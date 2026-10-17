@@ -9,13 +9,14 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 | **MirrorDelta** | Čára mini sektorů, čára delty a delta v sekundách (±) |
 | **MirrorDelta Timing** | Pozice, kolo, aktuální čas a nejrychlejší kolo |
 | **MirrorDelta Tyres** | Teplota jádra pneumatik a teploty pláště (vnitřní / střed / vnější) |
+| **MirrorDelta Damage** | Auto shora: čtyři strany karoserie barevně podle poškození a uprostřed stav motoru v % |
 | **MirrorDelta Gear** | Ukazatel otáček z 12 dílků, pod ním převod na barevné dlaždici a pod převodem rychlost |
 
 ## Instalace
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.2.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.3.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -37,7 +38,7 @@ U výchozí instalace Steamu je to `C:\Program Files (x86)\Steam\steamapps\commo
 ## Zapnutí ve hře
 
 1. Ve hře najeďte myší k pravému okraji obrazovky. Otevře se lišta aplikací.
-2. Klikněte na ikonu **MirrorDelta** (případně **MirrorDelta Timing**, **MirrorDelta Tyres** a **MirrorDelta Gear**).
+2. Klikněte na ikonu **MirrorDelta** (případně **MirrorDelta Timing**, **MirrorDelta Tyres**, **MirrorDelta Gear** a **MirrorDelta Damage**).
 3. **Přesun okna:** najeďte na okno myší. Objeví se titulek, za který okno přetáhnete.
 4. **Velikost:** táhněte za pravý dolní roh okna. Čáry vyplní celou šířku okna. Tloušťka čar, mezery a velikost čísla se zvětšují úměrně šířce okna, takže okno stačí roztáhnout přesně na šířku zrcátka.
 5. **Nastavení:** při najetí myší klikněte v titulku na ozubené kolečko.
@@ -46,7 +47,7 @@ Pokud se ikony na liště neobjeví, aktualizujte CSP a zkontrolujte, že jsou v
 
 ## Nastavení
 
-Nastavení je společné pro všechna okna a má pět záložek.
+Nastavení je společné pro všechna okna a má sedm záložek.
 
 **Delta**
 - Zobrazit: mini sektory, čáru delty, deltu v sekundách (každé zvlášť).
@@ -82,6 +83,16 @@ Nastavení je společné pro všechna okna a má pět záložek.
 - Na omezovači bliká modře čára i dlaždice (jde vypnout).
 - Rychlost se nemění po každém km/h, ale až když se posune o celý krok (1, 2, 3 nebo 5 km/h, výchozí 3). Číslo tak neposkakuje.
 - Písmo okna je Unbounded. Je přibalené ve složce `fonts` i s licencí SIL OFL.
+
+**Poškození**
+- Strany karoserie (přední, zadní, levá, pravá) jsou tmavé, dokud nejsou poškozené. S poškozením se barví od žluté po červenou.
+- Uprostřed je dlaždice motoru se zbývající životností v %: bílá, pod 95 % žlutá, pod 50 % červená.
+- Volba „Ukázat jen při poškození“ okno skryje, dokud je auto v pořádku.
+- Citlivost: od jaké hodnoty z AC je strana plně červená. Aktuální hodnoty z AC vidíte přímo v nastavení, podle nich jde citlivost doladit.
+
+**Diagnostika**
+- Ukazuje, co aplikace při měření kola vidí: jestli se kolo měří, kolik průjezdů cílem a referencí zaznamenala a proč naposledy kolo zahodila nebo nezapočítala.
+- Zobrazí také hodnoty přímo z AC a případnou chybu skriptu. Když delta nefunguje, pošlete screenshot této záložky.
 
 **Barvy**
 - Všechny barvy jde změnit. Tlačítko **Obnovit výchozí barvy** je vrátí zpět.

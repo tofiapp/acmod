@@ -28,8 +28,9 @@ apps/lua/MirrorDelta/
   src/delta_window.lua    delta window
   src/timing_window.lua   timing window
   src/tyres_window.lua    tyres window (two styles)
+  src/damage_window.lua   damage window (car.damage[0..3] front/rear/left/right, car.engineLifeLeft 0..1000)
   src/gear_window.lua     gear window (car.gear: -1 R, 0 N; car.rpm, car.rpmLimiter, car.speedKmh)
-  src/settings_window.lua tabs: Delta, Časy, Pneumatiky, Převody, Barvy
+  src/settings_window.lua tabs: Delta, Časy, Pneumatiky, Převody, Poškození, Barvy, Diagnostika
 tests/                    mock CSP API + simulated laps, run with LuaJIT via lupa
 build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDelta/...
 ```
@@ -53,6 +54,17 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
   event within 1.5 s is ignored (an earlier version dropped the lap here, which froze the delta on the out lap).
 - AC may report `previousLapTimeMs` one frame late: the lap time must fall inside the crossing frame,
   else the callback time or the timer estimate is used.
+
+## Diagnostics
+
+The delta did not start in the user's practice sessions although the simulated tests pass, so the
+tracker keeps `T.diag` (line crossings, timed laps, references, last reset reason, last rejected lap
+reason, jumps, session starts, first script error). `T.update` runs the logic under `pcall`; an error is
+stored and shown in the settings tab Diagnostika and as a red line in the delta window. Ask the user for a
+screenshot of that tab before guessing.
+
+The raw scale of `car.damage` is unknown (AC units); `damageFull` (default 50) maps it to full red and the
+Poškození tab shows the live raw values for calibration.
 
 ## Rules
 

@@ -6,8 +6,6 @@ local config = require('src/config')
 local D = require('src/draw')
 local S = config.S
 
--- Unbounded Bold ships with the app (fonts/, SIL OFL); the path is relative to the AC root.
-local FONT = 'Unbounded:apps/lua/MirrorDelta/fonts;Weight=Bold'
 
 local BASE_W, PAD = 260, 6
 local BAR_H, BAR_GAP = 13, 7
@@ -90,7 +88,7 @@ function M.draw()
   local atLimit = car.rpm >= limiter * 0.98
   local blinkOn = atLimit and S.gearShiftFlash and math.floor(os.preciseClock() * 8) % 2 == 0
 
-  ui.pushDWriteFont(FONT)
+  ui.pushDWriteFont(D.FONT_GEAR)
   if S.gearPlate then D.rect(ox, 0, ox + BASE_W * sc, baseH * sc, D.color(PLATE, alpha), 10 * sc) end
   local y = PAD * sc
 

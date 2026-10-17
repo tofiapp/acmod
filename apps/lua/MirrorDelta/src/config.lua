@@ -46,6 +46,11 @@ local defaults = {
   gearSpeedStep = 3,        -- km/h; the speed only changes once it moved a whole step
   gearPlate = false,
 
+  -- Damage window
+  damageAutoHide = false,   -- show the window only when something is damaged
+  damageFull = 50,          -- raw car.damage value drawn as full red
+  damagePlate = false,
+
   -- Colours
   colPurple = rgbm(0.69, 0.36, 1, 1),
   colGreen = rgbm(0.18, 0.83, 0.42, 1),

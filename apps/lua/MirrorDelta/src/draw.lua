@@ -5,6 +5,9 @@ local D = {}
 
 -- Bahnschrift ships with Windows 10 and 11; DirectWrite falls back to another font if it is missing.
 D.FONT = 'Bahnschrift;Weight=SemiBold;Stretch=SemiCondensed'
+-- Unbounded Bold ships with the app (fonts/, SIL OFL); the path is relative to the AC root,
+-- the same form official CSP code uses for its own fonts.
+D.FONT_GEAR = 'Unbounded:apps/lua/MirrorDelta/fonts;Weight=Bold'
 
 D.ALIGN_START = ui.Alignment.Start
 D.ALIGN_CENTER = ui.Alignment.Center

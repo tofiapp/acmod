@@ -10,6 +10,7 @@ local BASE_W = 600             -- sizes in settings are pixels at this window wi
 local ROW_NUMBER, ROW_LINE, ROW_SECTORS = 1, 2, 3
 
 local rows = { 0, 0, 0 }
+local ERROR_COLOR = rgbm(1, 0.35, 0.35, 1)
 local deltaStrings = {}        -- cache: hundredths -> "+0.23"
 
 local function enabled(row)
@@ -131,6 +132,9 @@ function M.draw()
       drawNumber(0, y, w, rh, S.numberSize * sc)
     end
     y = y + rh
+  end
+  if tracker.diag.error then
+    D.text('MirrorDelta: chyba skriptu, viz Nastavení > Diagnostika', 12, 0, 0, w, 16, D.ALIGN_START, ERROR_COLOR)
   end
   ui.popDWriteFont()
 end

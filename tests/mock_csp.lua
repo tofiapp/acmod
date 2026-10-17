@@ -64,7 +64,7 @@ os.preciseClock = function () return M.clock end
 -- car, sim, session
 M.car = {
   index = 0, splinePosition = 0, lapTimeMs = 0, lapCount = 0, previousLapTimeMs = 0, bestLapTimeMs = 0,
-  racePosition = 3, gear = 3, rpm = 7400, rpmLimiter = 7800, speedKmh = 184.4, isLapValid = true, isInPitlane = false, isInPit = false,
+  racePosition = 3, engineLifeLeft = 1000, damage = { [0] = 0, 0, 0, 0 }, gear = 3, rpm = 7400, rpmLimiter = 7800, speedKmh = 184.4, isLapValid = true, isInPitlane = false, isInPit = false,
   wheels = {},
 }
 for i = 0, 3 do
@@ -97,6 +97,7 @@ ac = {
   onCarJumped = function (_, cb) M.callbacks.jump = cb end,
   onRelease = function (cb) M.callbacks.release = cb end,
   log = function () end,
+  error = function (msg) print('ac.error: ' .. tostring(msg)) end,
   warn = function () end,
 }
 
