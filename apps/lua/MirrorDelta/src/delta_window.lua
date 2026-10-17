@@ -11,6 +11,16 @@ local ROW_NUMBER, ROW_LINE, ROW_SECTORS = 1, 2, 3
 
 local rows = { 0, 0, 0 }
 local ERROR_COLOR = rgbm(1, 0.35, 0.35, 1)
+local LIMITER_BLUE = rgbm(0.25, 0.55, 1, 1)
+
+-- True on the "on" half of the 8 Hz blink while the engine is at the rev limiter.
+local function limiterBlink()
+  if not S.deltaLimiterFlash then return false end
+  local car = ac.getCar(0)
+  if not car then return false end
+  local limiter = car.rpmLimiter > 0 and car.rpmLimiter or 8000
+  return car.rpm >= limiter * 0.98 and math.floor(os.preciseClock() * 8) % 2 == 0
+end
 local deltaStrings = {}        -- cache: hundredths -> "+0.23"
 
 local function enabled(row)
@@ -103,7 +113,9 @@ local function drawLine(x, y, w, h)
     local k = math.min(1, math.abs(tracker.delta) / math.max(0.05, S.intensityFullAt))
     alpha = alpha * (0.22 + 0.78 * k)
   end
-  D.rect(x, y, x + w, y + h, D.color(deltaColor(), alpha))
+  local col = deltaColor()
+  if limiterBlink() then col, alpha = LIMITER_BLUE, S.opacity end
+  D.rect(x, y, x + w, y + h, D.color(col, alpha))
 end
 
 local function drawNumber(x, y, w, h, size)

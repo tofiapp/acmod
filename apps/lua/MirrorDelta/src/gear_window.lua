@@ -130,7 +130,7 @@ function M.draw()
   if S.gearShowSpeed then
     y = y + SPEED_GAP * sc
     local sh = SPEED_H * sc
-    D.rect(tx, y, tx + tw, y + sh, D.color(SPEED_BACK, alpha), SPEED_R * sc)
+    D.rect(tx, y, tx + tw, y + sh, D.color(blinkOn and BLUE or SPEED_BACK, alpha), SPEED_R * sc)
     D.text(speedText(calmSpeed(car.speedKmh)), 18 * sc, tx, y, tw, sh, D.ALIGN_CENTER, D.color(S.colText, alpha))
   end
   ui.popDWriteFont()

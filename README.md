@@ -16,7 +16,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.3.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.3.1.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -56,6 +56,7 @@ Nastavení je společné pro všechna okna a má sedm záložek.
   - **B** (výchozí): mini sektory nahoře, čára delty uprostřed, čas dole.
 - Počet mini sektorů (výchozí 24), počet skupin (výchozí 3, tedy 8 | 8 | 8) a mezera mezi skupinami.
 - Tloušťka čar, mezera mezi čarami, velikost čísla a průhlednost. Hodnoty v pixelech platí pro okno široké 600 px a se šířkou okna se škálují.
+- Na omezovači čára delty bliká modře stejně jako okno s převodem (jde vypnout).
 - Intenzita barvy podle velikosti delty: když je zapnutá, plnou barvu má delta od ±0,5 s (nastavitelné).
 - Reference: nejlepší kolo této session, nebo nejlepší kolo vůbec (uložené).
 - Tlačítko **Smazat uložená data** smaže uložené nejlepší kolo a mini sektory pro aktuální auto a trať. Potvrdíte ho druhým kliknutím.
@@ -80,7 +81,7 @@ Nastavení je společné pro všechna okna a má sedm záložek.
 - Zobrazit: ukazatel otáček, rychlost pod převodem a tmavý podklad (každé zvlášť).
 - Ukazatel otáček má 12 dílků a rozsvěcuje se od obou krajů ke středu: zelená, žlutá, červená. Rozsah se bere z omezovače (`rpmLimiter`) daného auta. První dílky se rozsvítí od nastaveného podílu omezovače (výchozí 0,6).
 - Dlaždice s převodem je bílá, s rostoucími otáčkami žlutá a pak červená.
-- Na omezovači bliká modře čára i dlaždice (jde vypnout).
+- Na omezovači bliká modře čára, dlaždice s převodem i pruh s rychlostí (jde vypnout).
 - Rychlost se nemění po každém km/h, ale až když se posune o celý krok (1, 2, 3 nebo 5 km/h, výchozí 3). Číslo tak neposkakuje.
 - Písmo okna je Unbounded. Je přibalené ve složce `fonts` i s licencí SIL OFL.
 

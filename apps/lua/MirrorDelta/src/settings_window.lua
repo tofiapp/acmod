@@ -80,6 +80,7 @@ local function tabDelta()
   slider('lineGap', 'Mezera mezi čarami', 0, 30, '%.1f px', 0.5)
   slider('numberSize', 'Velikost čísla', 9, 60, '%.0f px', 1)
   slider('opacity', 'Průhlednost', 0.1, 1, '%.2f')
+  checkbox('deltaLimiterFlash', 'Na omezovači blikat modře (jako okno s převodem)')
   checkbox('intensityByDelta', 'Intenzita barvy podle velikosti delty')
   if S.intensityByDelta then
     slider('intensityFullAt', 'Plná barva od', 0.1, 2, '±%.2f s')
@@ -163,7 +164,7 @@ local function tabGear()
   gap()
   ui.header('Otáčky (rozsah podle omezovače auta)')
   slider('gearRpmStart', 'První dílky od', 0.3, 0.9, '%.2f × omezovač')
-  checkbox('gearShiftFlash', 'Na omezovači blikat modře (čára i převod)')
+  checkbox('gearShiftFlash', 'Na omezovači blikat modře (čára, převod i rychlost)')
 end
 
 local function tabDamage()
