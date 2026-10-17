@@ -1,0 +1,138 @@
+-- Delta window: mini sector line, delta line and the delta in seconds.
+-- Lines span the full window width; thickness, gaps and text scale with the window.
+
+local config = require('src/config')
+local tracker = require('src/tracker')
+local D = require('src/draw')
+local S = config.S
+
+local BASE_W = 600             -- sizes in settings are pixels at this window width
+local ROW_NUMBER, ROW_LINE, ROW_SECTORS = 1, 2, 3
+
+local rows = { 0, 0, 0 }
+local deltaStrings = {}        -- cache: hundredths -> "+0.23"
+
+local function enabled(row)
+  if row == ROW_NUMBER then return S.showDeltaNumber end
+  if row == ROW_LINE then return S.showDeltaLine end
+  return S.showSectors
+end
+
+local function rowHeight(row)
+  return row == ROW_NUMBER and S.numberSize * 1.15 or S.lineThickness
+end
+
+local function rowSpacing(a, b)
+  return (a == ROW_NUMBER or b == ROW_NUMBER) and 4 or S.lineGap
+end
+
+-- Layout 1: number, line, sectors. Layout 2: sectors, line, number.
+local function layoutRows()
+  local first, last = ROW_NUMBER, ROW_SECTORS
+  if S.deltaLayout ~= 1 then first, last = ROW_SECTORS, ROW_NUMBER end
+  local n = 0
+  if enabled(first) then n = n + 1; rows[n] = first end
+  if enabled(ROW_LINE) then n = n + 1; rows[n] = ROW_LINE end
+  if enabled(last) then n = n + 1; rows[n] = last end
+  local h = 0
+  for i = 1, n do
+    h = h + rowHeight(rows[i])
+    if i > 1 then h = h + rowSpacing(rows[i - 1], rows[i]) end
+  end
+  return n, h
+end
+
+local function deltaText(d)
+  local c = math.min(9999, math.floor(math.abs(d) * 100 + 0.5))
+  local key = c == 0 and 0 or (d < 0 and -c or c)
+  local str = deltaStrings[key]
+  if not str then
+    if c == 0 then
+      str = '0.00'
+    else
+      str = string.format('%s%d.%02d', d < 0 and '-' or '+', math.floor(c / 100), c % 100)
+    end
+    deltaStrings[key] = str
+  end
+  return str
+end
+
+local function sectorColor(i)
+  if i == tracker.curSector then return S.colCurrent end
+  local state = tracker.secState[i]
+  if state == 1 then return S.colPurple end
+  if state == 2 then return S.colGreen end
+  if state == 3 then return S.colYellow end
+  if state == 4 then return S.colNeutral end
+  return S.colIdle
+end
+
+local function drawSectors(x, y, w, h, sc)
+  local count = tracker.sectorCount
+  local groups = math.max(1, math.min(math.floor(S.sectorGroups + 0.5), count))
+  local gap = math.max(1, 1.2 * sc)
+  local groupGap = groups > 1 and math.max(gap, S.groupGap * sc) or gap
+  local segW = (w - (count - groups) * gap - (groups - 1) * groupGap) / count
+  if segW <= 0 then return end
+  local px, nextGroup = x, 1
+  local boundary = math.floor(count / groups + 0.5)   -- first segment (0-based) of the next group
+  for i = 1, count do
+    if i > 1 then
+      if groups > 1 and i - 1 == boundary then
+        px = px + groupGap
+        nextGroup = nextGroup + 1
+        boundary = math.floor(count * nextGroup / groups + 0.5)
+      else
+        px = px + gap
+      end
+    end
+    D.rect(px, y, px + segW, y + h, D.color(sectorColor(i), S.opacity))
+    px = px + segW
+  end
+end
+
+local function deltaColor()
+  if not tracker.hasDelta then return S.colNeutral end
+  return tracker.deltaSign < 0 and S.colGreen or S.colRed
+end
+
+local function drawLine(x, y, w, h)
+  local alpha = S.opacity
+  if S.intensityByDelta and tracker.hasDelta then
+    local k = math.min(1, math.abs(tracker.delta) / math.max(0.05, S.intensityFullAt))
+    alpha = alpha * (0.22 + 0.78 * k)
+  end
+  D.rect(x, y, x + w, y + h, D.color(deltaColor(), alpha))
+end
+
+local function drawNumber(x, y, w, h, size)
+  local str = tracker.hasDelta and deltaText(tracker.delta) or '-.--'
+  D.text(str, size, x, y, w, h, D.ALIGN_CENTER, D.color(deltaColor(), S.opacity))
+end
+
+local M = {}
+
+function M.draw()
+  local w, h = ui.windowWidth(), ui.windowHeight()
+  local n, contentH = layoutRows()
+  if n == 0 or w <= 0 or h <= 0 then return end
+  local sc = math.min(w / BASE_W, h / contentH)
+  local y = (h - contentH * sc) / 2
+  ui.pushDWriteFont(D.FONT)
+  for i = 1, n do
+    local row = rows[i]
+    if i > 1 then y = y + rowSpacing(rows[i - 1], row) * sc end
+    local rh = rowHeight(row) * sc
+    if row == ROW_SECTORS then
+      drawSectors(0, y, w, rh, sc)
+    elseif row == ROW_LINE then
+      drawLine(0, y, w, rh)
+    else
+      drawNumber(0, y, w, rh, S.numberSize * sc)
+    end
+    y = y + rh
+  end
+  ui.popDWriteFont()
+end
+
+return M

@@ -1,0 +1,81 @@
+-- Settings. Stored with ac.storage, but copied into a plain table (S) once,
+-- so drawing code never goes through the storage layer every frame.
+
+local defaults = {
+  -- Delta window
+  deltaLayout = 2,          -- 1: delta number on top, mini sectors at the bottom; 2: mini sectors on top, number at the bottom
+  showSectors = true,
+  showDeltaLine = true,
+  showDeltaNumber = true,
+  sectors = 24,
+  sectorGroups = 3,         -- 24 sectors in 3 groups = 8 | 8 | 8
+  groupGap = 8,             -- px at window width 600
+  lineThickness = 9.5,      -- px at window width 600
+  lineGap = 12,             -- px at window width 600
+  numberSize = 30,          -- px at window width 600
+  opacity = 1,
+  intensityByDelta = false,
+  intensityFullAt = 0.5,    -- seconds of delta for full colour
+  referenceMode = 2,        -- 1: best lap of this session, 2: all-time best lap (saved)
+
+  -- Timing window
+  showPosition = true,
+  showLaps = true,
+  showCurrent = true,
+  showBest = true,
+  timingLayout = 2,         -- 1: stacked, 2: side by side
+  bestHighlight = true,
+  lapFlash = true,
+  lapFlashTime = 4,         -- seconds
+  timingPlate = false,
+
+  -- Tyres window
+  tyreStyle = 1,            -- 1: big core numbers + zone bar, 2: big core number + tyre + three zone numbers
+  tyreArrange = 1,          -- 1: 2 x 2 like on the car, 2: in a row
+  tyreNumbers = true,
+  tyreZones = true,
+  tyreOptimumAuto = true,   -- use the optimum temperature of the car's tyres when CSP provides it
+  tyreOptimum = 85,         -- fallback optimum, °C
+  tyresPlate = false,
+
+  -- Colours
+  colPurple = rgbm(0.69, 0.36, 1, 1),
+  colGreen = rgbm(0.18, 0.83, 0.42, 1),
+  colYellow = rgbm(0.95, 0.76, 0.19, 1),
+  colRed = rgbm(1, 0.27, 0.27, 1),
+  colIdle = rgbm(0.19, 0.21, 0.24, 1),
+  colCurrent = rgbm(0.42, 0.45, 0.5, 1),
+  colNeutral = rgbm(0.35, 0.38, 0.42, 1),
+  colText = rgbm(0.9, 0.91, 0.93, 1),
+}
+
+local stored = ac.storage(defaults, 'md_')
+
+local function isColor(v)
+  return rgbm.isrgbm(v)
+end
+
+local function copy(v)
+  if isColor(v) then return v:clone() end
+  return v
+end
+
+local S = {}
+for key, default in pairs(defaults) do
+  local value = stored[key]
+  if value == nil or (type(value) ~= type(default)) then value = default end
+  S[key] = copy(value)
+end
+
+local M = { S = S, defaults = defaults }
+
+function M.set(key, value)
+  S[key] = value
+  stored[key] = copy(value)
+end
+
+function M.reset(key)
+  M.set(key, copy(defaults[key]))
+end
+
+return M
