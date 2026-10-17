@@ -16,8 +16,8 @@ local defaults = {
   opacity = 1,
   intensityByDelta = false,
   intensityFullAt = 0.5,    -- seconds of delta for full colour
-  referenceMode = 2,
-  deltaLimiterFlash = true, -- the delta line blinks blue at the rev limiter, like the gear window        -- 1: best lap of this session, 2: all-time best lap (saved)
+  referenceMode = 2,        -- 1: best lap of this session, 2: all-time best lap (saved)
+  deltaLimiterFlash = true, -- the delta line blinks blue at the rev limiter, like the gear window
 
   -- Timing window
   showPosition = true,
