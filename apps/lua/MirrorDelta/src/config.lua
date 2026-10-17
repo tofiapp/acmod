@@ -38,6 +38,13 @@ local defaults = {
   tyreOptimum = 85,         -- fallback optimum, °C
   tyresPlate = false,
 
+  -- Gear window
+  gearShowBar = true,
+  gearShowSpeed = true,
+  gearRpmStart = 0.6,       -- first segment lights up at this share of the rev limiter
+  gearShiftFlash = true,    -- all segments blink blue at the limiter
+  gearPlate = false,
+
   -- Colours
   colPurple = rgbm(0.69, 0.36, 1, 1),
   colGreen = rgbm(0.18, 0.83, 0.42, 1),

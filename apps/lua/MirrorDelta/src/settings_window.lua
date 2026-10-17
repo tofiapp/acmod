@@ -143,6 +143,17 @@ local function tabTyres()
   end
 end
 
+local function tabGear()
+  ui.header('Zobrazit')
+  checkbox('gearShowBar', 'Ukazatel otáček (12 dílků)')
+  checkbox('gearShowSpeed', 'Rychlost')
+  checkbox('gearPlate', 'Tmavý podklad')
+  gap()
+  ui.header('Otáčky (rozsah podle omezovače auta)')
+  slider('gearRpmStart', 'První dílek od', 0.3, 0.9, '%.2f × omezovač')
+  checkbox('gearShiftFlash', 'Na omezovači blikat modře')
+end
+
 local function tabColors()
   for i = 1, #COLOR_KEYS do
     colorPicker(COLOR_KEYS[i][1], COLOR_KEYS[i][2])
@@ -160,6 +171,7 @@ function M.draw()
     ui.tabItem('Delta', tabDelta)
     ui.tabItem('Časy', tabTiming)
     ui.tabItem('Pneumatiky', tabTyres)
+    ui.tabItem('Převody', tabGear)
     ui.tabItem('Barvy', tabColors)
   end)
 end

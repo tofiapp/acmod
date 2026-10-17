@@ -366,14 +366,17 @@ function T.update(dt)
     return
   end
 
-  local lapEvent = lapCount ~= prevLapCount or t + 500 < prevRawT
+  -- The lap timer restarting is the crossing. AC may bump lapCount a frame earlier or later than
+  -- the timer, so a lapCount change only counts on its own while the timer is already small.
+  local lapEvent = t + 500 < prevRawT or (lapCount ~= prevLapCount and t < 2000)
   local ds = circDiff(s, prevSpline)
   prevLapCount = lapCount
 
   if lapEvent and now - lastEventClock < EVENT_DEBOUNCE then
-    -- AC split one crossing over two frames; the timer base may have moved, so drop this lap
-    if T.flying then resetLap() end
-  elseif lapEvent and not (ds > 0 and ds < JUMP_LIMIT) then
+    -- second half of the same crossing (lapCount and timer in different frames): nothing to do
+    lapEvent = false
+  end
+  if lapEvent and not (ds > 0 and ds < JUMP_LIMIT) then
     -- lap counter or timer changed without driving over the line (teleport, session reset)
     resetLap()
   elseif lapEvent then

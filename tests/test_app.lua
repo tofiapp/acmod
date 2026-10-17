@@ -37,11 +37,14 @@ local tracker = loadApp()
 local lateLapTime = false   -- AC updating previousLapTimeMs one frame late
 local lateCallback = false  -- ac.onLapCompleted arriving one frame late
 local pendingPrev, pendingCb = nil, nil
+local splitEvent = false    -- lapCount changes one frame before the timer restarts
+local pendingTimer = nil
 
 local function frame(pace)
   env.clock = env.clock + DT
   if pendingPrev then car.previousLapTimeMs, pendingPrev = pendingPrev, nil end
   if pendingCb then env.callbacks.lap(0, pendingCb[1], pendingCb[2]); pendingCb = nil end
+  if pendingTimer then car.lapTimeMs = pendingTimer - DT * 1000; pendingTimer = nil end
   local p0 = car.splinePosition
   local p1 = p0 + DT * speed(p0) * pace
   local before = (p0 - LINE) % 1
@@ -52,7 +55,7 @@ local function frame(pace)
     local f = (1 - before) / ((1 - before) + after)
     local lapMs = car.lapTimeMs - DT * 1000 + f * DT * 1000
     if lateLapTime then pendingPrev = lapMs else car.previousLapTimeMs = lapMs end
-    car.lapTimeMs = (1 - f) * DT * 1000
+    if splitEvent then pendingTimer = (1 - f) * DT * 1000 + DT * 1000 else car.lapTimeMs = (1 - f) * DT * 1000 end
     car.lapCount = car.lapCount + 1
     if car.isLapValid and not car.wasPit and (car.bestLapTimeMs == 0 or lapMs < car.bestLapTimeMs) then
       car.bestLapTimeMs = lapMs
@@ -155,6 +158,15 @@ check(tracker.sessionRefMs < beforeLate, 'late-reported faster lap still becomes
 check(near(tracker.sessionRefMs, car.previousLapTimeMs, 1), 'reference time matches AC lap time')
 lateLapTime, lateCallback = false, false
 
+-- 5c. lapCount changing a frame before the timer restarts must not stop the delta
+splitEvent = true
+driveLaps(2, 1)
+local splitDelta = false
+for _ = 1, 600 do frame(1); if tracker.hasDelta then splitDelta = true end end
+check(tracker.flying and splitDelta, 'delta keeps working when lapCount and timer change in different frames')
+splitEvent = false
+driveLaps(1, 1)
+
 -- 6. Drawing with both layouts, both tyre styles and both timing layouts
 local delta = require('src/delta_window')
 local timing = require('src/timing_window')
@@ -173,6 +185,10 @@ local ok, err = pcall(function ()
     config.set('tyreArrange', layout)
     env.windowW, env.windowH = 180, 140
     tyres.draw()
+    env.windowW, env.windowH = 260, 102
+    config.set('gearShowSpeed', layout == 1)
+    car.rpm = layout == 1 and 7790 or 6000
+    script.windowGear(DT)
     env.windowW, env.windowH = 600, 80
   end
   settings.draw()
@@ -199,6 +215,8 @@ do
     script.windowTiming(DT)
     env.windowW, env.windowH = 180, 140
     script.windowTyres(DT)
+    env.windowW, env.windowH = 260, 102
+    script.windowGear(DT)
   end
   for _ = 1, 300 do frameAndDraw() end
   jit.off()

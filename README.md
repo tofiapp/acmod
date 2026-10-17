@@ -9,12 +9,13 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 | **MirrorDelta** | Čára mini sektorů, čára delty a delta v sekundách (±) |
 | **MirrorDelta Timing** | Pozice, kolo, aktuální čas a nejrychlejší kolo |
 | **MirrorDelta Tyres** | Teplota jádra pneumatik a teploty pláště (vnitřní / střed / vnější) |
+| **MirrorDelta Gear** | Velké číslo převodu, vlevo od něj rychlost, nad nimi ukazatel otáček z 12 dílků |
 
 ## Instalace
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.0.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.1.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -36,7 +37,7 @@ U výchozí instalace Steamu je to `C:\Program Files (x86)\Steam\steamapps\commo
 ## Zapnutí ve hře
 
 1. Ve hře najeďte myší k pravému okraji obrazovky. Otevře se lišta aplikací.
-2. Klikněte na ikonu **MirrorDelta** (případně **MirrorDelta Timing** a **MirrorDelta Tyres**).
+2. Klikněte na ikonu **MirrorDelta** (případně **MirrorDelta Timing**, **MirrorDelta Tyres** a **MirrorDelta Gear**).
 3. **Přesun okna:** najeďte na okno myší. Objeví se titulek, za který okno přetáhnete.
 4. **Velikost:** táhněte za pravý dolní roh okna. Čáry vyplní celou šířku okna. Tloušťka čar, mezery a velikost čísla se zvětšují úměrně šířce okna, takže okno stačí roztáhnout přesně na šířku zrcátka.
 5. **Nastavení:** při najetí myší klikněte v titulku na ozubené kolečko.
@@ -45,7 +46,7 @@ Pokud se ikony na liště neobjeví, aktualizujte CSP a zkontrolujte, že jsou v
 
 ## Nastavení
 
-Nastavení je společné pro všechna okna a má čtyři záložky.
+Nastavení je společné pro všechna okna a má pět záložek.
 
 **Delta**
 - Zobrazit: mini sektory, čáru delty, deltu v sekundách (každé zvlášť).
@@ -73,6 +74,11 @@ Nastavení je společné pro všechna okna a má čtyři záložky.
 - Zobrazit: teplotu jádra a zóny pláště.
 - Optimální teplota: podle auta, pokud ji CSP poskytuje. Jinak platí záložní hodnota (výchozí 85 °C).
 - Tmavý podklad.
+
+**Převody**
+- Zobrazit: ukazatel otáček a rychlost (každé zvlášť), tmavý podklad.
+- Rozsah otáček se bere z omezovače (`rpmLimiter`) daného auta. První dílek se rozsvítí od nastaveného podílu omezovače (výchozí 0,6). Dílky jsou 6 zelených, 4 žluté a 2 červené.
+- Na omezovači všechny dílky blikají modře (jde vypnout).
 
 **Barvy**
 - Všechny barvy jde změnit. Tlačítko **Obnovit výchozí barvy** je vrátí zpět.

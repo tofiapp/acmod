@@ -8,6 +8,7 @@ each with its own taskbar icon:
 - **delta** (`MirrorDelta`): mini sector line, delta line, delta in seconds. Sits above the mirror.
 - **timing** (`MirrorDelta Timing`): position, lap, current time, best lap.
 - **tyres** (`MirrorDelta Tyres`): tyre core temperature (big number) and tread zones (inner/middle/outer).
+- **gear** (`MirrorDelta Gear`): 12-segment RPM bar (range from `car.rpmLimiter`), speed, big gear number.
 
 The user speaks Czech: talk to them in Czech, write code, comments and commit messages in English.
 UI labels inside the app and the README are Czech.
@@ -25,7 +26,8 @@ apps/lua/MirrorDelta/
   src/delta_window.lua    delta window
   src/timing_window.lua   timing window
   src/tyres_window.lua    tyres window (two styles)
-  src/settings_window.lua tabs: Delta, Časy, Pneumatiky, Barvy
+  src/gear_window.lua     gear window (car.gear: -1 R, 0 N; car.rpm, car.rpmLimiter, car.speedKmh)
+  src/settings_window.lua tabs: Delta, Časy, Pneumatiky, Převody, Barvy
 tests/                    mock CSP API + simulated laps, run with LuaJIT via lupa
 build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDelta/...
 ```
@@ -44,6 +46,9 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
   existing best; best sector lists are kept per sector count.
 - Out laps, laps that start or pass through the pit lane, and invalid laps are never references.
   Teleport (`ac.onCarJumped`), replay and session start reset the lap until the next line crossing.
+- The lap event is the **timer restart** (`lapTimeMs` drops). AC can change `lapCount` a frame before or
+  after the timer; a lapCount change only counts on its own when the timer is already small, and a second
+  event within 1.5 s is ignored (an earlier version dropped the lap here, which froze the delta on the out lap).
 - AC may report `previousLapTimeMs` one frame late: the lap time must fall inside the crossing frame,
   else the callback time or the timer estimate is used.
 
