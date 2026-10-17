@@ -16,7 +16,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.3.1.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.4.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -58,6 +58,11 @@ Nastavení je společné pro všechna okna a má sedm záložek.
 - Tloušťka čar, mezera mezi čarami, velikost čísla a průhlednost. Hodnoty v pixelech platí pro okno široké 600 px a se šířkou okna se škálují.
 - Na omezovači čára delty bliká modře stejně jako okno s převodem (jde vypnout).
 - Intenzita barvy podle velikosti delty: když je zapnutá, plnou barvu má delta od ±0,5 s (nastavitelné).
+- Zdroj delty:
+  - **Vlastní měření, jinak delta z AC** (výchozí): dokud aplikace nemá vlastní referenci (out lap, první kolo, kolo po resetu), ukazuje deltu, kterou počítá samotné AC.
+  - **Jen vlastní měření.**
+  - **Jen delta z AC.**
+- Když delta zatím není, napíše okno nahoře malým písmem proč (čeká na průjezd cílem, nebo měří první kolo). Jde vypnout.
 - Reference: nejlepší kolo této session, nebo nejlepší kolo vůbec (uložené).
 - Tlačítko **Smazat uložená data** smaže uložené nejlepší kolo a mini sektory pro aktuální auto a trať. Potvrdíte ho druhým kliknutím.
 
@@ -89,6 +94,7 @@ Nastavení je společné pro všechna okna a má sedm záložek.
 - Strany karoserie (přední, zadní, levá, pravá) jsou tmavé, dokud nejsou poškozené. S poškozením se barví od žluté po červenou.
 - Uprostřed je dlaždice motoru se zbývající životností v %: bílá, pod 95 % žlutá, pod 50 % červená.
 - Volba „Ukázat jen při poškození“ okno skryje, dokud je auto v pořádku.
+- Dokud je okno otevřené, aplikace skryje původní ukazatel poškození z AC (jde vypnout).
 - Citlivost: od jaké hodnoty z AC je strana plně červená. Aktuální hodnoty z AC vidíte přímo v nastavení, podle nich jde citlivost doladit.
 
 **Diagnostika**
@@ -106,6 +112,7 @@ Nastavení je společné pro všechna okna a má sedm záložek.
 - Během kola aplikace zaznamenává čas v 1000 bodech (každých 0,1 % délky kola). Mezi framy body dopočítává.
 - Delta = aktuální čas v kole − čas reference na stejném místě trati.
 - Delta je lehce vyhlazená (asi 0,15 s). Barva se přepne až při překročení ±0,02 s, takže kolem nuly nebliká.
+- Když vlastní reference ještě není, použije se delta z AC (`performanceMeter`). AC ji počítá proti svému nejlepšímu kolu v session.
 - Zelená znamená rychlejší než reference, červená pomalejší. Když reference ještě neexistuje, jsou obě čáry šedé a číslo ukazuje `-.--`.
 
 ### Mini sektory
@@ -179,5 +186,6 @@ python tests/run_tests.py
 
 ## Známá omezení
 
+- Původní pořadí (leaderboard) z AC aplikace skrýt neumí, protože CSP umí skrýt jen všechny aplikace najednou. Zavřete ho ručně na liště aplikací.
 - Aplikace zatím nebyla vyzkoušená přímo ve hře, jen v simulaci. Prosím o zpětnou vazbu z prvních jízd.
 - Názvy polí pro teploty pneumatik (`tyreCoreTemperature`, `tyreInsideTemperature`, `tyreMiddleTemperature`, `tyreOutsideTemperature`, `tyreOptimumTemperature`) nejsou ve veřejném SDK. Aplikace je proto při startu ověří a bez nich nespadne.

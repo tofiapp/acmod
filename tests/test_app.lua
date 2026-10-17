@@ -204,6 +204,7 @@ check(tracker.diag.error == nil, 'tracker ran without script errors: ' .. tostri
 check(tracker.diag.lapEvents > 5 and tracker.diag.references > 0, 'diagnostics count line crossings and references')
 check((env.calls.rect or 0) > 100, 'rectangles were drawn')
 check(tyres.available() == true and tyres.optimumFromCar() == true, 'tyre temperatures detected')
+check(env.sim.damageDisplayerShown == false and env.calls['Hide Damage'] == 1, 'damage window hides AC damage displayer once')
 
 -- 6b. No per-frame allocation once caches are warm (JIT off: trace compilation would count too)
 do
@@ -265,6 +266,24 @@ check(ok and tyres2.available() == false, 'tyre window survives missing fields: 
 -- 9. Clearing saved data
 tracker.clearSaved()
 check(not io.fileExists(tracker.dataFile()) and tracker.allTimeRefMs == 0, 'saved data cleared')
+
+-- 10. Without own reference the delta falls back to AC's performanceMeter (deltaSource 1 only)
+car.performanceMeter = -0.42
+env.callbacks.release()
+tracker = loadApp()
+config = require('src/config')
+config.set('deltaSource', 2)
+env.callbacks.session(0, false)
+for _ = 1, 120 do frame(1) end
+check(not tracker.hasDelta and tracker.status ~= nil, 'own-only source shows a status instead of a delta')
+config.set('deltaSource', 1)
+for _ = 1, 120 do frame(1) end
+check(tracker.hasDelta and tracker.deltaFromAC and near(tracker.delta, -0.42, 0.02),
+  'AC delta used while there is no own reference: ' .. tostring(tracker.delta))
+check(tracker.diag.acDelta == true and tracker.status == nil, 'AC delta detected, no status text')
+ok, err = pcall(script.windowDelta, DT)
+check(ok and tracker.diag.error == nil, 'delta window draws with the AC delta: ' .. tostring(err or tracker.diag.error))
+config.set('deltaSource', 1)
 
 print(string.format('%d passed, %d failed', passed, failed))
 return failed

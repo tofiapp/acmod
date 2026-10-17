@@ -73,7 +73,7 @@ for i = 0, 3 do
     tyreOutsideTemperature = 78, tyreOptimumTemperature = 88,
   }
 end
-M.sim = { isReplayActive = false, isPaused = false, carsCount = 12, currentSessionIndex = 0 }
+M.sim = { isReplayActive = false, isPaused = false, carsCount = 12, currentSessionIndex = 0, damageDisplayerShown = true }
 M.session = { laps = 15, isTimedRace = false }
 
 ac = {
@@ -91,6 +91,10 @@ ac = {
       __index = function (_, k) return t[k] end,
       __newindex = function (_, k, v) t[k] = v; M.storage[k] = v end,
     })
+  end,
+  trySimKeyPressCommand = function (cmd)
+    M.calls[cmd] = (M.calls[cmd] or 0) + 1
+    if cmd == 'Hide Damage' then M.sim.damageDisplayerShown = not M.sim.damageDisplayerShown end
   end,
   onLapCompleted = function (_, cb) M.callbacks.lap = cb end,
   onSessionStart = function (cb) M.callbacks.session = cb end,

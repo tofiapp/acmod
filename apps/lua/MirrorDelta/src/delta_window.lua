@@ -123,15 +123,15 @@ local function drawNumber(x, y, w, h, size)
   D.text(str, size, x, y, w, h, D.ALIGN_CENTER, D.color(deltaColor(), S.opacity))
 end
 
-local M = {}
 
-function M.draw()
+local STATUS_COLOR = rgbm(0.93, 0.94, 0.96, 0.9)
+
+local function drawInner()
   local w, h = ui.windowWidth(), ui.windowHeight()
   local n, contentH = layoutRows()
   if n == 0 or w <= 0 or h <= 0 then return end
   local sc = math.min(w / BASE_W, h / contentH)
   local y = (h - contentH * sc) / 2
-  ui.pushDWriteFont(D.FONT)
   for i = 1, n do
     local row = rows[i]
     if i > 1 then y = y + rowSpacing(rows[i - 1], row) * sc end
@@ -147,8 +147,22 @@ function M.draw()
   end
   if tracker.diag.error then
     D.text('MirrorDelta: chyba skriptu, viz Nastavení > Diagnostika', 12, 0, 0, w, 16, D.ALIGN_START, ERROR_COLOR)
+  elseif S.deltaShowStatus and tracker.status then
+    D.text(tracker.status, 12, 0, 0, w, 16, D.ALIGN_START, STATUS_COLOR)
   end
+end
+
+local M = {}
+
+function M.draw()
+  ui.pushDWriteFont(D.FONT)
+  local ok, err = pcall(drawInner)
   ui.popDWriteFont()
+  if not ok then
+    if not tracker.diag.error then tracker.diag.error = 'okno delty: ' .. tostring(err) end
+    -- a plain red bar, so a broken window is visible even when text drawing is what failed
+    D.rect(0, 0, ui.windowWidth(), 4, ERROR_COLOR)
+  end
 end
 
 return M

@@ -59,7 +59,8 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
 
 The delta did not start in the user's practice sessions although the simulated tests pass, so the
 tracker keeps `T.diag` (line crossings, timed laps, references, last reset reason, last rejected lap
-reason, jumps, session starts, first script error). `T.update` runs the logic under `pcall`; an error is
+reason, jumps, session starts, first script error, whether AC's delta exists). `T.status` explains in the
+delta window why there is no delta yet. `T.update` runs the logic under `pcall`; an error is
 stored and shown in the settings tab Diagnostika and as a red line in the delta window. Ask the user for a
 screenshot of that tab before guessing.
 
@@ -75,7 +76,10 @@ Poškození tab shows the live raw values for calibration.
   official apps (`app-csp-defaults`, `acc-lua-internal`). The car state struct is generated from C++ and is
   not in the public SDK; fields used here were confirmed from official apps, except the tyre temperature
   fields (`tyreCoreTemperature`, `tyreInside/Middle/OutsideTemperature`, `tyreOptimumTemperature`), which
-  are checked with `pcall` at runtime. If someone provides `extension/internal/lua-sdk` from a CSP install,
+  are checked with `pcall` at runtime. `car.performanceMeter` (AC's own delta in seconds, see
+  `acc-lua-examples/cars/dash_display_8100`) is the fallback delta (`S.deltaSource`), also read under `pcall`.
+  AC's damage displayer is hidden like the official Unbound app does it: `sim.damageDisplayerShown` +
+  `ac.trySimKeyPressCommand('Hide Damage')`. AC's leaderboard cannot be hidden on its own. If someone provides `extension/internal/lua-sdk` from a CSP install,
   confirm them there.
 - Drawing uses `ui.drawRectFilled(p1, p2, color, rounding)` and `ui.dwriteTextAligned` after
   `ui.setCursor`. Rounded stripes are built by overlapping rects instead of corner flags.

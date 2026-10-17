@@ -49,9 +49,23 @@ local function sideColor(l)
   return damageColor
 end
 
+-- AC's own damage displayer is toggled by a sim key command (same as the official Unbound app).
+-- Retry at most once a second, so a toggle that has not applied yet is not undone by the next frame.
+local nextHideAttempt = 0
+local function hideOriginal()
+  if not S.damageHideOriginal then return end
+  local sim = ac.getSim()
+  if not sim or not sim.damageDisplayerShown then return end
+  local now = os.preciseClock()
+  if now < nextHideAttempt then return end
+  nextHideAttempt = now + 1
+  ac.trySimKeyPressCommand('Hide Damage')
+end
+
 local M = {}
 
 function M.draw()
+  hideOriginal()
   local car = ac.getCar(0)
   if not car then return end
   local w, h = ui.windowWidth(), ui.windowHeight()

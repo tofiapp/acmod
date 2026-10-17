@@ -48,6 +48,8 @@ local T = {
   totalLaps = 0,
   currentMs = 0,
   bestMs = 0,
+  deltaFromAC = false,         -- the shown delta comes from AC's own performance meter
+  status = 'Delta: čekám na první data',  -- why there is no delta (nil when there is one)
   -- diagnostics for the settings tab (strings are constants, so no allocation)
   diag = {
     error = nil,          -- first script error, if any
@@ -58,6 +60,7 @@ local T = {
     lastReject = '-',     -- why the last finished lap was not timed or not used
     jumps = 0,
     sessionStarts = 0,
+    acDelta = nil,        -- whether AC's own delta (performanceMeter) is available
   },
 }
 for i = 1, MAX_SECTORS do T.secState[i] = 0 end
@@ -309,28 +312,63 @@ local function finalizePending(now)
   if dirty then saveData() end
 end
 
-local function updateDelta(dt, s, t)
+-- AC computes its own delta to its best lap in seconds ("performance meter", read the same way by the
+-- official dash_display_8100 example). Checked once under pcall; used when our own measurement has nothing.
+local acDeltaOk = nil
+local function acDelta(car)
+  if acDeltaOk == nil then
+    acDeltaOk = pcall(function () return car.performanceMeter + 0 end)
+    T.diag.acDelta = acDeltaOk
+  end
+  if not acDeltaOk or car.bestLapTimeMs <= 0 then return nil end
+  return car.performanceMeter
+end
+
+local function smoothInto(raw, dt)
+  if T.hasDelta then
+    T.delta = T.delta + (raw - T.delta) * (1 - math.exp(-dt / SMOOTH_TIME))
+  else
+    T.delta = raw
+    T.hasDelta = true
+  end
+  if T.delta < -HYSTERESIS then
+    T.deltaSign = -1
+  elseif T.delta > HYSTERESIS then
+    T.deltaSign = 1
+  end
+end
+
+local function updateDelta(dt, s, t, car)
   local ref, refMs, refStart = activeRef()
   T.refMs = refMs
-  if T.flying and ref then
+  local own = S.deltaSource ~= 3 and T.flying and ref
+  if not own then
+    -- fall back to (or, with deltaSource = 3, always use) the delta AC computes itself
+    local v = S.deltaSource ~= 2 and car and acDelta(car)
+    if v then
+      T.deltaFromAC = true
+      T.status = nil
+      smoothInto(v, dt)
+      return
+    end
+  end
+  T.deltaFromAC = false
+  if own then
     local u = lapU(s)
     if prevU > 0.9 and u < 0.5 then u = 1 end   -- just past the line, AC has not counted the lap yet
     local uRef = u + circDiff(curStart, refStart)
     if uRef < 0 then uRef = 0 elseif uRef > 1 then uRef = 1 end
-    local raw = (t - gridAt(ref, uRef)) / 1000
-    if T.hasDelta then
-      T.delta = T.delta + (raw - T.delta) * (1 - math.exp(-dt / SMOOTH_TIME))
-    else
-      T.delta = raw
-      T.hasDelta = true
-    end
-    if T.delta < -HYSTERESIS then
-      T.deltaSign = -1
-    elseif T.delta > HYSTERESIS then
-      T.deltaSign = 1
-    end
+    T.status = nil
+    smoothInto((t - gridAt(ref, uRef)) / 1000, dt)
   else
     T.hasDelta = false
+    if S.deltaSource == 3 then
+      T.status = 'Delta z AC: AC zatím nemá nejlepší kolo'
+    elseif not T.flying then
+      T.status = 'Delta: čekám na průjezd cílovou čárou'
+    else
+      T.status = 'Delta: měřím kolo, reference zatím není (odjeďte celé čisté kolo)'
+    end
   end
 end
 
@@ -384,7 +422,7 @@ local function updateInner(dt)
     wasReplay, needReset = false, false
     prevLapCount, prevSpline, prevRawT = lapCount, s, t
     resetLap(nil)
-    updateDelta(dt, s, t)
+    updateDelta(dt, s, t, car)
     return
   end
 
@@ -440,7 +478,7 @@ local function updateInner(dt)
   finalizePending(now)
   local u = T.flying and lapU(s) or s
   T.curSector = math.min(T.sectorCount, math.floor(u * T.sectorCount) + 1)
-  updateDelta(dt, s, t)
+  updateDelta(dt, s, t, car)
 end
 
 -- Runs the tracker; a script error is kept for the diagnostics tab instead of being lost.

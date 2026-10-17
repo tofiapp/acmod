@@ -87,6 +87,12 @@ local function tabDelta()
   end
   gap()
   ui.header('Reference')
+  combo('deltaSource', 'Zdroj delty', {
+    'Vlastní měření, jinak delta z AC',
+    'Jen vlastní měření',
+    'Jen delta z AC',
+  })
+  checkbox('deltaShowStatus', 'Napsat do okna, proč delta zatím není')
   combo('referenceMode', 'Porovnávat s', { 'Nejlepší kolo této session', 'Nejlepší kolo vůbec (uložené)' })
   ui.text('Session: ' .. D.formatLap(tracker.sessionRefMs, 3) .. '    Vůbec: ' .. D.formatLap(tracker.allTimeRefMs, 3))
   ui.textWrapped('Data pro toto auto a trať: ' .. tracker.dataFile())
@@ -171,6 +177,7 @@ local function tabDamage()
   ui.header('Zobrazit')
   checkbox('damageAutoHide', 'Ukázat jen při poškození')
   checkbox('damagePlate', 'Tmavý podklad')
+  checkbox('damageHideOriginal', 'Skrýt původní ukazatel poškození z AC, když je toto okno otevřené')
   gap()
   ui.header('Citlivost')
   slider('damageFull', 'Plně červená od hodnoty', 1, 300, '%.0f', 1)
@@ -194,6 +201,9 @@ local function tabDiagnostics()
   ui.header('Měření kola')
   ui.text('Kolo se měří: ' .. yesNo(tracker.flying) .. '    platné zatím: ' .. yesNo(tracker.clean))
   ui.text('Delta k dispozici: ' .. yesNo(tracker.hasDelta) .. '    reference: ' .. D.formatLap(tracker.refMs, 3))
+  ui.text('Delta z AC (performanceMeter): ' .. (d.acDelta == nil and 'zatím nezjištěno' or yesNo(d.acDelta))
+    .. '    právě použitá: ' .. yesNo(tracker.deltaFromAC))
+  if tracker.status then ui.textWrapped('Stav: ' .. tracker.status) end
   ui.text(string.format('Průjezdů cílem: %d    změřených kol: %d    nových referencí: %d', d.lapEvents, d.timedLaps, d.references))
   ui.textWrapped('Poslední zahození kola: ' .. d.lastReset)
   ui.textWrapped('Poslední nezapočítané kolo: ' .. d.lastReject)
