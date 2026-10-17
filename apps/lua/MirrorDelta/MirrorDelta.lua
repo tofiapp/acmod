@@ -6,6 +6,7 @@ local deltaWindow = require('src/delta_window')
 local timingWindow = require('src/timing_window')
 local tyresWindow = require('src/tyres_window')
 local gearWindow = require('src/gear_window')
+local damageWindow = require('src/damage_window')
 local settingsWindow = require('src/settings_window')
 
 -- Runs every frame even when all windows are hidden, so laps are always recorded.
@@ -27,6 +28,10 @@ end
 
 function script.windowGear(dt)
   gearWindow.draw()
+end
+
+function script.windowDamage(dt)
+  damageWindow.draw()
 end
 
 function script.windowSettings(dt)

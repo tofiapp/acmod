@@ -48,6 +48,17 @@ local T = {
   totalLaps = 0,
   currentMs = 0,
   bestMs = 0,
+  -- diagnostics for the settings tab (strings are constants, so no allocation)
+  diag = {
+    error = nil,          -- first script error, if any
+    lapEvents = 0,        -- line crossings seen
+    timedLaps = 0,        -- laps that were complete and clean
+    references = 0,       -- laps that became a reference
+    lastReset = '-',      -- why the running lap was last dropped
+    lastReject = '-',     -- why the last finished lap was not timed or not used
+    jumps = 0,
+    sessionStarts = 0,
+  },
 }
 for i = 1, MAX_SECTORS do T.secState[i] = 0 end
 
@@ -233,8 +244,9 @@ local function startLap(flying, lineSpline)
   for i = 1, MAX_SECTORS do T.secState[i] = 0 end
 end
 
-local function resetLap()
+local function resetLap(reason)
   startLap(false, nil)
+  if reason then T.diag.lastReset = reason end
 end
 
 local function lapFinished(lapMs, now)
@@ -253,7 +265,15 @@ local function lapFinished(lapMs, now)
     -- keep the finished grid until AC confirms the lap (or the wait runs out)
     cur, cand = cand, cur
     pendingActive, pendingMs, pendingStart, pendingClock = true, lapMs, curStart, now
+    T.diag.timedLaps = T.diag.timedLaps + 1
   else
+    if not T.flying then
+      T.diag.lastReject = 'kolo nezačalo průjezdem cílem na trati (out lap, boxy, reset)'
+    elseif not T.clean then
+      T.diag.lastReject = 'neplatné kolo (řezání podle AC nebo boxová ulička)'
+    else
+      T.diag.lastReject = 'chybí část kola (záznam nedošel do konce)'
+    end
     T.flashKind = 4
     if dirty then saveData() end
   end
@@ -272,7 +292,9 @@ local function finalizePending(now)
     valid = cbValid
     if cbMs > 0 and math.abs(cbMs - ms) < 1000 then ms = cbMs end
   end
+  if not valid then T.diag.lastReject = 'AC kolo po dojetí označilo jako neplatné' end
   if valid then
+    T.diag.references = T.diag.references + 1
     cand[GRID + 1] = ms
     if T.sessionRefMs == 0 or ms < T.sessionRefMs then
       copyList(sessionRef, cand, GRID + 1)
@@ -325,7 +347,7 @@ local function updateTiming(sim, car, now)
   end
 end
 
-function T.update(dt)
+local function updateInner(dt)
   if not loaded then
     loadData()
     setSectorCount(S.sectors)
@@ -361,7 +383,7 @@ function T.update(dt)
     -- first frame, back from a replay, teleport or new session: wait for the next line crossing
     wasReplay, needReset = false, false
     prevLapCount, prevSpline, prevRawT = lapCount, s, t
-    resetLap()
+    resetLap(nil)
     updateDelta(dt, s, t)
     return
   end
@@ -376,11 +398,12 @@ function T.update(dt)
     -- second half of the same crossing (lapCount and timer in different frames): nothing to do
     lapEvent = false
   end
-  if lapEvent and not (ds > 0 and ds < JUMP_LIMIT) then
+  if lapEvent and not (ds >= 0 and ds < JUMP_LIMIT) then
     -- lap counter or timer changed without driving over the line (teleport, session reset)
-    resetLap()
+    resetLap('časovač kola se vynuloval bez jízdy přes cíl')
   elseif lapEvent then
     lastEventClock = now
+    T.diag.lapEvents = T.diag.lapEvents + 1
     -- the line lies between the previous and this frame: t ms have passed since crossing it
     local frameMs = dt * 1000
     local lineSpline = s
@@ -401,12 +424,12 @@ function T.update(dt)
     startLap(not car.isInPitlane and not car.isInPit, lineSpline)
     advance(lapU(s), t)
   elseif ds > JUMP_LIMIT or ds < -JUMP_LIMIT then
-    resetLap()
+    resetLap('skok pozice na trati (teleport)')
   elseif T.flying then
     local u = lapU(s)
     if prevU > 0.9 and u < 0.5 then
       -- past the measured line, but AC has not counted the lap: wait a little, then give up
-      if u > LINE_WAIT then resetLap() end
+      if u > LINE_WAIT then resetLap('projel cílem, ale AC kolo nezapočítalo') end
     elseif u > prevU then
       advance(u, t)
     end
@@ -418,6 +441,15 @@ function T.update(dt)
   local u = T.flying and lapU(s) or s
   T.curSector = math.min(T.sectorCount, math.floor(u * T.sectorCount) + 1)
   updateDelta(dt, s, t)
+end
+
+-- Runs the tracker; a script error is kept for the diagnostics tab instead of being lost.
+function T.update(dt)
+  local ok, err = pcall(updateInner, dt)
+  if not ok and not T.diag.error then
+    T.diag.error = tostring(err)
+    ac.error('MirrorDelta: ' .. T.diag.error)
+  end
 end
 
 -- Clears saved data for this car + track and the session reference.
@@ -432,6 +464,10 @@ function T.clearSaved()
   T.hasDelta = false
 end
 
+function T.lapFraction()
+  return curStart, prevU, nextK
+end
+
 function T.dataFile()
   return store.fileName()
 end
@@ -444,11 +480,15 @@ end
 if ac.onSessionStart then
   ac.onSessionStart(function ()
     needSessionReset, needReset = true, true
+    T.diag.sessionStarts = T.diag.sessionStarts + 1
+    T.diag.lastReset = 'nová session nebo restart'
   end)
 end
 if ac.onCarJumped then
   ac.onCarJumped(0, function ()
     needReset = true
+    T.diag.jumps = T.diag.jumps + 1
+    T.diag.lastReset = 'teleport nebo reset auta'
   end)
 end
 if ac.onRelease then

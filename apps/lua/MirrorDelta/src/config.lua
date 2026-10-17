@@ -17,6 +17,7 @@ local defaults = {
   intensityByDelta = false,
   intensityFullAt = 0.5,    -- seconds of delta for full colour
   referenceMode = 2,        -- 1: best lap of this session, 2: all-time best lap (saved)
+  deltaLimiterFlash = true, -- the delta line blinks blue at the rev limiter, like the gear window
 
   -- Timing window
   showPosition = true,
@@ -45,6 +46,11 @@ local defaults = {
   gearShiftFlash = true,    -- bar and gear tile blink blue at the limiter
   gearSpeedStep = 3,        -- km/h; the speed only changes once it moved a whole step
   gearPlate = false,
+
+  -- Damage window
+  damageAutoHide = false,   -- show the window only when something is damaged
+  damageFull = 50,          -- raw car.damage value drawn as full red
+  damagePlate = false,
 
   -- Colours
   colPurple = rgbm(0.69, 0.36, 1, 1),

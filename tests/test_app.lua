@@ -189,12 +189,19 @@ local ok, err = pcall(function ()
     config.set('gearShowSpeed', layout == 1)
     car.rpm = layout == 1 and 7790 or 6000
     script.windowGear(DT)
+    env.windowW, env.windowH = 150, 168
+    car.damage[0], car.damage[2] = layout == 1 and 0 or 30, layout == 1 and 80 or 0
+    car.engineLifeLeft = layout == 1 and 1000 or 420
+    config.set('damageAutoHide', layout == 2)
+    script.windowDamage(DT)
     env.windowW, env.windowH = 600, 80
   end
   settings.draw()
 end)
 check(ok, 'drawing runs without errors: ' .. tostring(err))
 check(env.calls.pushFont == env.calls.popFont, 'every pushed font is popped')
+check(tracker.diag.error == nil, 'tracker ran without script errors: ' .. tostring(tracker.diag.error))
+check(tracker.diag.lapEvents > 5 and tracker.diag.references > 0, 'diagnostics count line crossings and references')
 check((env.calls.rect or 0) > 100, 'rectangles were drawn')
 check(tyres.available() == true and tyres.optimumFromCar() == true, 'tyre temperatures detected')
 
@@ -217,6 +224,8 @@ do
     script.windowTyres(DT)
     env.windowW, env.windowH = 260, 102
     script.windowGear(DT)
+    env.windowW, env.windowH = 150, 168
+    script.windowDamage(DT)
   end
   for _ = 1, 300 do frameAndDraw() end
   jit.off()

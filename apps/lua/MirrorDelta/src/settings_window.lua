@@ -80,6 +80,7 @@ local function tabDelta()
   slider('lineGap', 'Mezera mezi čarami', 0, 30, '%.1f px', 0.5)
   slider('numberSize', 'Velikost čísla', 9, 60, '%.0f px', 1)
   slider('opacity', 'Průhlednost', 0.1, 1, '%.2f')
+  checkbox('deltaLimiterFlash', 'Na omezovači blikat modře (jako okno s převodem)')
   checkbox('intensityByDelta', 'Intenzita barvy podle velikosti delty')
   if S.intensityByDelta then
     slider('intensityFullAt', 'Plná barva od', 0.1, 2, '±%.2f s')
@@ -163,7 +164,51 @@ local function tabGear()
   gap()
   ui.header('Otáčky (rozsah podle omezovače auta)')
   slider('gearRpmStart', 'První dílky od', 0.3, 0.9, '%.2f × omezovač')
-  checkbox('gearShiftFlash', 'Na omezovači blikat modře (čára i převod)')
+  checkbox('gearShiftFlash', 'Na omezovači blikat modře (čára, převod i rychlost)')
+end
+
+local function tabDamage()
+  ui.header('Zobrazit')
+  checkbox('damageAutoHide', 'Ukázat jen při poškození')
+  checkbox('damagePlate', 'Tmavý podklad')
+  gap()
+  ui.header('Citlivost')
+  slider('damageFull', 'Plně červená od hodnoty', 1, 300, '%.0f', 1)
+  local car = ac.getCar(0)
+  if car then
+    ui.textWrapped(string.format('Aktuální hodnoty z AC: přední %.1f, zadní %.1f, levá %.1f, pravá %.1f, motor %.0f / 1000',
+      car.damage[0], car.damage[1], car.damage[2], car.damage[3], car.engineLifeLeft))
+    ui.textWrapped('Po nárazu podle těchto čísel nastavte, od kolika má být strana plně červená.')
+  end
+end
+
+local function yesNo(v) return v and 'ano' or 'ne' end
+
+local function tabDiagnostics()
+  local d = tracker.diag
+  if d.error then
+    ui.header('Chyba skriptu')
+    ui.textWrapped(d.error)
+    gap()
+  end
+  ui.header('Měření kola')
+  ui.text('Kolo se měří: ' .. yesNo(tracker.flying) .. '    platné zatím: ' .. yesNo(tracker.clean))
+  ui.text('Delta k dispozici: ' .. yesNo(tracker.hasDelta) .. '    reference: ' .. D.formatLap(tracker.refMs, 3))
+  ui.text(string.format('Průjezdů cílem: %d    změřených kol: %d    nových referencí: %d', d.lapEvents, d.timedLaps, d.references))
+  ui.textWrapped('Poslední zahození kola: ' .. d.lastReset)
+  ui.textWrapped('Poslední nezapočítané kolo: ' .. d.lastReject)
+  ui.text(string.format('Teleporty/resety: %d    nové session: %d', d.jumps, d.sessionStarts))
+  gap()
+  ui.header('Hodnoty z AC')
+  local car = ac.getCar(0)
+  if car then
+    local start, u, k = tracker.lapFraction()
+    ui.text(string.format('lapCount %d    lapTimeMs %d    previousLapTimeMs %d', car.lapCount, car.lapTimeMs, car.previousLapTimeMs))
+    ui.text(string.format('splinePosition %.4f    čára %.4f    část kola %.4f    bodů %d', car.splinePosition, start, u, k - 1))
+    ui.text('isLapValid ' .. yesNo(car.isLapValid) .. '    isInPitlane ' .. yesNo(car.isInPitlane) .. '    isInPit ' .. yesNo(car.isInPit))
+  end
+  gap()
+  ui.textWrapped('Když delta nefunguje: odjeďte dvě až tři celá kola bez řezání a pošlete screenshot této záložky.')
 end
 
 local function tabColors()
@@ -184,7 +229,9 @@ function M.draw()
     ui.tabItem('Časy', tabTiming)
     ui.tabItem('Pneumatiky', tabTyres)
     ui.tabItem('Převody', tabGear)
+    ui.tabItem('Poškození', tabDamage)
     ui.tabItem('Barvy', tabColors)
+    ui.tabItem('Diagnostika', tabDiagnostics)
   end)
 end
 
