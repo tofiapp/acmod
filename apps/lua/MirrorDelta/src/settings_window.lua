@@ -143,15 +143,27 @@ local function tabTyres()
   end
 end
 
+local SPEED_STEPS = { 1, 2, 3, 5 }
+
 local function tabGear()
   ui.header('Zobrazit')
-  checkbox('gearShowBar', 'Ukazatel otáček (12 dílků)')
-  checkbox('gearShowSpeed', 'Rychlost')
+  checkbox('gearShowBar', 'Ukazatel otáček (12 dílků, od krajů ke středu)')
+  checkbox('gearShowSpeed', 'Rychlost pod převodem')
   checkbox('gearPlate', 'Tmavý podklad')
   gap()
+  ui.header('Rychlost')
+  ui.text('Číslo se změní, až se rychlost posune o celý krok:')
+  ui.setNextItemWidth(ui.availableSpaceX())
+  ui.combo('##gearSpeedStep', string.format('po %d km/h', S.gearSpeedStep), ui.ComboFlags.None, function ()
+    for i = 1, #SPEED_STEPS do
+      local v = SPEED_STEPS[i]
+      if ui.selectable(string.format('po %d km/h', v), S.gearSpeedStep == v) then config.set('gearSpeedStep', v) end
+    end
+  end)
+  gap()
   ui.header('Otáčky (rozsah podle omezovače auta)')
-  slider('gearRpmStart', 'První dílek od', 0.3, 0.9, '%.2f × omezovač')
-  checkbox('gearShiftFlash', 'Na omezovači blikat modře')
+  slider('gearRpmStart', 'První dílky od', 0.3, 0.9, '%.2f × omezovač')
+  checkbox('gearShiftFlash', 'Na omezovači blikat modře (čára i převod)')
 end
 
 local function tabColors()

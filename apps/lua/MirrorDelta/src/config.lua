@@ -42,7 +42,8 @@ local defaults = {
   gearShowBar = true,
   gearShowSpeed = true,
   gearRpmStart = 0.6,       -- first segment lights up at this share of the rev limiter
-  gearShiftFlash = true,    -- all segments blink blue at the limiter
+  gearShiftFlash = true,    -- bar and gear tile blink blue at the limiter
+  gearSpeedStep = 3,        -- km/h; the speed only changes once it moved a whole step
   gearPlate = false,
 
   -- Colours

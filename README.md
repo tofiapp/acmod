@@ -9,13 +9,13 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 | **MirrorDelta** | Čára mini sektorů, čára delty a delta v sekundách (±) |
 | **MirrorDelta Timing** | Pozice, kolo, aktuální čas a nejrychlejší kolo |
 | **MirrorDelta Tyres** | Teplota jádra pneumatik a teploty pláště (vnitřní / střed / vnější) |
-| **MirrorDelta Gear** | Velké číslo převodu, vlevo od něj rychlost, nad nimi ukazatel otáček z 12 dílků |
+| **MirrorDelta Gear** | Ukazatel otáček z 12 dílků, pod ním převod na barevné dlaždici a pod převodem rychlost |
 
 ## Instalace
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.1.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.2.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -76,9 +76,12 @@ Nastavení je společné pro všechna okna a má pět záložek.
 - Tmavý podklad.
 
 **Převody**
-- Zobrazit: ukazatel otáček a rychlost (každé zvlášť), tmavý podklad.
-- Rozsah otáček se bere z omezovače (`rpmLimiter`) daného auta. První dílek se rozsvítí od nastaveného podílu omezovače (výchozí 0,6). Dílky jsou 6 zelených, 4 žluté a 2 červené.
-- Na omezovači všechny dílky blikají modře (jde vypnout).
+- Zobrazit: ukazatel otáček, rychlost pod převodem a tmavý podklad (každé zvlášť).
+- Ukazatel otáček má 12 dílků a rozsvěcuje se od obou krajů ke středu: zelená, žlutá, červená. Rozsah se bere z omezovače (`rpmLimiter`) daného auta. První dílky se rozsvítí od nastaveného podílu omezovače (výchozí 0,6).
+- Dlaždice s převodem je bílá, s rostoucími otáčkami žlutá a pak červená.
+- Na omezovači bliká modře čára i dlaždice (jde vypnout).
+- Rychlost se nemění po každém km/h, ale až když se posune o celý krok (1, 2, 3 nebo 5 km/h, výchozí 3). Číslo tak neposkakuje.
+- Písmo okna je Unbounded. Je přibalené ve složce `fonts` i s licencí SIL OFL.
 
 **Barvy**
 - Všechny barvy jde změnit. Tlačítko **Obnovit výchozí barvy** je vrátí zpět.

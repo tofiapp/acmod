@@ -8,7 +8,9 @@ each with its own taskbar icon:
 - **delta** (`MirrorDelta`): mini sector line, delta line, delta in seconds. Sits above the mirror.
 - **timing** (`MirrorDelta Timing`): position, lap, current time, best lap.
 - **tyres** (`MirrorDelta Tyres`): tyre core temperature (big number) and tread zones (inner/middle/outer).
-- **gear** (`MirrorDelta Gear`): 12-segment RPM bar (range from `car.rpmLimiter`), speed, big gear number.
+- **gear** (`MirrorDelta Gear`): 12-segment RPM bar lighting from both edges to the centre (range from
+  `car.rpmLimiter`), gear on a rounded tile coloured by revs (white/yellow/red, blinking blue at the limiter),
+  calm speed (changes only by whole steps) on a dark bar under it. Font: bundled Unbounded Bold.
 
 The user speaks Czech: talk to them in Czech, write code, comments and commit messages in English.
 UI labels inside the app and the README are Czech.
@@ -65,7 +67,9 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
   confirm them there.
 - Drawing uses `ui.drawRectFilled(p1, p2, color, rounding)` and `ui.dwriteTextAligned` after
   `ui.setCursor`. Rounded stripes are built by overlapping rects instead of corner flags.
-- Font: `Bahnschrift;Weight=SemiBold;Stretch=SemiCondensed` (Windows 10/11).
+- Font: `Bahnschrift;Weight=SemiBold;Stretch=SemiCondensed` (Windows 10/11) for delta, timing and tyres.
+  The gear window uses `Unbounded:apps/lua/MirrorDelta/fonts;Weight=Bold` (bundled TTF + OFL.txt; the
+  `Name:dir` form with a path relative to the AC root is how official CSP code loads its own fonts).
 
 ## Commands
 
@@ -79,3 +83,4 @@ pip install lupa && python tests/run_tests.py   # syntax check of all Lua files 
 Delta layout B (sectors top, line middle, number bottom), 24 sectors in 3 groups, line 9.5 px, gap 12 px,
 number 30 px, opacity 100 %, intensity off. Timing side by side, best lap purple frame, lap flash on.
 Tyres style 1 (big core numbers + zone bar); style 2 = core number + tyre + three zone numbers.
+Gear: rounded style, speed on a dark bar as wide as the gear tile, speed step 3 km/h, font Unbounded.
