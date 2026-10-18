@@ -81,7 +81,18 @@ M.overlayBoard = { displayMode = 2, verticalLayout = false }                   -
 M.session = { laps = 15, isTimedRace = false, type = 3 }
 
 ac = {
-  FolderID = { ScriptConfig = 1 },
+  FolderID = { ScriptConfig = 1, ExtCfgUser = 18 },
+  INIConfig = {
+    load = function (path)
+      M.iniFiles = M.iniFiles or {}
+      local file = M.iniFiles[path] or {}
+      M.iniFiles[path] = file
+      return {
+        get = function (_, section, key, default) local v = file[section .. '/' .. key]; if v == nil then return default end; return v end,
+        setAndSave = function (_, section, key, value) file[section .. '/' .. key] = value; M.iniWrites = (M.iniWrites or 0) + 1 end,
+      }
+    end,
+  },
   getFolder = function () return M.folder end,
   getCarID = function () return 'test_car' end,
   getTrackFullID = function (sep) return 'test_track' .. sep .. 'gp' end,

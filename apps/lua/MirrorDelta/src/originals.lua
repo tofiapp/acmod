@@ -18,20 +18,26 @@ local CHECK_EVERY = 1        -- s
 local nextCheck = 0
 local messagesApplied = nil  -- value of S.hideSystemMessages last applied
 
+-- CSP's own option (Content Manager > Custom Shaders Patch > GUI > Hide system messages) lives in the user's
+-- cfg/extension/gui.ini. It is written the way the official ControllerTweaks app writes CSP user configs
+-- (ac.INIConfig.load + setAndSave), only when the value differs; CSP reloads its configs when they change.
+local function writeGuiIni(value)
+  local path = ac.getFolder(ac.FolderID.ExtCfgUser) .. '/gui.ini'
+  local ini = ac.INIConfig.load(path)
+  if ini:get('HIDE', 'HIDE_SYSTEM_MESSAGES', 0) == value then return 'už nastaveno' end
+  ini:setAndSave('HIDE', 'HIDE_SYSTEM_MESSAGES', value)
+  return 'zapsáno do cfg/extension/gui.ini'
+end
+
 local function applyMessages()
   if messagesApplied == S.hideSystemMessages then return end
   messagesApplied = S.hideSystemMessages
-  if type(ac.applyLiveConfigEdit) ~= 'function' then
-    M.messages = 'CSP to aplikacím nedovoluje, zapněte ručně (viz README)'
-    return
+  local value = S.hideSystemMessages and 1 or 0
+  local ok, result = pcall(writeGuiIni, value)
+  if type(ac.applyLiveConfigEdit) == 'function' then
+    pcall(ac.applyLiveConfigEdit, 'gui.ini', '[HIDE]\nHIDE_SYSTEM_MESSAGES=' .. value)
   end
-  local ok, err = pcall(ac.applyLiveConfigEdit, 'gui.ini',
-    '[HIDE]\nHIDE_SYSTEM_MESSAGES=' .. (S.hideSystemMessages and '1' or '0'))
-  if ok then
-    M.messages = S.hideSystemMessages and 'skryté' or 'zobrazené'
-  else
-    M.messages = 'nejde zapnout z aplikace: ' .. tostring(err)
-  end
+  M.messages = (S.hideSystemMessages and 'skryté' or 'zobrazené') .. ' (' .. (ok and result or ('chyba: ' .. tostring(result))) .. ')'
 end
 
 local function hideLeaderboard()
@@ -142,15 +148,35 @@ function M.translate(str)
   return out
 end
 
--- AC's system messages, in Czech: penalties go to the notification window, the rest (TC, ABS, brake bias...)
--- to the one-line car settings window at the top, like AC shows them (or to the notifications when that is off).
+-- Messages about car settings (AC's titles: 'ABS', 'TC', 'Auto Shifter', 'Turbo: ...', as CSP's split screen mode
+-- checks them). Short words must stand alone, longer ones may be part of a word.
+local SETTING_WORDS = { 'abs', 'tc', 'tc2', 'esc', 'ers', 'map' }
+local SETTING_PARTS = { 'traction', 'stability', 'brake', 'bias', 'turbo', 'mgu', 'kers', 'limiter', 'shifter',
+  'gearbox', 'clutch', 'blip', 'fuel', 'engine', 'boost', 'differential', 'diff ' }
+function M.isSettingMessage(title)
+  local t = title:lower()
+  for _, w in ipairs(SETTING_WORDS) do
+    if t:find('%f[%w]' .. w .. '%f[%W]') then return true end
+  end
+  for _, p in ipairs(SETTING_PARTS) do
+    if t:find(p, 1, true) then return true end
+  end
+  return false
+end
+
+-- AC's system messages, in Czech. Car settings go to the one-line settings window (only when the app did not
+-- read the change itself), penalties and everything else to the notifications, kept apart.
 if type(ac.onMessage) == 'function' then
   pcall(ac.onMessage, function (title, description, kind)
     title = type(title) == 'string' and title or ''
     description = type(description) == 'string' and description or ''
     if title == '' and description == '' then return end
+    local setting = kind ~= 'illegal' and M.isSettingMessage(title)
     title, description = M.upper(M.translate(title)), M.translate(description)
-    if kind ~= 'illegal' and setupLine.message(title, description) then return end
+    if setting and S.setupLine then
+      setupLine.acMessage(title, description)
+      return
+    end
     if not S.notifySystem then return end
     notify.push(kind == 'illegal' and notify.PENALTY or notify.SYSTEM, title, description)
   end)

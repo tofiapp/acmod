@@ -1,6 +1,8 @@
 -- Car settings line: one line at the top of the screen when a driver aid or car setting changes
--- (TC, TC2, ABS, brake bias, engine brake, fuel map, turbo, MGU-K/H, limiters, auto shift, auto clutch),
--- and AC's own system messages (translated in originals.lua). A new change replaces the line.
+-- (TC, TC2, ABS, brake bias, engine brake, fuel map, turbo, MGU-K/H, limiters, auto shift, auto clutch).
+-- Only car settings: AC's other system messages go to the notifications (originals.lua). AC's own message
+-- about a setting is shown only when the app did not read that change itself (no doubles). A new change
+-- replaces the line.
 -- Car fields are the ones the official Unbound app reads; each is probed once under pcall,
 -- so a field missing in an older CSP only disables that one setting.
 -- Strings are built only when something changes, never per frame.
@@ -14,7 +16,8 @@ local M = { count = 0 }
 local BASE_W, BASE_H = 520, 44
 local FADE_OUT = 0.4           -- s
 local QUIET = 1.5              -- s after start / reset: the initial state is not news
-local OWN_WINS = 0.5           -- s an own reading wins over AC's message about the same change
+local AC_WAIT = 0.5            -- s AC's settings message waits, so an own reading of the same change can win
+local OWN_NEAR = 2             -- s around AC's message in which an own reading means it is the same change
 local MAX_SEGS = 12            -- more steps than this: no step bar, only the number
 
 -- The line shown now.
@@ -30,12 +33,17 @@ local function show(label, value, lit, segs, own)
   M.count = M.count + 1
 end
 
--- An AC system message (already in Czech); skipped when an own reading just showed the same change.
-function M.message(label, value)
-  if not S.setupLine then return false end
-  if os.preciseClock() - ownClock < OWN_WINS then return true end
-  show(label, value, 0, 0, false)
-  return true
+-- AC's system message about a car setting (already in Czech). Waits a moment and is dropped when the app read
+-- the change itself shortly before or after; shown only for settings the app cannot read.
+local pendingLabel, pendingValue, pendingAt = nil, nil, 0
+function M.acMessage(label, value)
+  pendingLabel, pendingValue, pendingAt = label, value, os.preciseClock()
+end
+
+local function flushPending(now)
+  if not pendingLabel or now - pendingAt < AC_WAIT then return end
+  if ownClock < pendingAt - OWN_NEAR then show(pendingLabel, pendingValue, 0, 0, false) end
+  pendingLabel, pendingValue = nil, nil
 end
 
 -- The line shown now (for tests and Diagnostika).
@@ -119,6 +127,7 @@ function M.update()
     quietUntil = now + QUIET
   end
   local quiet = now < quietUntil or not S.setupLine
+  if quiet then pendingLabel = nil end
   for i = 1, #WATCH do
     local w = WATCH[i]
     if w.ok == nil then probe(w, car) end
@@ -131,6 +140,7 @@ function M.update()
       end
     end
   end
+  flushPending(now)
 end
 
 -- Settings that work on this car / CSP (for Diagnostika).

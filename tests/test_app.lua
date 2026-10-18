@@ -624,23 +624,32 @@ do
   env.overlayBoard.displayMode = 2
   for _ = 1, 90 do frame(1) end
   check(env.overlayBoard.displayMode == 0, 'AC overlay leaderboard turned off')
-  local edited = false
-  for _, e in ipairs(env.configEdits or {}) do if e:find('HIDE_SYSTEM_MESSAGES=1', 1, true) then edited = true end end
-  check(edited, 'AC system messages hidden through gui.ini [HIDE]')
+  local guiIni = env.iniFiles and env.iniFiles[env.folder .. '/gui.ini']
+  check(guiIni and guiIni['HIDE/HIDE_SYSTEM_MESSAGES'] == 1, 'AC system messages hidden: written to the user gui.ini [HIDE]')
+  local writes = env.iniWrites
+  for _ = 1, 120 do frame(1) end
+  check(env.iniWrites == writes, 'gui.ini written only once')
   local setup = require('src/setup_line')
   local countBefore = notify2.count
   env.callbacks.message('ABS', 'Level 3', 'info', 2)
+  for _ = 1, 40 do frame(1) end
   local sl, sv = setup.current()
   check(sl == 'ABS' and sv == 'Úroveň 3' and notify2.count == countBefore,
-    'AC system message shown in the car settings line, not the notifications: ' .. sl .. ' / ' .. sv)
+    'AC settings message shown in the car settings line, not the notifications: ' .. sl .. ' / ' .. sv)
+  env.callbacks.message('Session', 'Qualifying starts in 2 minutes', 'info', 2)
+  for _ = 1, 40 do frame(1) end
+  sl = setup.current()
+  check(notify2.get(1).kind == notify2.SYSTEM and sl == 'ABS', 'other AC messages go to the notifications, not the settings line')
   env.callbacks.message('Penalty', 'Cut', 'illegal', 2)
   check(notify2.get(1).kind == notify2.PENALTY, 'illegal message shown as a penalty')
   check(notify2.get(1).title == 'PENALIZACE' and notify2.get(1).sub == 'Řezání trati',
     'AC message translated to Czech: ' .. notify2.get(1).title .. ' / ' .. notify2.get(1).sub)
   env.callbacks.message('Traction Control', 'Level 3', 'info', 2)
+  for _ = 1, 40 do frame(1) end
   sl, sv = setup.current()
   check(sl == 'TRAKČNÍ KONTROLA' and sv == 'Úroveň 3', 'TC message in Czech: ' .. sl .. ' / ' .. sv)
   env.callbacks.message('Auto Clutch', 'ON', 'info', 2)
+  for _ = 1, 40 do frame(1) end
   sl, sv = setup.current()
   check(sv == 'Zapnuto' and sl == 'AUTOMATICKÁ SPOJKA', 'ON translated: ' .. sv)
   local flags = require('src/flag_window')
@@ -810,9 +819,17 @@ do
   frame(1)
   local label, value = setup.current()
   check(label == 'TRAKČNÍ KONTROLA' and value == '3 / 8', 'TC change shown: ' .. label .. ' / ' .. value)
-  env.callbacks.message('Traction Control', 'Level 3', 'info', 2)
+  env.callbacks.message('TC', '3', 'info', 2)
+  for _ = 1, 60 do frame(1) end
   label, value = setup.current()
   check(value == '3 / 8', 'AC message right after does not replace the own reading: ' .. value)
+  local n0 = setup.count
+  env.callbacks.message('TC', '4', 'info', 2)  -- AC first, own reading a few frames later: still one line
+  for _ = 1, 5 do frame(1) end
+  car.tractionControlMode = 4
+  for _ = 1, 60 do frame(1) end
+  label, value = setup.current()
+  check(value == '4 / 8' and setup.count == n0 + 1, 'AC message before the own reading is not shown twice: ' .. value)
   car.brakeBias = 0.6
   frame(1)
   label, value = setup.current()

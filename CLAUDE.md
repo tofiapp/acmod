@@ -107,8 +107,10 @@ Poškození tab shows the live raw values for calibration.
   `acc-lua-examples/cars/dash_display_8100`) is the fallback delta (`S.deltaSource`), also read under `pcall`.
   AC's damage displayer is hidden like the official Unbound app does it: `sim.damageDisplayerShown` +
   `ac.trySimKeyPressCommand('Hide Damage')`. AC's overlay leaderboard (F9) is turned off with `ac.accessOverlayLeaderboardParams().displayMode = 0` (Unbound).
-  System messages: CSP `gui.ini [HIDE] HIDE_SYSTEM_MESSAGES` via `ac.applyLiveConfigEdit` (pcall; may be refused for apps)
-  and caught with `ac.onMessage(title, description, type)` (RGBControl) into the notification window.
+  System messages: CSP `[HIDE] HIDE_SYSTEM_MESSAGES` written to `ac.getFolder(ac.FolderID.ExtCfgUser)/gui.ini` with
+  `ac.INIConfig.load` + `:setAndSave` (as ControllerTweaks writes CSP user configs; `applyLiveConfigEdit` is internal
+  only and did not hide them). Caught with `ac.onMessage(title, description, type)` (RGBControl): car setting messages
+  (`originals.isSettingMessage`) go to the setup line only if no own reading within 2 s, the rest to the notifications.
   Notifications use `sim.raceFlagType` + `ac.FlagType` (Radar, RGBControl), `ac.getDriverName(i)`, `car.isConnected`,
   `car.bestLapTimeMs` of any car and `ac.getSession(i).type == ac.SessionType.Race` (RGBControl). If someone provides `extension/internal/lua-sdk` from a CSP install,
   confirm them there.

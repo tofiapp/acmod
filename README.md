@@ -12,14 +12,14 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 | **MirrorDelta Damage** | Poškození ve tvaru auta, 12 vzhledů: karoserie, pneumatiky a stav motoru v % |
 | **MirrorDelta Gear** | Ukazatel otáček z 12 dílků, pod ním převod na barevné dlaždici a pod převodem rychlost |
 | **MirrorDelta Flags** | Aktuální vlajka v pravém horním rohu: vlajka a její název, dokud platí |
-| **MirrorDelta Setup** | Jeden řádek nahoře uprostřed při změně nastavení auta (TC, ABS, brzdy…) a systémové zprávy AC |
+| **MirrorDelta Setup** | Jeden řádek nahoře uprostřed při změně nastavení auta (TC, ABS, brzdy…) |
 | **MirrorDelta Notifications** | Krátké zprávy nahoře: vlajky, nejrychlejší kolo, předjetí, boxy, neplatné kolo, odpojení |
 
 ## Instalace
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.12.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.12.1.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -51,7 +51,7 @@ Po instalaci nové verze se všechna okna MirrorDelta jednou sama zobrazí a roz
 ### Vypnutí původních ukazatelů AC
 
 - **Pořadí AC (F9)** aplikace vypne sama, stejně jako to dělá oficiální aplikace CSP Unbound.
-- **Systémové zprávy AC** (ABS, TC, penalizace, připojení…) se pokusí skrýt sama. Zprávy pak ukáže okno MirrorDelta Notifications, takže o nic nepřijdete. Pokud CSP aplikaci skrytí nedovolí (stav uvidíte v nastavení na záložce Notifikace), zapněte ho jednou ručně: **Content Manager > Nastavení > Custom Shaders Patch > GUI > Hide system messages**.
+- **Systémové zprávy AC** (původní řádek nahoře: ABS, TC, penalizace, připojení…) aplikace skryje tak, že zapne volbu CSP „Hide system messages“ ve vašem `Documents/Assetto Corsa/cfg/extension/gui.ini` (stejně zapisuje nastavení CSP oficiální aplikace ControllerTweaks). Je to stejná volba jako **Content Manager > Nastavení > Custom Shaders Patch > GUI > Hide system messages**. Když v nastavení MirrorDelta skrývání vypnete, vrátí ji zpět. Zprávy o nastavení auta pak ukáže okno MirrorDelta Setup, ostatní okno MirrorDelta Notifications. Kdyby se původní řádek dál ukazoval, zapněte volbu ručně v Content Manageru a restartujte jízdu.
 - **Vlajky** ukazuje okno MirrorDelta Flags v pravém horním rohu a pod ním okno MirrorDelta Notifications se všemi zprávami ve stejném stylu (barevná ikona vpravo, text vlevo od ní). Po instalaci se tam obě samy přesunou.
 - Okna s deltou, časy, pneumatikami, notifikacemi, vlajkou a poškozením mají matné průsvitné pozadí podle velikosti obsahu. Sytost jde změnit v nastavení na záložce Barvy.
 
@@ -124,7 +124,7 @@ Nastavení je společné pro všechna okna a má osm záložek.
   - odpojení jezdce, jen online.
 - Pozice a boxy se standardně hlásí jen v závodě, v tréninku by jich bylo moc.
 - Tlačítko **Ukázat ukázku** zobrazí dvě zkušební zprávy, podle nich okno umístěte (výchozí šířka 520 px, patří doprostřed nahoru).
-- **Nastavení auta (jeden řádek nahoře):** okno MirrorDelta Setup ukáže na 2,5 s (nastavitelné) jeden řádek, když změníte trakční kontrolu, TC2, ABS, rozložení brzd, brzdění motorem, mapu paliva, turbo, MGU-K / MGU-H, omezovač v boxech nebo rychlosti, automatické řazení nebo spojku. Třeba „TRAKČNÍ KONTROLA 3 / 8“ s dílky úrovně. Nová změna řádek přepíše, takže při držení tlačítka brzd se hodnota jen plynule mění. Do stejného řádku jdou i ostatní systémové zprávy AC (česky); penalizace zůstávají v notifikacích. Hodnoty čte stejně jako oficiální aplikace Unbound; co daná verze CSP nemá, se vynechá.
+- **Nastavení auta (jeden řádek nahoře):** okno MirrorDelta Setup ukáže na 2,5 s (nastavitelné) jeden řádek, když změníte trakční kontrolu, TC2, ABS, rozložení brzd, brzdění motorem, mapu paliva, turbo, MGU-K / MGU-H, omezovač v boxech nebo rychlosti, automatické řazení nebo spojku. Třeba „TRAKČNÍ KONTROLA 3 / 8“ s dílky úrovně. Nová změna řádek přepíše, takže při držení tlačítka brzd se hodnota jen plynule mění. Řádek je jen pro nastavení auta: zprávu AC o nastavení ukáže jen tehdy, když změnu nezachytila aplikace sama (nic se nezdvojí). Ostatní systémové zprávy AC (česky) a penalizace jsou zvlášť v notifikacích. Hodnoty čte stejně jako oficiální aplikace Unbound; co daná verze CSP nemá, se vynechá.
 
 **Diagnostika**
 - Ukazuje, co aplikace při měření kola vidí: jestli se kolo měří, kolik průjezdů cílem a referencí zaznamenala a proč naposledy kolo zahodila nebo nezapočítala.
