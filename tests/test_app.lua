@@ -451,7 +451,7 @@ for _ = 1, 1500 do
 end
 local acGreen = 0
 for i = 1, tracker.sectorCount do if tracker.secState[i] == 2 then acGreen = acGreen + 1 end end
-check(tracker.refKind == 0 and tracker.deltaFromAC and acGreen >= 3, 'mini sectors coloured from AC delta: ' .. acGreen)
+check(tracker.refKind ~= 1 and tracker.refKind ~= 2 and tracker.deltaFromAC and acGreen >= 3, 'mini sectors coloured from AC delta: ' .. acGreen)
 
 -- 17. Line crossed in the pit lane with lapCount one frame late: the lap time is still read correctly
 tracker.clearSaved()
@@ -494,7 +494,7 @@ car.isLapValid = true
 local start = tracker.lapFraction()
 local yellow = 0
 for i = 1, tracker.sectorCount do if tracker.secState[i] == 3 then yellow = yellow + 1 end end
-check(tracker.partial and tracker.refKind == 0, 'out lap without a reference is measured from the pit exit')
+check(tracker.partial and tracker.refKind ~= 1 and tracker.refKind ~= 2, 'out lap without a reference is measured from the pit exit')
 check(math.abs(start - LINE) < 0.01, string.format('line position loaded from the saved file: %.4f', start))
 check(yellow >= 3, 'out lap mini sectors coloured from AC delta: ' .. yellow)
 check(notify.count == countBefore, 'no invalid-lap notification on the out lap')
@@ -511,6 +511,36 @@ for i = 1, tracker.sectorCount do if tracker.secState[i] == 4 then neutral = neu
 check(tracker.partial and neutral >= 3, 'out lap sectors shown as passed without any comparison: ' .. neutral)
 config.set('deltaSource', 1)
 check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
+
+-- 19. A lap our checks rejected but AC took as its best lap becomes the reference
+tracker.clearSaved()
+env.callbacks.session(0, false)
+frame(1)
+driveLaps(1, 1)                     -- flying lap starts
+car.bestLapTimeMs = 0               -- AC has no best lap yet in this session
+for _ = 1, 600 do frame(1) end
+car.isLapValid = false              -- a moment our tracker sees as a cut, AC does not keep
+frame(1)
+car.isLapValid = true
+driveLaps(1, 1)
+for _ = 1, 30 do frame(1) end
+check((tracker.refKind == 1 or tracker.refKind == 2) and math.abs(tracker.sessionRefMs - car.bestLapTimeMs) < 2,
+  string.format('lap confirmed by AC best time becomes the reference: kind %d, %.0f vs %.0f', tracker.refKind, tracker.sessionRefMs, car.bestLapTimeMs))
+
+-- 20. AC knows a best lap but has no delta of its own: delta against AC's best time (estimate)
+tracker.clearSaved()
+car.performanceMeter = nil          -- this CSP has no performanceMeter
+env.callbacks.release()
+tracker = loadApp()
+config = require('src/config')
+env.callbacks.session(0, false)
+frame(1)
+driveLaps(1, 1)
+for _ = 1, 300 do frame(1) end
+check(tracker.refKind == 4 and tracker.hasDelta and not tracker.deltaFromAC,
+  'delta against the AC best time without own reference: kind ' .. tracker.refKind)
+check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
+car.performanceMeter = 0
 
 print(string.format('%d passed, %d failed', passed, failed))
 return failed
