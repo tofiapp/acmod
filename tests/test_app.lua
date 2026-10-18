@@ -630,6 +630,12 @@ do
   local writes = env.iniWrites
   for _ = 1, 120 do frame(1) end
   check(env.iniWrites == writes, 'gui.ini written only once')
+  local before = #env.configEdits
+  for _ = 1, 60 * 60 do frame(1) end
+  check(#env.configEdits == before, 'live edit not repeated forever')
+  env.sim.currentSessionIndex = (env.sim.currentSessionIndex or 0) + 1
+  for _ = 1, 35 * 60 do frame(1) end
+  check(#env.configEdits == before + 3, 'live edit applied again 3, 10 and 30 s after a session change: ' .. (#env.configEdits - before))
   local setup = require('src/setup_line')
   local countBefore = notify2.count
   env.callbacks.message('ABS', 'Level 3', 'info', 2)

@@ -112,7 +112,8 @@ Poškození tab shows the live raw values for calibration.
   `ac.trySimKeyPressCommand('Hide Damage')`. AC's overlay leaderboard (F9) is turned off with `ac.accessOverlayLeaderboardParams().displayMode = 0` (Unbound).
   System messages: CSP `[HIDE] HIDE_SYSTEM_MESSAGES` written to `ac.getFolder(ac.FolderID.ExtCfgUser)/gui.ini` with
   `ac.INIConfig.load` + `:setAndSave` (as ControllerTweaks writes CSP user configs; `applyLiveConfigEdit` is internal
-  only and did not hide them). Caught with `ac.onMessage(title, description, type)` (RGBControl): car setting messages
+  only, but in versions up to 1.12.0 it also hid the track limits / penalty messages, so it is applied as well:
+  at start and again 3, 10 and 30 s later and after every session change, `originals.applyMessages`). Caught with `ac.onMessage(title, description, type)` (RGBControl): car setting messages
   (`originals.isSettingMessage`) go to the setup line only if no own reading within 2 s, the rest to the notifications.
   Notifications use `sim.raceFlagType` + `ac.FlagType` (Radar, RGBControl), `ac.getDriverName(i)`, `car.isConnected`,
   `car.bestLapTimeMs` of any car and `ac.getSession(i).type == ac.SessionType.Race` (RGBControl). If someone provides `extension/internal/lua-sdk` from a CSP install,

@@ -17,6 +17,8 @@ local M = {
 local CHECK_EVERY = 1        -- s
 local nextCheck = 0
 local messagesApplied = nil  -- value of S.hideSystemMessages last applied
+local LIVE_AGAIN = { 3, 10, 30 }   -- s after start (or a session change / file write): apply the live edit again
+local liveStart, liveStep, liveSession = 0, 1, -1
 
 -- CSP's own option (Content Manager > Custom Shaders Patch > GUI > Hide system messages) lives in the user's
 -- cfg/extension/gui.ini. It is written the way the official ControllerTweaks app writes CSP user configs
@@ -29,15 +31,32 @@ local function writeGuiIni(value)
   return 'zapsáno do cfg/extension/gui.ini'
 end
 
-local function applyMessages()
-  if messagesApplied == S.hideSystemMessages then return end
-  messagesApplied = S.hideSystemMessages
+-- The live edit (what hid them in versions up to 1.12.0, also the penalty / track limits messages) is applied again
+-- a few times after start, after the file was written (CSP reloads the file and may drop live edits) and after
+-- every session change, so a reload cannot bring AC's message line back.
+local function liveEdit(value)
+  if type(ac.applyLiveConfigEdit) ~= 'function' then return false end
+  return (pcall(ac.applyLiveConfigEdit, 'gui.ini', '[HIDE]\nHIDE_SYSTEM_MESSAGES=' .. value))
+end
+
+local function applyMessages(now)
   local value = S.hideSystemMessages and 1 or 0
-  local ok, result = pcall(writeGuiIni, value)
-  if type(ac.applyLiveConfigEdit) == 'function' then
-    pcall(ac.applyLiveConfigEdit, 'gui.ini', '[HIDE]\nHIDE_SYSTEM_MESSAGES=' .. value)
+  local sim = ac.getSim()
+  local session = sim and sim.currentSessionIndex or -1
+  if session ~= liveSession then
+    liveSession, liveStart, liveStep = session, now, 1
   end
-  M.messages = (S.hideSystemMessages and 'skryté' or 'zobrazené') .. ' (' .. (ok and result or ('chyba: ' .. tostring(result))) .. ')'
+  if messagesApplied ~= S.hideSystemMessages then
+    messagesApplied = S.hideSystemMessages
+    local ok, result = pcall(writeGuiIni, value)
+    local live = liveEdit(value)
+    liveStart, liveStep = now, 1
+    M.messages = (S.hideSystemMessages and 'skryté' or 'zobrazené') .. ' (' .. (ok and result or ('chyba: ' .. tostring(result)))
+      .. (live and ', živě' or '') .. ')'
+  elseif liveStep <= #LIVE_AGAIN and now - liveStart >= LIVE_AGAIN[liveStep] then
+    liveStep = liveStep + 1
+    liveEdit(value)
+  end
 end
 
 local function hideLeaderboard()
@@ -64,7 +83,7 @@ function M.update()
   nextCheck = now + CHECK_EVERY
   local ok, err = pcall(hideLeaderboard)
   if not ok then M.leaderboard = 'chyba: ' .. tostring(err) end
-  ok, err = pcall(applyMessages)
+  ok, err = pcall(applyMessages, now)
   if not ok then M.messages = 'chyba: ' .. tostring(err) end
 end
 
