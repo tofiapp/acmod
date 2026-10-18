@@ -92,6 +92,10 @@ local function tabDelta()
   if S.deltaLineMode == 1 then slider('splitFull', 'Plná délka čáry při rozdílu', 0.03, 0.5, '%.2f s za 3 s') end
   checkbox('deltaPanel', 'Matné průhledné pozadí')
   checkbox('deltaLimiterFlash', 'Na omezovači blikat modře: čára delty i mini sektory')
+  checkbox('pitBlink', 'V boxech blikat žlutě: čára delty ze strany na stranu a s ní mini sektory')
+  if S.pitBlink then
+    combo('pitSectorPattern', 'Mini sektory v boxech', { 'Střídavě jednotlivé', 'Po polovinách s čárou' })
+  end
   checkbox('intensityByDelta', 'Intenzita barvy podle velikosti delty')
   if S.intensityByDelta then
     slider('intensityFullAt', 'Plná barva od', 0.1, 2, '±%.2f s')
@@ -142,6 +146,7 @@ local function tabTiming()
   gap()
   checkbox('bestHighlight', 'Zvýraznit nejlepší kolo (fialový rámeček)')
   checkbox('lapFlash', 'Po projetí cíle obarvit čas kola')
+  checkbox('pitBox', 'V boxech místo aktuálního času svítí BOX')
   if S.lapFlash then
     slider('lapFlashTime', 'Jak dlouho', 1, 10, '%.0f s', 1)
   end

@@ -73,6 +73,8 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
   delta in that mode. The out lap's partial grid becomes the previous lap with an anchor (`prevLapAnchor`, first
   recorded u); `ownDelta` compares an out-lap reference directly (its grid holds AC's raw out-lap timer, pit lane included, so the delta at the line equals the lap time difference), no delta before the anchor, sectors before it neutral. Keep `updateInner` under LuaJIT's
   60-upvalue limit (move new logic into helper functions).
+- Pit lane (`car.isInPitlane`): delta line lights its halves in turn in yellow (`pitPhase`, ~3 Hz), mini sectors blink
+  with it (`S.pitSectorPattern`: every other one or the half under the lit half); the timing window shows BOX (`S.pitBox`).
 - Mini sectors are boundaries at `j / N` in `u`; times are interpolated; purple needs a clean lap and an
   existing best; best sector lists are kept per sector count.
 - Deleted laps (cut on track, or AC's callback says invalid) flash red (`flashKind 5`), never become the flash best,

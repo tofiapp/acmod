@@ -31,6 +31,9 @@ local defaults = {
   showLast = true,
   setupLine = true,           -- car settings line at the top (TC, ABS, brake bias...) and AC's system messages
   setupTime = 2.5,            -- s the line stays
+  pitBlink = true,            -- in the pit lane the delta line and mini sectors blink yellow
+  pitSectorPattern = 1,       -- 1 every other mini sector, 2 the half under the lit half of the line
+  pitBox = true,              -- in the pit lane the timing window shows BOX instead of the lap time
   standingsCount = 7,         -- standings window: cars shown (the player in the middle)
   standingsGapMode = 2,       -- race gaps: 1 live, 2 after every sector (timing loop), 3 at the line only
   standingsSectors = 3,       -- checkpoints per lap for mode 2
@@ -130,7 +133,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.17.1' }
+local M = { S = S, defaults = defaults, VERSION = '1.18.0' }
 
 function M.set(key, value)
   S[key] = value

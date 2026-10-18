@@ -21,6 +21,15 @@ local function limiterBlink()
   local limiter = car.rpmLimiter > 0 and car.rpmLimiter or 8000
   return car.rpm >= limiter * 0.98 and math.floor(os.preciseClock() * 8) % 2 == 0
 end
+-- In the pit lane: 1 or 2, alternating (about 3 times a second), else 0. The delta line lights its left and right half
+-- in turn, mini sectors blink with it (every other one, or the half under the lit half of the line).
+local PIT_YELLOW = rgbm(1, 0.8, 0.1, 1)
+local function pitPhase()
+  if not S.pitBlink then return 0 end
+  local car = ac.getCar(0)
+  if not car or not car.isInPitlane then return 0 end
+  return math.floor(os.preciseClock() / 0.35) % 2 + 1
+end
 local deltaStrings = {}        -- cache: hundredths -> "+0.23"
 
 local function enabled(row)
@@ -78,7 +87,7 @@ local function sectorColor(i)
   return S.colIdle
 end
 
-local function drawSectors(x, y, w, h, sc, blink)
+local function drawSectors(x, y, w, h, sc, blink, pit)
   local count = tracker.sectorCount
   local groups = math.max(1, math.min(math.floor(S.sectorGroups + 0.5), count))
   local gap = math.max(1, 1.2 * sc)
@@ -97,7 +106,15 @@ local function drawSectors(x, y, w, h, sc, blink)
         px = px + gap
       end
     end
-    D.rect(px, y, px + segW, y + h, D.color(blink and LIMITER_BLUE or sectorColor(i), S.opacity))
+    local color
+    if pit > 0 then
+      local on
+      if S.pitSectorPattern == 2 then on = (i <= count / 2) == (pit == 1) else on = i % 2 == pit % 2 end
+      color = on and PIT_YELLOW or S.colIdle
+    else
+      color = blink and LIMITER_BLUE or sectorColor(i)
+    end
+    D.rect(px, y, px + segW, y + h, D.color(color, S.opacity))
     px = px + segW
   end
 end
@@ -119,6 +136,13 @@ end
 -- Split line (default): the middle is "same as the reference right now"; green grows to the right while you
 -- gain over the last 3 s, red grows to the left while you lose.
 local SPLIT_TICK = rgbm(0.95, 0.96, 0.97, 1)
+local function drawPitLine(x, y, w, h, pit)
+  D.rect(x, y, x + w, y + h, D.color(S.colIdle, S.opacity))
+  local cx = x + w / 2
+  if pit == 1 then D.rect(x, y, cx, y + h, D.color(PIT_YELLOW, S.opacity))
+  else D.rect(cx, y, x + w, y + h, D.color(PIT_YELLOW, S.opacity)) end
+end
+
 local function drawSplit(x, y, w, h, blink)
   if blink then
     D.rect(x, y, x + w, y + h, D.color(LIMITER_BLUE, S.opacity))
@@ -138,7 +162,8 @@ local function drawSplit(x, y, w, h, blink)
   D.rect(cx - t / 2, y - h * 0.3, cx + t / 2, y + h * 1.3, D.color(SPLIT_TICK, S.opacity))
 end
 
-local function drawLine(x, y, w, h, blink)
+local function drawLine(x, y, w, h, blink, pit)
+  if pit > 0 then return drawPitLine(x, y, w, h, pit) end
   if S.deltaLineMode ~= 2 then return drawSplit(x, y, w, h, blink) end
   local alpha = S.opacity
   if S.intensityByDelta and tracker.hasDelta then
@@ -167,6 +192,7 @@ local function drawInner()
   if n == 0 or w <= 0 or h <= 0 then return end
   local sc = math.min(w / BASE_W, h / contentH)
   local blink = limiterBlink()
+  local pit = pitPhase()
   if S.deltaPanel then
     local top = (h - contentH * sc) / 2
     D.panel(0, math.max(0, top - 6 * sc), w, math.min(h, top + contentH * sc + 6 * sc), 6 * sc)
@@ -177,9 +203,9 @@ local function drawInner()
     if i > 1 then y = y + rowSpacing(rows[i - 1], row) * sc end
     local rh = rowHeight(row) * sc
     if row == ROW_SECTORS then
-      drawSectors(0, y, w, rh, sc, blink)
+      drawSectors(0, y, w, rh, sc, blink, pit)
     elseif row == ROW_LINE then
-      drawLine(0, y, w, rh, blink)
+      drawLine(0, y, w, rh, blink, pit)
     else
       drawNumber(0, y, w, rh, S.numberSize * sc)
     end

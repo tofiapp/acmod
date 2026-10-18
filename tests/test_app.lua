@@ -1085,5 +1085,42 @@ do
   env.sim.carsCount = 12
 end
 
+-- 31. Pit lane: BOX instead of the lap time, the delta line and mini sectors blink yellow side to side
+do
+  local yellow = config.S.colYellow
+  local function countYellow()
+    local left, right = 0, 0
+    local saved = ui.drawRectFilled
+    ui.drawRectFilled = function (p1, p2, color)
+      if color.r > 0.95 and color.g > 0.75 and color.g < 0.85 and color.b < 0.15 then
+        if p1.x < 300 then left = left + 1 else right = right + 1 end
+      end
+    end
+    env.windowW, env.windowH = 600, 80
+    script.windowDelta(DT)
+    ui.drawRectFilled = saved
+    return left, right
+  end
+  car.isInPitlane = true
+  env.clock = 0.1
+  local l1, r1 = countYellow()
+  env.clock = 0.45
+  local l2, r2 = countYellow()
+  check(l1 > 0 and r2 > 0 and l1 + r1 > 1 and l2 + r2 > 1 and (l1 ~= l2 or r1 ~= r2),
+    string.format('pit lane: yellow blinking alternates sides (%d/%d then %d/%d)', l1, r1, l2, r2))
+  env.lastTexts = {}
+  env.windowW, env.windowH = 505, 60
+  script.windowTiming(DT)
+  local box = false
+  for _, t in ipairs(env.lastTexts) do if t == 'BOX' then box = true end end
+  check(box, 'pit lane: BOX instead of the current lap time')
+  car.isInPitlane = false
+  env.lastTexts = {}
+  script.windowTiming(DT)
+  box = false
+  for _, t in ipairs(env.lastTexts) do if t == 'BOX' then box = true end end
+  check(not box, 'on track: lap time again')
+end
+
 print(string.format('%d passed, %d failed', passed, failed))
 return failed
