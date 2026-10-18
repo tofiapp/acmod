@@ -460,7 +460,7 @@ local function settleCut(now)
   if not fresh and now - cutWaitClock < CALLBACK_WAIT then return end
   cutWait = false
   local tookAsBest = seenACBest > 0 and math.abs(seenACBest - cutWaitMs) <= 2
-  if (fresh and cbValid) or (not fresh and tookAsBest) then
+  if (fresh and cbValid) or tookAsBest then
     T.lastLapState = 1
     if T.flashKind == 5 then T.flashKind = (prevLapMs > 0 and cutWaitMs < prevLapMs) and 2 or 3 end
     T.diag.lastDeleted = string.format('nesmazáno: isLapValid=ne na %.0f %% kola, ale AC kolo uznalo%s', lapCutU * 100,
@@ -489,6 +489,11 @@ local function finalizePending(now)
       valid = true
       T.diag.lastDeleted = 'nesmazáno: AC hlásí neplatné, ale bez řezání (0 cuts)'
     end
+  end
+  -- AC already took the lap as its best: AC counts it, whatever the callback said
+  if not valid and seenACBest > 0 and math.abs(seenACBest - ms) <= 2 then
+    valid = true
+    T.diag.lastDeleted = 'nesmazáno: AC kolo vzalo jako svůj nejlepší čas'
   end
   if T.lastLapMs == pendingMs then T.lastLapMs = ms end
   if T.flashLapMs == pendingMs then T.flashLapMs = ms end
@@ -654,12 +659,12 @@ local function updateDelta(dt, s, t, car)
   end
 end
 
--- AC took a lap the app deleted on its own observation as its best lap: AC knows better, the lap is valid.
--- (A lap AC's own callback called invalid stays deleted.)
+-- AC took a deleted lap as its best lap: AC counts it, so it is valid (AC does not keep invalid laps as its best).
+-- The best time AC shows is the final word; the app never hides a lap AC counts.
 local function undeleteIfACBest(ms)
   local found = false
   for i = 1, DELETED_N do
-    if deletedLaps[i] > 0 and not deletedByAC[i] and math.abs(deletedLaps[i] - ms) <= 2 then
+    if deletedLaps[i] > 0 and math.abs(deletedLaps[i] - ms) <= 2 then
       deletedLaps[i], found = 0, true
     end
   end
@@ -695,6 +700,7 @@ local function updateTiming(sim, car, now)
   T.currentMs = car.lapTimeMs
   -- AC's best, unless it is a lap that was deleted: then AC's best before it, or the tracker's own best valid lap
   local best = car.bestLapTimeMs
+  T.acBestMs = best
   if best ~= seenACBest then
     if best > 0 then undeleteIfACBest(best) end
     if seenACBest > 0 and not T.isDeletedLap(seenACBest) and (keptACBest == 0 or seenACBest < keptACBest) then

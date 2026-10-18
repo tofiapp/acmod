@@ -793,17 +793,17 @@ do
   for _ = 1, 5 do frame(1) end
   check(tracker.lastLapState == 1 and tracker.flashKind ~= 5, 'invalid without cuts on a clean lap is not deleted')
   check(tracker.lastLapState == 1 and tracker.lastLapMs > 0, 'valid last lap recorded')
-  -- AC deletes the next (fastest) lap after the line, e.g. track limits; AC's best still shows it
+  -- AC deletes the next (fastest) lap after the line, e.g. track limits, and does not take it as its best
   local realLap = env.callbacks.lap
-  env.callbacks.lap = function (i, ms) realLap(i, ms, false) end
+  local acBestBefore = car.bestLapTimeMs
+  env.callbacks.lap = function (i, ms) car.bestLapTimeMs = acBestBefore; realLap(i, ms, false) end
   driveLaps(1, 1.06)
   env.callbacks.lap = realLap
   for _ = 1, 5 do frame(1) end
   local deleted = tracker.lastLapMs
   check(tracker.flashKind == 5 and tracker.lastLapState == 2, 'deleted lap flashes red and is marked deleted: ' .. tracker.flashKind)
-  check(near(car.bestLapTimeMs, deleted, 2) and tracker.bestMs > 0 and not tracker.isDeletedLap(tracker.bestMs)
-    and tracker.isDeletedLap(deleted),
-    string.format('deleted lap is not shown as the best lap, the best before it is: %.0f (deleted %.0f)', tracker.bestMs, deleted))
+  check(near(tracker.bestMs, acBestBefore, 2) and tracker.isDeletedLap(deleted),
+    string.format('deleted lap is not the best lap: %.0f (deleted %.0f)', tracker.bestMs, deleted))
   env.lastTexts = {}
   env.windowW, env.windowH = 505, 60
   script.windowTiming(DT)
@@ -814,6 +814,13 @@ do
   driveLaps(1, 1.045)                 -- slower than the deleted lap, faster than the best valid one
   for _ = 1, 5 do frame(1) end
   check(tracker.flashKind == 1, 'next valid lap is the best, not the deleted one: ' .. tracker.flashKind)
+  -- AC's callback says invalid, but AC takes the lap as its best: AC counts it, so it is shown as valid
+  env.callbacks.lap = function (i, ms) realLap(i, ms, false) end
+  driveLaps(1, 1.07)
+  env.callbacks.lap = realLap
+  for _ = 1, 120 do frame(1) end
+  check(tracker.lastLapState == 1 and near(tracker.bestMs, car.bestLapTimeMs, 2) and near(car.bestLapTimeMs, tracker.lastLapMs, 2),
+    'a lap AC counts as its best is never shown as deleted')
   -- AC still reports the previous lap as invalid for a while after the line (no lap callback): not a cut
   local realLap2 = env.callbacks.lap
   env.callbacks.lap = function () end
