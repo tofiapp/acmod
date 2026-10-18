@@ -100,6 +100,21 @@ ac = {
     M.calls[cmd] = (M.calls[cmd] or 0) + 1
     if cmd == 'Hide Damage' then M.sim.damageDisplayerShown = not M.sim.damageDisplayerShown end
   end,
+  getUI = function () return { windowSize = vec2(1920, 1080) } end,
+  getAppWindows = function ()
+    local list = {}
+    for i, title in ipairs({ 'MirrorDelta', 'MirrorDelta Timing', 'MirrorDelta Tyres', 'MirrorDelta Gear',
+      'MirrorDelta Damage', 'MirrorDelta Notifications', 'Some Other App' }) do
+      list[i] = { name = 'w' .. i, title = title, visible = false, layer = 0 }
+    end
+    return list
+  end,
+  accessAppWindow = function (name)
+    return {
+      move = function (self, pos) M.moved = M.moved or {}; M.moved[name] = pos; return self end,
+      setVisible = function (self, v) M.shown = M.shown or {}; M.shown[name] = v ~= false; return self end,
+    }
+  end,
   onLapCompleted = function (_, cb) M.callbacks.lap = cb end,
   onSessionStart = function (cb) M.callbacks.session = cb end,
   onCarJumped = function (_, cb) M.callbacks.jump = cb end,
@@ -123,6 +138,8 @@ ui = {
     count('rect')
   end,
   setCursor = function () end,
+  windowHovered = function () return M.hovered == true end,
+  mouseClicked = function () return M.clicked == true end,
   pathLineTo = function (p) assert(p.x == p.x and p.y == p.y, 'NaN in path'); count('pathLineTo') end,
   pathFillConvex = function (color) assert(color and color.mult, 'path without colour'); count('quad') end,
   pathStroke = function (color, closed, thickness)

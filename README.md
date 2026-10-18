@@ -17,7 +17,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.6.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.7.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -43,6 +43,10 @@ U výchozí instalace Steamu je to `C:\Program Files (x86)\Steam\steamapps\commo
 3. **Přesun okna:** najeďte na okno myší. Objeví se titulek, za který okno přetáhnete.
 4. **Velikost:** táhněte za pravý dolní roh okna. Čáry vyplní celou šířku okna. Tloušťka čar, mezery a velikost čísla se zvětšují úměrně šířce okna, takže okno stačí roztáhnout přesně na šířku zrcátka.
 5. **Nastavení:** při najetí myší klikněte v titulku na ozubené kolečko.
+
+Po instalaci nové verze se všechna okna MirrorDelta jednou sama zobrazí a rozmístí kolem středu obrazovky. Kdykoli je tam vrátíte tlačítkem **Zobrazit všechna okna uprostřed obrazovky** nahoře v nastavení.
+
+Když některé okno narazí na chybu, ukáže ji červeně přímo v sobě a ostatní okna běží dál. Chyba je i v záložce Diagnostika.
 
 Pokud se ikony na liště neobjeví, aktualizujte CSP a zkontrolujte, že jsou v nastavení CSP zapnuté Lua aplikace.
 
@@ -92,6 +96,7 @@ Nastavení je společné pro všechna okna a má osm záložek.
 - Písmo okna je Unbounded. Je přibalené ve složce `fonts` i s licencí SIL OFL.
 
 **Poškození**
+- Kliknutím do okna přepnete na další vzhled. Při najetí myší okno ukáže název a číslo vzhledu (1/12 až 12/12). Vzhled jde vybrat i v nastavení.
 - 12 vzhledů: GT shora, neonový obrys, oba boky, formule, LMP prototyp, výkres, segmenty jako v AC, rallye hatchback, pohled zezadu, piktogram, drátěný model a termokamera.
 - Strany karoserie (přední, zadní, levá, pravá) mají barvu daného vzhledu, dokud nejsou poškozené. S poškozením se barví od žluté po červenou. Část, do které jste právě narazili, krátce blikne bíle.
 - Kola ukazují pneumatiky: opotřebení od žluté po červenou, defekt červeně.

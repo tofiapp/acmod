@@ -68,6 +68,8 @@ local defaults = {
   notifyConnections = true, -- driver disconnected (online)
   notifyRaceOnly = true,    -- positions and pits only in a race session
 
+  layoutVersion = 0,        -- windows were opened and placed around the screen centre for this layout version
+
   -- Colours
   colPurple = rgbm(0.69, 0.36, 1, 1),
   colGreen = rgbm(0.18, 0.83, 0.42, 1),
@@ -97,7 +99,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults }
+local M = { S = S, defaults = defaults, VERSION = '1.7.0' }
 
 function M.set(key, value)
   S[key] = value

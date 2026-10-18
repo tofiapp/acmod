@@ -53,10 +53,13 @@ local function circleB(x, y, r, color)
   ui.drawCircleFilled(pa:set(X(x), Y(y)), r * sc, color, 24)
 end
 
+-- Rectangle outline from path calls (corners square; only verified CSP calls are used here).
 local function rectOutlineB(x, y, w, h, color, r, width)
-  local x1, x2 = X(x), X(x + w)
-  if x1 > x2 then x1, x2 = x2, x1 end
-  ui.drawRect(pa:set(x1, Y(y)), pb:set(x2, Y(y + h)), color, r * sc, nil, width * sc)
+  ui.pathLineTo(pa:set(X(x), Y(y)))
+  ui.pathLineTo(pa:set(X(x + w), Y(y)))
+  ui.pathLineTo(pa:set(X(x + w), Y(y + h)))
+  ui.pathLineTo(pa:set(X(x), Y(y + h)))
+  ui.pathStroke(color, true, width * sc)
 end
 
 local function clipB(x1, y1, x2, y2)
@@ -828,6 +831,13 @@ M.STYLE_NAMES = { 'GT shora', 'Neonový obrys', 'Oba boky', 'Formule', 'LMP prot
 
 function M.wheelFieldsOk() return wheelFieldsOk end
 
+local STYLE_LABELS = {}
+for i, name in ipairs(M.STYLE_NAMES) do STYLE_LABELS[i] = string.format('%d/12  %s', i, name) end
+
+local nameUntil = 0
+local NAME_BACK = rgbm(0.03, 0.04, 0.055, 0.85)
+local NAME_TEXT = rgbm(1, 0.71, 0.28, 1)
+
 function M.draw()
   hideOriginal()
   local car = ac.getCar(0)
@@ -835,6 +845,13 @@ function M.draw()
   local w, h = ui.windowWidth(), ui.windowHeight()
   if w <= 0 or h <= 0 then return end
   now = os.preciseClock()
+
+  -- a click on the window switches to the next of the twelve styles
+  local hovered = ui.windowHovered()
+  if hovered and ui.mouseClicked() then
+    config.set('damageStyle', S.damageStyle % #M.STYLE_NAMES + 1)
+    nameUntil = now + 2.5
+  end
 
   for side = 0, 3 do level[side + 1] = bodyLevel(car, side) end
   for i = 0, 3 do level[5 + i] = wheelLevel(car, i) end
@@ -858,6 +875,14 @@ function M.draw()
   local style = STYLES[S.damageStyle] or STYLES[1]
   style()
   setFrame()
+  if hovered or now < nameUntil then
+    -- which style this is, and how to switch
+    D.rect(0, 0, w, 30, NAME_BACK, 0)
+    ui.pushDWriteFont(D.FONT)
+    D.text(STYLE_LABELS[S.damageStyle] or STYLE_LABELS[1], 13, 0, 0, w, 18, D.ALIGN_CENTER, NAME_TEXT)
+    D.text('kliknutím další vzhled', 10, 0, 16, w, 13, D.ALIGN_CENTER, LABEL)
+    ui.popDWriteFont()
+  end
   ui.popDWriteFont()
 end
 

@@ -5,6 +5,7 @@ local tracker = require('src/tracker')
 local notify = require('src/notify')
 local tyres = require('src/tyres_window')
 local damage = require('src/damage_window')
+local layout = require('src/layout')
 local D = require('src/draw')
 local S = config.S
 
@@ -220,6 +221,7 @@ local REF_KINDS = { 'žádná', 'nejlepší kolo session', 'nejlepší kolo vůb
 
 local function tabDiagnostics()
   local d = tracker.diag
+  ui.text('MirrorDelta ' .. config.VERSION)
   if d.error then
     ui.header('Chyba skriptu')
     ui.textWrapped(d.error)
@@ -268,6 +270,13 @@ end
 local M = {}
 
 function M.draw()
+  ui.text('MirrorDelta ' .. config.VERSION)
+  ui.sameLine()
+  if ui.button('Zobrazit všechna okna uprostřed obrazovky') then
+    local ok, err = pcall(layout.arrange)
+    if not ok then layout.lastResult = 'chyba: ' .. tostring(err) end
+  end
+  if layout.lastResult ~= '-' then ui.text(layout.lastResult) end
   ui.tabBar('mirrorDeltaSettings', function ()
     ui.tabItem('Delta', tabDelta)
     ui.tabItem('Časy', tabTiming)

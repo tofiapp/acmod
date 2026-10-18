@@ -586,5 +586,39 @@ do
   config.set('damageStyle', 1)
 end
 
+-- 22. Clicking the damage window switches to the next style; windows get placed around the screen centre once
+do
+  local damage = require('src/damage_window')
+  config.set('damageStyle', 12)
+  env.hovered, env.clicked = true, true
+  env.windowW, env.windowH = 160, 200
+  damage.draw()
+  env.hovered, env.clicked = false, false
+  check(config.S.damageStyle == 1, 'click on the damage window cycles the style: ' .. config.S.damageStyle)
+  config.set('layoutVersion', 0)
+  for _ = 1, 300 do frame(1) end      -- arranged a few seconds after start
+  local moved = 0
+  for _ in pairs(env.moved or {}) do moved = moved + 1 end
+  check(moved == 6 and config.S.layoutVersion == 1, 'all six windows placed around the screen centre: ' .. moved)
+  local p = env.moved.w5
+  check(p and p.x > 960 and p.y > 400 and p.y < 700, 'damage window right of the centre')
+  env.moved = nil
+  for _ = 1, 300 do frame(1) end
+  check(env.moved == nil, 'windows are placed only once')
+end
+
+-- 23. A failing window shows its error and does not stop the rest
+do
+  local damage = require('src/damage_window')
+  local saved = damage.draw
+  damage.draw = function () error('test failure') end
+  local ok4 = pcall(script.windowDamage, DT)
+  damage.draw = saved
+  check(ok4, 'a window error is caught')
+  local okDelta = pcall(script.windowDelta, DT)
+  check(okDelta, 'other windows keep drawing after an error')
+  tracker.diag.error = nil
+end
+
 print(string.format('%d passed, %d failed', passed, failed))
 return failed
