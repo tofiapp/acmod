@@ -919,16 +919,17 @@ do
   env.recordFills, env.fills = true, {}
   local ok, err = pcall(script.windowMirror, DT)
   env.recordFills = false
-  local m = env.lastMirror
-  check(ok and m and math.abs((m[3] - m[1]) / (m[4] - m[2]) - 4) < 0.001 and m[1] < 0 and m[3] > 400
-    and math.abs(m[4] - m[2] - 146) < 1, 'rear view drawn 4:1, as high as the window, sides cropped: ' .. tostring(err))
-  check(mirror.tonemapping and env.tonemapDepth == 0 and (env.calls.tonemap or 0) > 0,
-    'rear view tonemapped like CSP draws its mirror displays')
+  local m, im = env.lastMirror, env.lastImage
+  check(ok and m and m[3] == 1024 and m[4] == 256 and env.canvasExposure == 30 and im and im.img == env.canvas,
+    'rear view post-processed in a YEBIS canvas like CSP\'s OBS view, then drawn: ' .. tostring(err))
+  local function stretched(t)
+    return math.abs((t[3] - t[1]) / (t[4] - t[2]) - (t[7] - t[5]) * 4 / (t[8] - t[6]))
+  end
+  check(im and stretched(im) < 0.01 and im[6] == 0 and im[8] == 1 and im[5] > 0, 'narrow window: middle of the width, not stretched')
   env.windowW, env.windowH = 600, 100           -- wider than 4:1: the whole width, middle of the height
   script.windowMirror(DT)
-  m = env.lastMirror
-  check(math.abs((m[3] - m[1]) / (m[4] - m[2]) - 4) < 0.001 and math.abs(m[3] - m[1] - 597.3) < 0.5 and m[2] < 0,
-    'wide window: whole width, still 4:1')
+  im = env.lastImage
+  check(stretched(im) < 0.01 and im[5] == 0 and im[7] == 1 and im[6] > 0, 'wide window: whole width, middle of the height')
   env.windowW, env.windowH = 400, 150
   check(mirror.shown == 2, 'two cars behind get a marker: ' .. mirror.shown)
   local left, right

@@ -94,12 +94,29 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
   M.shown = shown
 end
 
--- The mirror texture is HDR. It is drawn the way CSP's own display.mirror() draws it (car_scriptable_display_utils):
--- inside ui.beginTonemapping() with ui.setShadingOffset(1, 0, 1, 1), closed by ui.endTonemapping(0, 0, true).
--- Without that the picture comes out dark and greenish. ui.drawVirtualMirror() keeps CSP's own piece mapping.
-local hasTonemapping = type(ui.beginTonemapping) == 'function' and type(ui.endTonemapping) == 'function'
-  and type(ui.setShadingOffset) == 'function' and type(ui.resetShadingOffset) == 'function'
-M.tonemapping = hasTonemapping
+-- The mirror texture is HDR (before AC's post-processing), so drawn directly it is dark and greenish. It goes through
+-- the same steps as the "Virtual mirror" view of CSP's own OBS integration (lua-module/src/obs_integration.lua):
+-- a canvas with render.AntialiasingMode.SimplifiedYEBIS in R16G16B16A16.Float, exposure 30, cleared and filled with
+-- ui.drawVirtualMirror() every frame; the canvas is then drawn into the window (cropped, never stretched).
+local CANVAS_W, CANVAS_H = 1024, 256
+local canvas, canvasFailed = nil, false
+local canvasOk = false
+local cp1, cp2 = vec2(0, 0), vec2(CANVAS_W, CANVAS_H)
+local uv1, uv2 = vec2(), vec2()
+local function fillCanvas()
+  canvasOk = ui.drawVirtualMirror(cp1, cp2, WHITE)
+end
+
+local function ensureCanvas()
+  if canvas or canvasFailed then return canvas end
+  local ok, result = pcall(function ()
+    return ui.ExtraCanvas(vec2(CANVAS_W, CANVAS_H), 1, render.AntialiasingMode.SimplifiedYEBIS,
+      render.TextureFormat.R16G16B16A16.Float)
+  end)
+  if ok and result then canvas = result else canvasFailed = true end
+  M.canvasError = not ok and tostring(result) or nil
+  return canvas
+end
 
 function M.draw()
   local w, h = ui.windowWidth(), ui.windowHeight()
@@ -112,25 +129,34 @@ function M.draw()
   local a = S.opacity
   D.rect(0, 0, w, h, col(FRAME, a), 6 * sc)
 
-  -- AC's rear view is 4:1 and is always drawn 4:1 (never stretched), big enough to cover the window, centred and
-  -- clipped: a window narrower than 4:1 shows the middle of the width, a wider one the middle of the height.
-  local dh = math.max(mh, mw / 4) * math.max(1, S.mirrorZoom)
-  local dw = dh * 4
-  local dx, dy = ox + (mw - dw) / 2, oy + (mh - dh) / 2
-  ui.pushClipRect(p1:set(ox, oy), p2:set(ox + mw, oy + mh), true)
-  if hasTonemapping then
-    ui.beginTonemapping()
-    ui.setShadingOffset(1, 0, 1, 1)
+  -- AC's rear view is 4:1. The window shows a part of it in the window's own proportions (never stretched):
+  -- a window narrower than 4:1 shows the middle of the width, a wider one the middle of the height. Zoom crops more.
+  local zoom = math.max(1, S.mirrorZoom)
+  local aspect = mw / mh
+  local fw = math.min(1, aspect / 4) / zoom      -- part of the width shown
+  local fh = math.min(1, 4 / aspect) / zoom      -- part of the height shown
+  local dw = mw / fw                             -- width the whole rear view has at this scale
+  local dx = ox + (mw - dw) / 2
+
+  local c = ensureCanvas()
+  local ok
+  if c then
+    c:setExposure(30 * S.mirrorBrightness)
+    c:clear()
+    c:update(fillCanvas)
+    ok = canvasOk
+    if ok then
+      uv1:set(0.5 - fw / 2, 0.5 - fh / 2)
+      uv2:set(0.5 + fw / 2, 0.5 + fh / 2)
+      ui.drawImage(c, p1:set(ox, oy), p2:set(ox + mw, oy + mh), col(WHITE, a), uv1, uv2)
+    end
+  else
+    -- no canvas (older CSP): the plain virtual mirror, cropped by a clip rect
+    local dh = mw / fw / 4
+    ui.pushClipRect(p1:set(ox, oy), p2:set(ox + mw, oy + mh), true)
+    ok = ui.drawVirtualMirror(p1:set(dx, oy + (mh - dh) / 2), p2:set(dx + dw, oy + (mh + dh) / 2), col(WHITE, a))
+    ui.popClipRect()
   end
-  local k = math.min(1, S.mirrorBrightness)
-  tint:set(WHITE)
-  tint.r, tint.g, tint.b, tint.mult = k, k, k, a
-  local ok = ui.drawVirtualMirror(p1:set(dx, dy), p2:set(dx + dw, dy + dh), tint)
-  if hasTonemapping then
-    ui.resetShadingOffset()
-    ui.endTonemapping(0, 0, true)
-  end
-  ui.popClipRect()
   if not ok then
     D.rect(ox, oy, ox + mw, oy + mh, col(NONE, a), 4 * sc)
     ui.pushDWriteFont(D.FONT)

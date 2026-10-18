@@ -7,6 +7,9 @@ local function count(name)
   M.calls[name] = (M.calls[name] or 0) + 1
 end
 
+render = { AntialiasingMode = { None = 0, SimplifiedYEBIS = 7 },
+  TextureFormat = { R16G16B16A16 = { Float = 10 }, R8G8B8A8 = { UNorm = 28 } } }
+
 -- vec2
 local vec2mt = {}
 vec2mt.__index = vec2mt
@@ -174,6 +177,24 @@ ui = {
       M.fills[#M.fills + 1] = { pts = M.path or {}, r = color.r, g = color.g, b = color.b }
       M.path = nil
     end
+  end,
+  ExtraCanvas = function (size, mips, aa, format)
+    assert(size and size.x > 0 and aa and format, 'canvas without size, antialiasing mode or format')
+    local c = { exposure = 0 }
+    function c:setExposure(v) self.exposure = v; M.canvasExposure = v; return self end
+    function c:clear() return self end
+    function c:update(cb) cb(0); return self end
+    M.canvas = c
+    return c
+  end,
+  drawImage = function (img, p1, p2, color, uv1, uv2)
+    assert(img and p1 and p2 and color and color.mult, 'image without rect or colour')
+    count('image')
+    local m = M.lastImage or {}
+    m[1], m[2], m[3], m[4] = p1.x, p1.y, p2.x, p2.y
+    m[5], m[6], m[7], m[8] = uv1 and uv1.x or 0, uv1 and uv1.y or 0, uv2 and uv2.x or 1, uv2 and uv2.y or 1
+    m.img = img
+    M.lastImage = m
   end,
   beginTonemapping = function () M.tonemapDepth = (M.tonemapDepth or 0) + 1; count('tonemap') end,
   endTonemapping = function () M.tonemapDepth = (M.tonemapDepth or 0) - 1 end,
