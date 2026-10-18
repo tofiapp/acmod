@@ -6,9 +6,10 @@
 -- LEDs: digital_instruments.ini [LED_n] OBJECT_NAME (ac.INIConfig.carData), meshes found under
 -- ac.findNodes('carRoot:0') with :findMeshes(name); without that file the meshes CSP marks as LEDs ('{ actsAsLED:yes }',
 -- CSP's show_important_wheels filter). Position: the mesh's :boundingSphere() in its parent's space, taken to world space
--- by multiplying the local transforms up the node chain (CSP's vr_rig_base getActualTransform does the same; the cached
--- world matrix is not kept up to date, the lights stayed behind when the car drove off), then into car space with
--- car.worldToLocal. Recomputed at every pit entry; each frame car.transform takes them back to the world.
+-- every frame by multiplying the live local matrices up the node chain (:getTransformationRaw() references, kept from
+-- the pit entry; CSP's vr_rig_base getActualTransform does the same). Earlier tries: the cached world matrix was stale
+-- (the lights stayed behind), and going through car.worldToLocal / car.transform put them above the LEDs (the model
+-- is offset from the physics body). Following the model's own nodes also follows a turning steering wheel.
 -- Cars whose dash is a CSP script or a screen texture have no such meshes. Everything under pcall; no per-frame allocation.
 
 local config = require('src/config')
@@ -29,26 +30,35 @@ local function addMesh(ref)
   leds[#leds + 1] = { ref = ref, centre = centre, radius = radius, pos = vec3(), side = 0 }
 end
 
--- World transform of a node from its local transforms (as CSP's getActualTransform).
-local function actualTransform(n)
-  local t = nil
-  while n and #n > 0 do
-    t = (t and t or mat4x4.identity()):mulSelf(n:getTransformationRaw())
+-- The live local matrices from the LED's parent node up to the scene root (references to the nodes' own matrices).
+local function chainOf(ref)
+  local list = {}
+  local n = ref:getParent()
+  while n and #n > 0 and #list < 32 do
+    list[#list + 1] = n:getTransformationRaw()
     n = n:getParent()
   end
-  return t
+  return list
 end
 
--- Car-space positions of all LEDs, from the scene as it is now.
+local IDENT = mat4x4.identity()
+local acc = mat4x4.identity()
+-- World position of LED led into worldPos (local x parent x ... x root, as CSP's getActualTransform).
+local function ledWorld(led)
+  acc:set(IDENT)
+  local chain = led.chain
+  for i = 1, #chain do acc:mulSelf(chain[i]) end
+  acc:transformPointTo(worldPos, led.centre)
+end
+
+-- Node chains of all LEDs, and their car-space positions for the left-to-right order.
 local function locate(car)
   local w2l = car.worldToLocal
   for k = 1, #leds do
     local led = leds[k]
-    local m = actualTransform(led.ref:getParent())
-    if m then
-      m:transformPointTo(worldPos, led.centre)
-      w2l:transformPointTo(led.pos, worldPos)
-    end
+    led.chain = chainOf(led.ref)
+    ledWorld(led)
+    w2l:transformPointTo(led.pos, worldPos)
   end
 end
 
@@ -105,7 +115,7 @@ end
 local function draw()
   if not M.active then return end
   local cam = ac.getSim().cameraPosition
-  local tr = ac.getCar(0).transform
+  local up = ac.getCar(0).up
   local c = pitLights.colorAt(S.carLedsColor)
   local n, t = #leds, os.preciseClock()
   render.setDepthMode(render.DepthMode.Normal)
@@ -113,7 +123,11 @@ local function draw()
     local led = leds[k]
     local b = level(k, n, t)
     if b > 0.02 then
-      tr:transformPointTo(worldPos, led.pos)
+      ledWorld(led)
+      if S.carLedsOffset ~= 0 then                 -- manual nudge along the car's up axis, cm
+        local h = S.carLedsOffset / 100
+        worldPos:set(worldPos.x + up.x * h, worldPos.y + up.y * h, worldPos.z + up.z * h)
+      end
       toCam:set(cam.x - worldPos.x, cam.y - worldPos.y, cam.z - worldPos.z)
       local len = math.max(1e-4, math.sqrt(toCam.x * toCam.x + toCam.y * toCam.y + toCam.z * toCam.z))
       -- just in front of the LED towards the eye, so the LED's own geometry does not cover the disc

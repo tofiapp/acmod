@@ -1419,6 +1419,13 @@ do
   frame(1)
   brightestX()
   check(math.abs(env.circles[1].y - 1.5) < 0.05, 'pit entry: positions from the node chain: ' .. env.circles[1].y)
+  env.ledParentOffset = { x = 0, y = 0.2, z = 0 }    -- a node moving later (steering wheel): the light follows it live
+  brightestX()
+  check(math.abs(env.circles[1].y - 1.2) < 0.05, 'live node matrices each frame: ' .. env.circles[1].y)
+  config.set('carLedsOffset', -10)
+  brightestX()
+  check(math.abs(env.circles[1].y - 1.1) < 0.05, 'manual nudge down 10 cm: ' .. env.circles[1].y)
+  config.set('carLedsOffset', 0)
   env.ledParentOffset = nil
   car.isInPitlane = false
   frame(1)

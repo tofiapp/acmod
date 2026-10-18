@@ -21,7 +21,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.23.2.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.23.3.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -75,7 +75,7 @@ Nastavení je společné pro všechna okna a má osm záložek.
 - Čára delty (výchozí) je rozdělená uprostřed a pohybuje se plynule jako původní ukazatel AC. Doprava roste zelená, když teď jedete rychleji než v referenčním kole, doleva červená, když pomaleji. Porovnává se posledních zhruba 3 sekund jízdy, ne celkový čas. Plná délka na jednu stranu odpovídá rozdílu 0,1 s (nastavitelné). Číslo pod čarou ukazuje celkovou deltu. Jde přepnout na celou čáru barvou podle celkové delty.
 - V bodě řazení blikají modře čára delty i mini sektory, stejně jako okno s převodem (jde vypnout).
 - V boxové uličce svítí na čáře delty a mini sektorech světla boxů. Styl: skener (výchozí, jedno měkké světlo plynule běhá ze strany na stranu), vlny ze středu ke krajům, pomalé dýchání, nebo poloviny na střídačku (původní). Barva: modrá (výchozí), oranžová, bílá nebo žlutá. Jde vypnout. V okně časů místo aktuálního času svítí BOX ve stejné barvě.
-- V boxové uličce přejíždí i po diodách otáček přímo v autě oranžové světlo ze strany na stranu (nebo blikají každá druhá na střídačku; barva a styl jdou změnit, celé jde vypnout). Diody samotné AC dál řídí podle otáček, aplikace přes ně jen kreslí svítící tečky, takže se nic nepere a neproblikává. Tečky jedou s autem a jejich jas jde nastavit (moc vysoký jas barvu přepálí do bílé). Funguje u aut, která mají diody řazení jako diody AC (`digital_instruments.ini`) nebo je CSP jako diody pozná; auta s palubní deskou ze skriptu nebo z textury ne. Kolik diod aplikace v autě našla, je vidět v nastavení.
+- V boxové uličce přejíždí i po diodách otáček přímo v autě oranžové světlo ze strany na stranu (nebo blikají každá druhá na střídačku; barva a styl jdou změnit, celé jde vypnout). Diody samotné AC dál řídí podle otáček, aplikace přes ně jen kreslí svítící tečky, takže se nic nepere a neproblikává. Poloha teček se každý snímek počítá přímo z modelu auta, takže sedí na diodách, jedou s autem i s volantem; jas a případný posun nahoru/dolů jdou nastavit (moc vysoký jas barvu přepálí do bílé). Funguje u aut, která mají diody řazení jako diody AC (`digital_instruments.ini`) nebo je CSP jako diody pozná; auta s palubní deskou ze skriptu nebo z textury ne. Kolik diod aplikace v autě našla, je vidět v nastavení.
 - Intenzita barvy podle velikosti delty: když je zapnutá, plnou barvu má delta od ±0,5 s (nastavitelné).
 - Zdroj delty:
   - **Vlastní měření, jinak delta z AC** (výchozí): dokud aplikace nemá vlastní referenci (out lap, první kolo, kolo po resetu), ukazuje deltu, kterou počítá samotné AC (ne v režimu Předchozí kolo).

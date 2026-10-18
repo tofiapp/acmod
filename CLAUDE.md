@@ -92,9 +92,10 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
   `src/car_leds.lua` runs a light over the car's own shift LEDs (`S.carLedsPit`, `S.carLedsStyle` scanner / every other,
   `S.carLedsColor` orange): digital_instruments.ini `[LED_n] OBJECT_NAME` (power from EMISSIVE) found with
   `ac.findNodes('carRoot:0'):findMeshes(name)`, else `{ actsAsLED:yes }` (CSP's show_important_wheels filter) split with
-  `:at(k)`; position = `:boundingSphere()` taken to world space by multiplying local transforms up the node chain (CSP's
-  vr_rig_base getActualTransform; the kept `getWorldTransformationRaw()` reference was stale, the discs stayed behind),
-  into car space with `car.worldToLocal` at every pit entry, each frame back with `car.transform`; ordered left to right;
+  `:at(k)`; position = `:boundingSphere()` taken to world space every frame by multiplying the live
+  `:getTransformationRaw()` references up the node chain (kept from the pit entry; CSP's vr_rig_base getActualTransform).
+  Not the kept `getWorldTransformationRaw()` (stale, discs stayed behind) nor car.worldToLocal/car.transform (model is
+  offset from the physics body: discs above the LEDs); `S.carLedsOffset` cm nudge; ordered left to right;
   drawn as `render.circle` discs (colour x `S.carLedsBrightness`, default 2: 40 turned them white) in
   `render.on('main.root.transparent')` like CSP's Traffic virtual lights.
   Writing the LEDs' ksEmissive flickered (AC writes it by RPM every frame), so the material is never touched.

@@ -42,7 +42,8 @@ vec3 = setmetatable({}, { __call = function (_, x, y, z) return setmetatable({ x
 -- mat4x4 (translations only, enough for the node chain in the tests)
 function M.translation(x, y, z)
   local m = { tx = x, ty = y, tz = z }
-  function m:mulSelf(o) self.tx, self.ty, self.tz = self.tx + o.tx, self.ty + o.ty, self.tz + o.tz; return self end
+  function m:mulSelf(o) if o.live then o:live() end; self.tx, self.ty, self.tz = self.tx + o.tx, self.ty + o.ty, self.tz + o.tz; return self end
+  function m:set(o) self.tx, self.ty, self.tz = o.tx, o.ty, o.tz; return self end
   function m:transformPointTo(dst, v) dst.x, dst.y, dst.z = v.x + self.tx, v.y + self.ty, v.z + self.tz; return dst end
   return m
 end
@@ -171,9 +172,15 @@ ac = {
       -- parent node: its local transform moves by M.ledParentOffset (default none), and it hangs under the scene root
       function r:getParent()
         local node = { 'parent' }
+        -- a live matrix: the car model's root follows car.position (+ M.ledParentOffset), read when multiplied
         function node:getTransformationRaw()
-          local o = M.ledParentOffset or { x = 0, y = 0, z = 0 }
-          return M.translation(o.x, o.y, o.z)
+          local m = M.translation(0, 0, 0)
+          function m:live()
+            local o, p = M.ledParentOffset or { x = 0, y = 0, z = 0 }, M.car.position
+            self.tx, self.ty, self.tz = p.x + o.x, p.y + o.y, p.z + o.z
+            return self
+          end
+          return m
         end
         function node:getParent() return {} end
         return node
