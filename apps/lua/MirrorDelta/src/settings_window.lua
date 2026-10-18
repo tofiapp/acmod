@@ -206,7 +206,7 @@ local function tabDamage()
   end
   ui.textWrapped('Kola ukazují pneumatiky: opotřebení (od žluté po červenou) a defekt (červená).'
     .. (damage.tyreFieldsOk() == false and ' Tato verze CSP stav pneumatik neposkytuje.' or ''))
-  ui.textWrapped('Zavěšení (pružiny uvnitř obrysu): '
+  ui.textWrapped('Zavěšení (čtverečky vedle pneumatik): '
     .. (damage.suspensionFieldOk() == false and 'tato verze CSP poškození zavěšení neposkytuje, zůstává šedé.' or 'podle poškození zavěšení z AC.'))
 end
 

@@ -9,7 +9,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 | **MirrorDelta** | Čára mini sektorů, čára delty a delta v sekundách (±) |
 | **MirrorDelta Timing** | Pozice, kolo, aktuální čas, poslední kolo (smazané červeně) a nejrychlejší kolo |
 | **MirrorDelta Tyres** | Teplota jádra pneumatik a teploty pláště (vnitřní / střed / vnější) |
-| **MirrorDelta Damage** | Poškození ve tvaru auta, 12 vzhledů: karoserie, pneumatiky a stav motoru v % |
+| **MirrorDelta Damage** | Poškození jako jednoduchý kříž: předek, zadek, boky, 4 pneumatiky, 4 zavěšení a motor v % |
 | **MirrorDelta Gear** | Ukazatel otáček z 12 dílků, pod ním převod na barevné dlaždici a pod převodem rychlost |
 | **MirrorDelta Flags** | Aktuální vlajka v pravém horním rohu: vlajka a její název, dokud platí |
 | **MirrorDelta Setup** | Jeden řádek nahoře uprostřed při změně nastavení auta (TC, ABS, brzdy…) |
@@ -19,7 +19,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.12.2.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.13.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -106,10 +106,10 @@ Nastavení je společné pro všechna okna a má osm záložek.
 - Písmo okna je Unbounded. Je přibalené ve složce `fonts` i s licencí SIL OFL.
 
 **Poškození**
-- Obrys auta rozdělený mezerami na předek, boky a zadek. Kola jsou mimo obrys a ukazují pneumatiku (opotřebení, defekt). Uvnitř obrysu je u každého kola pružina zavěšení s vlastním stavem. Uprostřed je motor v %: bílá, pod 95 % žlutá, pod 50 % červená.
+- Jeden jednoduchý vzhled (kříž): předek a zadek jsou vodorovné pruhy nahoře a dole, levý a pravý bok svislé pruhy po stranách. V každém rohu je pneumatika (opotřebení, defekt) a vedle ní čtvereček zavěšení s vlastním stavem. Uprostřed je motor v %: bílá, pod 95 % žlutá, pod 50 % červená.
 - Část v pořádku je světle šedá, s poškozením se barví od žluté po červenou. Část, do které jste právě narazili, krátce blikne bíle.
 - Okno je vlevo uprostřed obrazovky a ukáže se jen po nárazu na 8 sekund, jako původní ukazatel AC. V nastavení jde přepnout na „vždy“ nebo „dokud je něco poškozené“. Při najetí myší je vidět vždy, ať ho jde přesunout.
-- Poškození zavěšení CSP v žádné oficiální aplikaci neukazuje. Aplikace ho zkouší číst, a když ho vaše verze CSP nedá, pružiny zůstanou šedé (stav je vidět v nastavení).
+- Poškození zavěšení CSP v žádné oficiální aplikaci neukazuje. Aplikace ho zkouší číst, a když ho vaše verze CSP nedá, čtverečky zavěšení zůstanou šedé (stav je vidět v nastavení).
 - Citlivost: od jaké hodnoty z AC je strana plně červená. Aktuální hodnoty z AC vidíte přímo v nastavení, podle nich jde citlivost doladit.
 
 **Notifikace**

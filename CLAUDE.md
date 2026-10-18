@@ -33,7 +33,8 @@ apps/lua/MirrorDelta/
   src/delta_window.lua    delta window
   src/timing_window.lua   timing window
   src/tyres_window.lua    tyres window (two styles)
-  src/damage_window.lua   damage window: one view, car outline with gaps, tyres outside, coil-overs inside
+  src/damage_window.lua   damage window: one view ("cross"): body bars top/bottom/sides, tyre + suspension square per corner,
+                          engine % in the middle, rectangles only
                           (car.damage[0..3], wheels[i].tyreWear/isBlown, wheels[i].suspensionDamage under pcall)
   src/gear_window.lua     gear window (car.gear: -1 R, 0 N; car.rpm, car.rpmLimiter, car.speedKmh)
   src/notify.lua          event detection (flags, other cars polled at 10 Hz) + fixed ring buffer of events
