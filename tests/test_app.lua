@@ -919,16 +919,16 @@ do
   env.recordFills, env.fills = true, {}
   local ok, err = pcall(script.windowMirror, DT)
   env.recordFills = false
-  local sh = env.lastShader
-  local shownW, shownH = sh and (sh[5] - sh[7]) or 0, sh and (sh[8] - sh[6]) or 0
-  local boxW, boxH = sh and (sh[3] - sh[1]) or 1, sh and (sh[4] - sh[2]) or 1
-  check(ok and sh and math.abs(boxW / boxH - shownW * 4 / shownH) < 0.01 and shownH == 1 and shownW < 1,
-    string.format('rear view not stretched: box %.2f, picture part %.3f x %.3f (%s)', boxW / boxH, shownW, shownH, tostring(err)))
-  env.windowW, env.windowH = 600, 100           -- wider than 4:1: the middle of the height
+  local m = env.lastMirror
+  check(ok and m and math.abs((m[3] - m[1]) / (m[4] - m[2]) - 4) < 0.001 and m[1] < 0 and m[3] > 400
+    and math.abs(m[4] - m[2] - 146) < 1, 'rear view drawn 4:1, as high as the window, sides cropped: ' .. tostring(err))
+  check(mirror.tonemapping and env.tonemapDepth == 0 and (env.calls.tonemap or 0) > 0,
+    'rear view tonemapped like CSP draws its mirror displays')
+  env.windowW, env.windowH = 600, 100           -- wider than 4:1: the whole width, middle of the height
   script.windowMirror(DT)
-  sh = env.lastShader
-  check(math.abs((sh[3] - sh[1]) / (sh[4] - sh[2]) - (sh[5] - sh[7]) * 4 / (sh[8] - sh[6])) < 0.01 and sh[5] - sh[7] == 1,
-    'wide window: whole width, part of the height, still not stretched')
+  m = env.lastMirror
+  check(math.abs((m[3] - m[1]) / (m[4] - m[2]) - 4) < 0.001 and math.abs(m[3] - m[1] - 597.3) < 0.5 and m[2] < 0,
+    'wide window: whole width, still 4:1')
   env.windowW, env.windowH = 400, 150
   check(mirror.shown == 2, 'two cars behind get a marker: ' .. mirror.shown)
   local left, right

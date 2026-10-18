@@ -175,6 +175,10 @@ ui = {
       M.path = nil
     end
   end,
+  beginTonemapping = function () M.tonemapDepth = (M.tonemapDepth or 0) + 1; count('tonemap') end,
+  endTonemapping = function () M.tonemapDepth = (M.tonemapDepth or 0) - 1 end,
+  setShadingOffset = function () end,
+  resetShadingOffset = function () end,
   renderShader = function (params)
     assert(params.p1 and params.p2 and params.textures and params.shader, 'shader without rect, textures or code')
     count('shader')

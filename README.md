@@ -20,7 +20,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.14.2.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.14.3.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -114,7 +114,7 @@ Nastavení je společné pro všechna okna a má osm záložek.
 - Citlivost: od jaké hodnoty z AC je strana plně červená. Aktuální hodnoty z AC vidíte přímo v nastavení, podle nich jde citlivost doladit.
 
 **Zrcátko**
-- Okno MirrorDelta Mirror ukazuje zpětný pohled AC (stejný obraz jako virtuální zrcátko) v rámečku, který jde posunout a zvětšit kamkoli. Výchozí tvar je obdélník 400 × 150. Obraz se nikdy nedeformuje: okno ukáže výřez zrcátka ve svém poměru stran (užší okno prostředek šířky), přiblížení jde zvýšit. Jas obrazu (výchozí 2×) jde nastavit, protože obraz zrcátka z AC je tmavý.
+- Okno MirrorDelta Mirror ukazuje zpětný pohled AC (stejný obraz jako virtuální zrcátko) v rámečku, který jde posunout a zvětšit kamkoli. Výchozí tvar je obdélník 400 × 150. Obraz se nikdy nedeformuje: okno ukáže výřez zrcátka ve svém poměru stran (užší okno prostředek šířky), přiblížení jde zvýšit. Obraz se převádí z HDR stejně, jako CSP kreslí zrcátka na displejích aut, takže má správný jas a barvy; jas jde případně ztlumit.
 - Původní zrcátko AC se vypíná ve hře volbou virtual cockpit / virtuální zrcátko.
 - Nad každým autem za vámi je trojúhelník: bílý, žlutý když se rychle blíží, červený když je blízko (méně než 10 m nebo za méně než 1,2 s u vás). Když je auto vedle vás, mimo záběr, svítí na té straně rámečku červená šipka.
 - Šířka záběru (výchozí 50°) se nastavuje tak, aby šipky seděly přesně nad auty; hlídaná vzdálenost výchozí 60 m.
