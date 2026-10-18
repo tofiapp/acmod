@@ -1044,6 +1044,7 @@ do
   -- own camera (mode 6 automatic exposure): the app renders the rear view itself from the markers' camera, mirrored,
   -- own car clipped
   config.set('mirrorMode', 6)
+  config.set('mirrorCamPos', 2)                       -- first at the driver's place, the rear bumper below
   config.set('mirrorOffsetX', 25)                     -- calibration offsets do not apply to the own camera
   local x7 = only(carAt(1, -20, 50))
   local shot = env.shots and env.shots[#env.shots]
@@ -1075,6 +1076,14 @@ do
       shot.look.y, yLevel, yTilted))
   config.set('mirrorCamHeight', 0)
   config.set('mirrorCamPitch', 0)
+  -- default: camera on the rear bumper, middle of the back, 0.5 m above the bottom, just behind the car
+  config.set('mirrorCamPos', 1)
+  local xB = only(carAt(0, -20, 50))
+  env.sceneReady()
+  check(math.abs(shot.pos.z - (-0.1 - 2.25 - 0.05)) < 1e-6 and math.abs(shot.pos.y - 0.4) < 1e-6 and shot.pos.x == 0
+    and shot.near < 0.2 and math.abs(xB - centre) < 0.5,
+    string.format('own camera on the rear bumper (%.2f, %.2f, %.2f), near %.2f, car behind centred',
+      shot.pos.x, shot.pos.y, shot.pos.z, shot.near))
   config.set('mirrorMode', 5)
   only(carAt(1, -20, 50))
   env.sceneReady()

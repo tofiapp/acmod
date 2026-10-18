@@ -25,7 +25,8 @@ each with its own taskbar icon:
   `display.mirror()`; 4 raw; 5 own camera = `ac.GeometryShot(ac.findNodes('sceneRoot:yes'))` updated in `render.onSceneReady` as
   CSP's OBS camera views (obs_integration.lua quality levels, `S.mirrorCamQuality`: 1 SimplifiedWithLights + SimplifiedYEBIS,
   looked dark and unlit in game; 2 default Main shaders + 'area' shadows + full YEBIS; 3 'dedicated' shadows + grass), from the
-  markers' camera with vertical FOV from `S.mirrorFov` (4:1), `S.mirrorCamHeight` / `S.mirrorCamPitch` (camera basis camF/camU
+  markers' camera (`S.mirrorCamPos` 1 rear bumper = back of our aabb, end picked by transforming both ends, 0.5 m above its
+  bottom, 5 cm behind; 2 the mirror position) with vertical FOV from `S.mirrorFov` (4:1), `S.mirrorCamHeight` / `S.mirrorCamPitch` (camera basis camF/camU
   shared with the projection), near plane past our own car, drawn mirrored (u reversed), so markers are exact (`M.exact`,
   offsets off); 6 the same camera without YEBIS: 11 MIPs + `mipsUpdate`, the shader takes exposure from the last MIP
   (average) then mode 1's gamma. Markers are not smoothed. Always cropped to the window's aspect via UVs or a clip rect, never stretched (`S.mirrorZoom`). Hiding AC's own

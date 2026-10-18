@@ -260,6 +260,7 @@ local function tabMirror()
   if S.mirrorMode >= 5 then
     combo('mirrorCamQuality', 'Kvalita vlastní kamery', { 'Rychlá (bez stínů a úprav obrazu)',
       'Jako hra (stíny, úprava obrazu jako hra)', 'Nejlepší (vlastní stíny a tráva, náročné)' })
+    combo('mirrorCamPos', 'Kamera', { 'Na zadním nárazníku', 'Na místě řidiče (jako zrcátko AC)' })
     slider('mirrorCamHeight', 'Výška kamery', -0.8, 0.8, '%+.2f m', 0.05)
     slider('mirrorCamPitch', 'Sklon kamery dolů', -5, 15, '%.1f°', 0.5)
   end

@@ -103,6 +103,7 @@ M.car.position, M.car.look, M.car.up = { x = 0, y = 0, z = 0 }, { x = 0, y = 0, 
 M.car.side, M.car.velocity = { x = 1, y = 0, z = 0 }, { x = 0, y = 0, z = 50 }
 M.car.transform = M.transformOf(M.car)
 M.car.driverEyesPosition = { x = 0, y = 0.6, z = 0 }   -- like the old fixed camera height
+M.car.aabbCenter, M.car.aabbSize = { x = 0, y = 0.5, z = -0.1 }, { x = 1.9, y = 1.2, z = 4.5 }   -- bottom at y -0.1
 M.sim = { isReplayActive = false, isPaused = false, carsCount = 12, currentSessionIndex = 0, damageDisplayerShown = true, raceFlagType = 0 }
 M.cars = {}
 M.overlayBoard = { displayMode = 2, verticalLayout = false }                   -- other cars by index (1..); missing ones are nil like unused slots

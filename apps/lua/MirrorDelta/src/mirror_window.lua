@@ -177,13 +177,48 @@ end
 -- the mirror position; the own camera (modes 5, 6) can sit higher or lower (S.mirrorCamHeight, m) and tilt down
 -- (S.mirrorCamPitch, degrees, + = down).
 local camF, camU = vec3(), vec3()
+
+-- Rear bumper camera (own camera, S.mirrorCamPos 1): the middle of the back of our bounding box, 0.5 m above its
+-- bottom, 5 cm behind it, so nothing of our car is in view. Which end is the back is found by transforming both ends
+-- (no assumption about the sign of the local axes). Read once per session; false without the fields.
+local bumperLocal, bumperState, bumperSession = vec3(), 0, -1
+local BUMPER_HEIGHT, BUMPER_GAP = 0.5, 0.05
+local function readBumper(me)
+  local cc, hs, tr = me.aabbCenter, me.aabbSize, me.transform
+  if not cc or not hs or hs.z <= 0 then return false end
+  local p, lk = me.position, me.look
+  tr:transformPointTo(cornerW, cornerL:set(cc.x, cc.y, cc.z - hs.z / 2))
+  local a = (cornerW.x - p.x) * lk.x + (cornerW.y - p.y) * lk.y + (cornerW.z - p.z) * lk.z
+  tr:transformPointTo(cornerW, cornerL:set(cc.x, cc.y, cc.z + hs.z / 2))
+  local b = (cornerW.x - p.x) * lk.x + (cornerW.y - p.y) * lk.y + (cornerW.z - p.z) * lk.z
+  local z = a < b and cc.z - hs.z / 2 - BUMPER_GAP or cc.z + hs.z / 2 + BUMPER_GAP
+  bumperLocal:set(cc.x, cc.y - hs.y / 2 + BUMPER_HEIGHT, z)
+  return true
+end
+
+local function bumperCamera(me, sim)
+  if bumperSession ~= sim.currentSessionIndex then
+    bumperSession = sim.currentSessionIndex
+    local ok, found = pcall(readBumper, me)
+    bumperState = (ok and found) and 1 or -1
+  end
+  if bumperState == 1 then
+    me.transform:transformPointTo(camWorld, bumperLocal)
+  else                                           -- no bounding box: a typical car's rear end
+    local p, lk, u = me.position, me.look, me.up
+    camWorld:set(p.x - lk.x * 2.4 + u.x * 0.2, p.y - lk.y * 2.4 + u.y * 0.2, p.z - lk.z * 2.4 + u.z * 0.2)
+  end
+end
+
 local function cameraPosition(me, sim, own)
   if camState == 0 or sim.currentSessionIndex ~= camSession then
     camSession = sim.currentSessionIndex
     loadCamera(me)
   end
   local u, lk = me.up, me.look
-  if camState == 1 then
+  if own and S.mirrorCamPos == 1 then
+    bumperCamera(me, sim)
+  elseif camState == 1 then
     me.transform:transformPointTo(camWorld, camLocal)
   else
     local p = me.position
@@ -542,6 +577,9 @@ local function readOwnHalf(me)
   if size and size.z > 0 then ownHalf = size.z / 2 + math.abs(centre and centre.z or 0) end
 end
 local function ownCarClip(me, sim)
+  if S.mirrorCamPos == 1 then                    -- the bumper camera is already behind our car
+    return 0.1 + 0.6 * math.max(0, math.sin(math.rad(S.mirrorCamPitch)))
+  end
   if ownHalfSession ~= sim.currentSessionIndex then
     ownHalfSession, ownHalf = sim.currentSessionIndex, 2.6
     pcall(readOwnHalf, me)

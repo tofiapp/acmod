@@ -51,7 +51,8 @@ local defaults = {
   mirrorHideOverlap = true,   -- a marker that would overlap a nearer car's marker is not shown
   mirrorOffsetX = 0,          -- px (at 400x150): manual shift of the markers, + = right
   mirrorOffsetY = 0,          -- px: + = down
-  mirrorCamHeight = 0,        -- m: own camera (modes 5, 6) above (+) or below (-) the mirror position
+  mirrorCamPos = 1,           -- own camera (modes 5, 6): 1 rear bumper, 2 driver's place (AC's mirror position)
+  mirrorCamHeight = 0,        -- m: own camera above (+) or below (-) that position
   mirrorCamPitch = 0,         -- degrees: own camera tilted down (+) or up (-)
   mirrorCamQuality = 2,       -- own camera: 1 fast, 2 like the game (main shaders, shadows, YEBIS), 3 best
   mirrorMarkers = true,       -- mirror window: triangles above the cars behind
@@ -140,7 +141,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.20.2' }
+local M = { S = S, defaults = defaults, VERSION = '1.21.0' }
 
 function M.set(key, value)
   S[key] = value
