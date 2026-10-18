@@ -173,18 +173,39 @@ local function loadCamera(me)
   end
 end
 
--- World position of the rear view camera into camWorld.
-local function cameraPosition(me, sim)
+-- The rear view camera: position camWorld, view direction camF, up camU (world). AC's mirror looks straight back from
+-- the mirror position; the own camera (modes 5, 6) can sit higher or lower (S.mirrorCamHeight, m) and tilt down
+-- (S.mirrorCamPitch, degrees, + = down).
+local camF, camU = vec3(), vec3()
+local function cameraPosition(me, sim, own)
   if camState == 0 or sim.currentSessionIndex ~= camSession then
     camSession = sim.currentSessionIndex
     loadCamera(me)
   end
+  local u, lk = me.up, me.look
   if camState == 1 then
     me.transform:transformPointTo(camWorld, camLocal)
   else
-    local p, u = me.position, me.up
+    local p = me.position
     camWorld:set(p.x + u.x * CAM_UP, p.y + u.y * CAM_UP, p.z + u.z * CAM_UP)
   end
+  local h, pitch = 0, 0
+  if own then h, pitch = S.mirrorCamHeight, math.rad(S.mirrorCamPitch) end
+  camWorld:set(camWorld.x + u.x * h, camWorld.y + u.y * h, camWorld.z + u.z * h)
+  local c, sn = math.cos(pitch), math.sin(pitch)
+  camF:set(-lk.x * c - u.x * sn, -lk.y * c - u.y * sn, -lk.z * c - u.z * sn)   -- backwards, tilted down
+  camU:set(u.x * c - lk.x * sn, u.y * c - lk.y * sn, u.z * c - lk.z * sn)
+end
+
+-- Screen position of a world point (x, y, z) seen from the camera into px, py; false when it is not in front of it.
+local px, py = 0, 0
+local function projectPoint(x, y, z, sd, ls, cx, cy, fx, fy)
+  local rx, ry, rz = x - camWorld.x, y - camWorld.y, z - camWorld.z
+  local depth = rx * camF.x + ry * camF.y + rz * camF.z
+  if depth < 0.5 then return false end
+  px = cx - (rx * sd.x + ry * sd.y + rz * sd.z) * ls / depth * fx
+  py = cy - (rx * camU.x + ry * camU.y + rz * camU.z) / depth * fy
+  return true
 end
 
 local function probeBox(c)
@@ -195,7 +216,7 @@ local function probeBox(c)
 end
 
 -- Projects car c's bounding box into bx1..by2; false when it cannot (no fields, a corner beside or ahead of the camera).
-local function projectBox(c, lk, sd, up, ls, cx, cy, fx, fy)
+local function projectBox(c, sd, ls, cx, cy, fx, fy)
   if boxState == 0 then
     local ok, works = pcall(probeBox, c)
     boxState = (ok and works) and 1 or -1
@@ -206,11 +227,8 @@ local function projectBox(c, lk, sd, up, ls, cx, cy, fx, fy)
   local x1, x2, y1, y2 = 1e9, -1e9, 1e9, -1e9
   for k = 1, 8 do
     tr:transformPointTo(cornerW, cornerL:set(cc.x + SX[k] * hs.x, cc.y + SY[k] * hs.y, cc.z + SZ[k] * hs.z))
-    local rx, ry, rz = cornerW.x - camWorld.x, cornerW.y - camWorld.y, cornerW.z - camWorld.z
-    local back = -(rx * lk.x + ry * lk.y + rz * lk.z)
-    if back < 0.5 then return false end
-    local x = cx - (rx * sd.x + ry * sd.y + rz * sd.z) * ls / back * fx
-    local y = cy - (rx * up.x + ry * up.y + rz * up.z) / back * fy
+    if not projectPoint(cornerW.x, cornerW.y, cornerW.z, sd, ls, cx, cy, fx, fy) then return false end
+    local x, y = px, py
     if x < x1 then x1 = x end
     if x > x2 then x2 = x end
     if y < y1 then y1 = y end
@@ -234,12 +252,7 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
   local tanH = math.tan(math.rad(math.max(10, S.mirrorFov) / 2))
   local tanV = tanH / 4                          -- the rear view is 4:1 with square pixels
   local cx, cy = dx + dw / 2, oy + mh / 2        -- centre of the whole rear view
-  cameraPosition(me, sim)
-  -- camera relative to our origin (for the fallback estimate): forward, to the left, up
-  local crx, cry, crz = camWorld.x - mp.x, camWorld.y - mp.y, camWorld.z - mp.z
-  local camFwd = crx * lk.x + cry * lk.y + crz * lk.z
-  local camLat = (crx * sd.x + cry * sd.y + crz * sd.z) * ls
-  local camHgt = crx * up.x + cry * up.y + crz * up.z
+  cameraPosition(me, sim, M.exact)
   -- manual calibration (px at 400x150), only for AC's own mirror picture: the own camera needs none
   local offX, offY = 0, 0
   if not M.exact then offX, offY = S.mirrorOffsetX * sc, S.mirrorOffsetY * sc end
@@ -258,7 +271,6 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
       local rx, ry, rz = p.x - mp.x, p.y - mp.y, p.z - mp.z
       local fwd = rx * lk.x + ry * lk.y + rz * lk.z
       local lat = (rx * sd.x + ry * sd.y + rz * sd.z) * ls       -- + = to our left
-      local hgt = rx * up.x + ry * up.y + rz * up.z
       local back = -fwd
       local onTrack = length <= 0 or math.abs(trackGap(mySpline, c, length) - back) < 25
       if onTrack and math.abs(lat) < SIDE_LIMIT then
@@ -278,15 +290,17 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
           threat[i] = level
           -- perspective projection (mirror: a car behind on our left is on the left of the picture)
           local x, hw, yTop, yBot
-          if projectBox(c, lk, sd, up, ls, cx, cy, fx, fy) then
+          if projectBox(c, sd, ls, cx, cy, fx, fy) then
             x, hw, yTop, yBot = (bx1 + bx2) / 2, (bx2 - bx1) / 2, by1, by2
-          else
-            local cb = back + camFwd                 -- distance from the camera, not from our origin
-            local cl = lat - camLat
-            x = cx - (cl / cb) * fx
-            hw = CAR_HALF_W / cb * fx
-            yTop = cy - ((hgt + CAR_TOP - camHgt) / cb) * fy
-            yBot = cy - ((hgt + CAR_BOTTOM - camHgt) / cb) * fy
+          else                                       -- no bounding box: a fixed car size around its origin
+            local cu = c.up or up
+            local ok1 = projectPoint(p.x + cu.x * CAR_TOP, p.y + cu.y * CAR_TOP, p.z + cu.z * CAR_TOP, sd, ls, cx, cy, fx, fy)
+            x, yTop = px, py
+            local ok2 = projectPoint(p.x + cu.x * CAR_BOTTOM, p.y + cu.y * CAR_BOTTOM, p.z + cu.z * CAR_BOTTOM, sd, ls, cx, cy, fx, fy)
+            yBot = py
+            local depth = (p.x - camWorld.x) * camF.x + (p.y - camWorld.y) * camF.y + (p.z - camWorld.z) * camF.z
+            hw = CAR_HALF_W / math.max(0.5, depth) * fx
+            if not (ok1 and ok2) then x, yTop, yBot = -1e5, 0, 0 end
           end
           x, yTop, yBot = x + offX, yTop + offY, yBot + offY
           if x + hw < ox or x - hw > ox + mw then
@@ -429,10 +443,10 @@ end
 -- 3 UI tonemapping: ui.beginTonemapping / setShadingOffset / endTonemapping, as CSP's display.mirror();
 -- 4 raw: ui.drawVirtualMirror as it is.
 -- 5 own camera: the app renders the scene itself (ac.GeometryShot of sceneRoot, as CSP's OBS integration renders its
---   camera views: SimplifiedWithLights shaders, SimplifiedYEBIS, float texture) from the same camera the markers use,
---   so the markers sit exactly on the cars; 6 the same shot without YEBIS, through the gamma shader of mode 1.
+--   camera views: SimplifiedWithLights shaders, float texture) from the same camera the markers use, so the markers sit
+--   exactly on the cars; drawn with automatic exposure and mode 1's gamma; 6 the same shot with SimplifiedYEBIS as OBS.
 local MODES = 6
-local MODE_NAMES = { 'gamma', 'YEBIS', 'tonemapping UI', 'bez úprav', 'vlastní kamera', 'vlastní kamera gamma' }
+local MODE_NAMES = { 'gamma', 'YEBIS', 'tonemapping UI', 'bez úprav', 'vlastní kamera', 'vlastní kamera YEBIS' }
 local LABELS = {}
 local CANVAS_W, CANVAS_H = 1024, 256
 local cp1, cp2 = vec2(0, 0), vec2(CANVAS_W, CANVAS_H)
@@ -482,9 +496,10 @@ local function shotFov()
   return math.deg(2 * math.atan(tanH / 4))
 end
 
+local SHOT_MIPS = 11                           -- 1024 x 256 down to 1 x 1: the last MIP is the average colour
 local function newShot(mode)
-  local shot = ac.GeometryShot(ac.findNodes('sceneRoot:yes'), vec2(CANVAS_W, CANVAS_H), 1, false,
-    mode == 5 and render.AntialiasingMode.SimplifiedYEBIS or render.AntialiasingMode.None,
+  local shot = ac.GeometryShot(ac.findNodes('sceneRoot:yes'), vec2(CANVAS_W, CANVAS_H), mode == 5 and SHOT_MIPS or 1,
+    false, mode == 6 and render.AntialiasingMode.SimplifiedYEBIS or render.AntialiasingMode.None,
     render.TextureFormat.R16G16B16A16.Float)
   shot:setBestSceneShotQuality()
   shot:setShadersType(render.ShadersType.SimplifiedWithLights)
@@ -513,26 +528,48 @@ local function ownCarClip(me, sim)
   local half = ownHalf
   local p, lk = me.position, me.look
   local camFwd = (camWorld.x - p.x) * lk.x + (camWorld.y - p.y) * lk.y + (camWorld.z - p.z) * lk.z
-  return math.max(0.3, half + camFwd + 0.15)
+  -- a camera tilted down sees the end of our car a bit later along its view
+  return math.max(0.3, half + camFwd + 0.15 + 1.2 * math.max(0, math.sin(math.rad(S.mirrorCamPitch))))
 end
+
+local mipsOk = true
+local function makeMips(shot) shot:mipsUpdate() end
+
+-- Mode 5: HDR shot -> exposure from its average brightness (smallest MIP, sampled like RGBControl samples
+-- dynamic::mirror::raw) -> the same gamma conversion as mode 1. The scene's HDR scale differs from the virtual mirror
+-- texture's, so a fixed exposure made it dark; this one adapts like a camera.
+local AUTO = {
+  async = true,
+  p1 = vec2(), p2 = vec2(), uv1 = vec2(), uv2 = vec2(),
+  textures = { txShot = false },
+  values = { gExposure = 1, gAlpha = 1 },
+  shader = [[
+    float4 main(PS_IN pin) {
+      float3 avg = txShot.SampleLevel(samLinearClamp, float2(0.5, 0.5), 20).rgb;
+      float lum = max(dot(avg, float3(0.2126, 0.7152, 0.0722)), 1e-5);
+      float3 c = txShot.SampleLevel(samLinearClamp, pin.Tex, 0).rgb * (gExposure * 0.2 / lum);
+      return float4(pow(saturate(c), 0.4545), gAlpha);
+    }
+  ]],
+}
 
 local function updateShot()
   local shot = shots[shotMode]
   if not shot or os.preciseClock() - shotWanted > 0.5 then return end
   local me, sim = ac.getCar(0), ac.getSim()
   if not me or not sim then return end
-  cameraPosition(me, sim)
+  cameraPosition(me, sim, true)
   local near = ownCarClip(me, sim)
   if math.abs(near - shotNear) > 0.05 then
     shotNear = near
     shot:setClippingPlanes(near, 3000)
   end
-  local lk, u = me.look, me.up
   shotPos:set(camWorld.x, camWorld.y, camWorld.z)
-  shotLook:set(-lk.x, -lk.y, -lk.z)
-  shotUp:set(u.x, u.y, u.z)
+  shotLook:set(camF.x, camF.y, camF.z)
+  shotUp:set(camU.x, camU.y, camU.z)
   M.shotFov = shotFov()
   shot:update(shotPos, shotLook, shotUp, M.shotFov)
+  if shotMode == 5 and mipsOk then mipsOk = pcall(makeMips, shot) end   -- MIPs for the average brightness
   M.shotUpdates = M.shotUpdates + 1
 end
 
@@ -558,15 +595,15 @@ local function drawShot(mode, ox, oy, mw, mh, fw, fh, a)
   shotMode, shotWanted = mode, os.preciseClock()
   uv1:set(0.5 + fw / 2, 0.5 - fh / 2)            -- u runs backwards: a mirror
   uv2:set(0.5 - fw / 2, 0.5 + fh / 2)
-  if mode == 6 then
-    SHADER.p1:set(ox, oy)
-    SHADER.p2:set(ox + mw, oy + mh)
-    SHADER.uv1:set(uv1.x, uv1.y)
-    SHADER.uv2:set(uv2.x, uv2.y)
-    SHADER.textures.txMirror = shot
-    SHADER.values.gExposure = S.mirrorBrightness
-    SHADER.values.gAlpha = a
-    ui.renderShader(SHADER)
+  if mode == 5 then
+    AUTO.p1:set(ox, oy)
+    AUTO.p2:set(ox + mw, oy + mh)
+    AUTO.uv1:set(uv1.x, uv1.y)
+    AUTO.uv2:set(uv2.x, uv2.y)
+    AUTO.textures.txShot = shot
+    AUTO.values.gExposure = S.mirrorBrightness
+    AUTO.values.gAlpha = a
+    ui.renderShader(AUTO)
   else
     ui.drawImage(shot, p1:set(ox, oy), p2:set(ox + mw, oy + mh), col(WHITE, a), uv1, uv2)
   end

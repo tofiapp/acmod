@@ -21,7 +21,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.20.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.20.1.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -123,7 +123,7 @@ Nastavení je společné pro všechna okna a má osm záložek.
 
 **Zrcátko**
 - Okno MirrorDelta Mirror ukazuje zpětný pohled AC (stejný obraz jako virtuální zrcátko) v rámečku, který jde posunout a zvětšit kamkoli. Výchozí tvar je obdélník 400 × 150. Obraz se nikdy nedeformuje: okno ukáže výřez zrcátka ve svém poměru stran (užší okno prostředek šířky), přiblížení jde zvýšit. Obraz zrcátka dává CSP v HDR (před úpravou obrazu AC), proto jsou čtyři způsoby, jak z něj udělat normální obraz: gamma (výchozí), YEBIS jako pohled pro OBS, tonemapping UI a bez úprav. Přepínají se kliknutím do okna; po najetí myší okno ukáže verzi a aktivní způsob. Jas jde zvýšit i snížit.
-- **Vlastní kamera (obraz 5 a 6):** aplikace si pohled dozadu vykreslí sama (stejně jako kamery v OBS integraci CSP), z místa kamery zrcátka a se zvolenou šířkou záběru. Značky se počítají ze stejné kamery, takže sedí na autech přesně a nic se nekalibruje; šířka záběru mění i obraz. Vlastní auto se do obrazu nedostane. 5 = s úpravou obrazu jako hra (YEBIS), 6 = přes gammu jako obraz 1. Výkonově je to podobné jako druhé zrcátko.
+- **Vlastní kamera (obraz 5 a 6):** aplikace si pohled dozadu vykreslí sama (stejně jako kamery v OBS integraci CSP), z místa kamery zrcátka a se zvolenou šířkou záběru. Značky se počítají ze stejné kamery, takže sedí na autech přesně a nic se nekalibruje; šířka záběru mění i obraz. Vlastní auto se do obrazu nedostane. 5 = barvy jako obraz 1 a jas se nastavuje sám podle scény jako u fotoaparátu (posuvník Jas ho doladí), 6 = s úpravou obrazu YEBIS jako OBS. Kameru jde posunout výš nebo níž a sklopit dolů (Výška kamery, Sklon kamery dolů); značky se posunou s ní. Výkonově je to podobné jako druhé zrcátko.
 - Původní zrcátko AC se vypíná ve hře volbou virtual cockpit / virtuální zrcátko.
 - Dvě nejbližší auta za vámi mají kolem sebe rohový rámeček jako radar v GT3, ve výrazných barvách s tmavým obrysem: zelený (nedotahuje), oranžový (dotahuje), červený (blízko, méně než 8 m nebo u vás do 1,5 s; navíc šipka nad ním). Velikost rámečku odpovídá vzdálenosti, značky se pohybují plynule. U nejbližšího auta je odstup v sekundách.
 - Počítají se jen auta, která jsou za vámi i podle polohy na trati, takže auto na vedlejší rovince se neoznačí.

@@ -1046,25 +1046,40 @@ do
   config.set('mirrorOffsetX', 25)                     -- calibration offsets do not apply to the own camera
   local x7 = only(carAt(1, -20, 50))
   local shot = env.shots and env.shots[#env.shots]
-  check(shot and env.sceneReady and shot.aa == 7 and shot.shaders == 14 and shot.scene.filter == 'sceneRoot:yes',
-    'own camera: scene shot like CSP\'s OBS camera views, updated when the scene is ready')
+  check(shot and env.sceneReady and shot.aa == 0 and shot.mipCount > 8 and shot.shaders == 14 and shot.scene.filter == 'sceneRoot:yes',
+    'own camera: scene shot like CSP\'s OBS camera views with MIPs, updated when the scene is ready')
   env.sceneReady()
+  check(shot.mips == 1 and env.lastShader, 'own camera: MIPs for the automatic exposure, drawn through the shader')
   local tanH = math.tan(math.rad(config.S.mirrorFov / 2))
   check(shot.updates == 1 and math.abs(shot.fov - math.deg(2 * math.atan(tanH / 4))) < 0.01
     and shot.look.z == -1 and math.abs(shot.pos.y - 0.6) < 1e-6 and shot.near > 2,
     string.format('own camera: looks back from the mirror camera, vertical FOV %.2f, own car clipped (near %.2f)',
       shot.fov or -1, shot.near or -1))
-  local im = env.lastImage
-  check(im and im.img == shot and im[5] > im[7] and math.abs((im[3] - im[1]) / (im[4] - im[2]) - (im[5] - im[7]) * 4 / (im[8] - im[6])) < 0.01
+  local im = env.lastShader
+  check(im and im[5] > im[7] and math.abs((im[3] - im[1]) / (im[4] - im[2]) - (im[5] - im[7]) * 4 / (im[8] - im[6])) < 0.01
     and mirror.exact,
     'own camera: picture mirrored left to right, not stretched')
   check(x7 < centre - 3 and mirror.shown == 1, string.format('own camera: car behind on the left marked on the left, no offset (%.1f)', x7))
   config.set('mirrorOffsetX', 0)
+  -- camera higher and tilted down: the shot and the markers move together
+  local _, _, yLevel = only(carAt(1, -20, 50))
+  config.set('mirrorCamHeight', 0.3)
+  config.set('mirrorCamPitch', 8)
+  local _, _, yTilted = only(carAt(1, -20, 50))
+  env.sceneReady()
+  check(math.abs(shot.pos.y - 0.9) < 1e-6 and shot.look.y < -0.1 and shot.look.z < -0.95 and shot.up.z < -0.1
+    and yTilted < yLevel - 10,
+    string.format('own camera higher and tilted down: shot follows (look.y %.2f), car higher in the picture (%.0f -> %.0f)',
+      shot.look.y, yLevel, yTilted))
+  config.set('mirrorCamHeight', 0)
+  config.set('mirrorCamPitch', 0)
   config.set('mirrorMode', 6)
   only(carAt(1, -20, 50))
   env.sceneReady()
   local shot6 = env.shots[#env.shots]
-  check(shot6 ~= shot and shot6.aa == 0 and shot6.updates == 1 and env.lastShader, 'own camera gamma: own shot through the HDR shader')
+  local im6 = env.lastImage
+  check(shot6 ~= shot and shot6.aa == 7 and shot6.updates == 1 and im6 and im6.img == shot6 and im6[5] > im6[7],
+    'own camera YEBIS: own shot with YEBIS as OBS, drawn mirrored')
   shot.updates = 0
   env.sceneReady()
   check(shot.updates == 0, 'the unused shot is not rendered')

@@ -111,10 +111,11 @@ M.session = { laps = 15, isTimedRace = false, type = 3 }
 ac = {
   findNodes = function (filter) return { filter = filter } end,
   GeometryShot = function (scene, size, mips, depth, aa, format)
-    local shot = { scene = scene, size = size, aa = aa, updates = 0 }
+    local shot = { scene = scene, size = size, aa = aa, mipCount = mips, updates = 0 }
     function shot:setBestSceneShotQuality() return self end
     function shot:setShadersType(t) self.shaders = t; return self end
     function shot:setClippingPlanes(near, far) self.near, self.far = near, far; return self end
+    function shot:mipsUpdate() self.mips = (self.mips or 0) + 1; return self end
     function shot:update(pos, look, up, fov)
       self.updates = self.updates + 1
       self.pos, self.look, self.up, self.fov = pos, look, up, fov

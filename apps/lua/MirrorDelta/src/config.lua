@@ -51,6 +51,8 @@ local defaults = {
   mirrorHideOverlap = true,   -- a marker that would overlap a nearer car's marker is not shown
   mirrorOffsetX = 0,          -- px (at 400x150): manual shift of the markers, + = right
   mirrorOffsetY = 0,          -- px: + = down
+  mirrorCamHeight = 0,        -- m: own camera (modes 5, 6) above (+) or below (-) the mirror position
+  mirrorCamPitch = 0,         -- degrees: own camera tilted down (+) or up (-)
   mirrorMarkers = true,       -- mirror window: triangles above the cars behind
   mirrorSideArrows = true,    -- mirror window: red arrow at the side when a car is alongside
   mirrorFov = 50,             -- degrees the rear view covers horizontally (markers line up with the cars)
@@ -137,7 +139,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.20.0' }
+local M = { S = S, defaults = defaults, VERSION = '1.20.1' }
 
 function M.set(key, value)
   S[key] = value
