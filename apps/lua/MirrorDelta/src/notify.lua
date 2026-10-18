@@ -13,6 +13,10 @@ local N = { count = 0, lastLine = '-' }   -- count and last text for the Diagnos
 -- Kinds; colour and tag live in notify_window.lua.
 N.FASTEST, N.DISCONNECT, N.PIT_IN, N.PIT_OUT, N.GAIN, N.LOSS = 1, 2, 3, 4, 5, 6
 N.YELLOW, N.BLUE, N.BLACK, N.LAST_LAP, N.FINISH, N.INVALID, N.PENALTY = 7, 8, 9, 10, 11, 12, 13
+N.SYSTEM = 14                -- AC system message (ABS, TC, penalties...) caught by originals.lua
+
+-- The flag active right now (for the flag window); 0 = none.
+N.flagKind, N.flagTitle, N.flagSub = 0, '', ''
 
 local MAX_EVENTS = 8
 local MAX_CARS = 64
@@ -190,6 +194,9 @@ function N.update()
   local quiet = now < quietUntil
 
   local f = sim.raceFlagType or 0
+  local active = FLAGS[f]
+  if active then N.flagKind, N.flagTitle, N.flagSub = active[1], active[2], active[3]
+  else N.flagKind = 0 end
   if f ~= lastFlag then
     lastFlag = f
     local info = FLAGS[f]

@@ -354,7 +354,7 @@ for _ = 1, 80 do frame(1) end
 check(newest().kind == notify.GAIN and newest().title == 'POSUN NA P2' and newest().sub:find('Jezdec 2', 1, true), 'position gained notification')
 env.sim.raceFlagType = ac.FlagType.Caution
 frame(1)
-check(newest().kind == notify.YELLOW, 'yellow flag notification')
+check(notify.flagKind == notify.YELLOW and newest().kind ~= notify.YELLOW, 'yellow flag goes to the flag window, not a notification by default')
 env.sim.raceFlagType = 0
 car.isLapValid = false
 frame(1)
@@ -599,7 +599,8 @@ do
   for _ = 1, 300 do frame(1) end      -- arranged a few seconds after start
   local moved = 0
   for _ in pairs(env.moved or {}) do moved = moved + 1 end
-  check(moved == 6 and config.S.layoutVersion == 1, 'all six windows placed around the screen centre: ' .. moved)
+  check(moved == 7 and config.S.layoutVersion == 2, 'all seven windows placed: ' .. moved)
+  check(env.moved.w7 and env.moved.w7.x > 1500 and env.moved.w7.y < 100, 'flag window in the top right corner')
   local p = env.moved.w5
   check(p and p.x > 960 and p.y > 400 and p.y < 700, 'damage window right of the centre')
   env.moved = nil
@@ -618,6 +619,35 @@ do
   local okDelta = pcall(script.windowDelta, DT)
   check(okDelta, 'other windows keep drawing after an error')
   tracker.diag.error = nil
+end
+
+-- 24. AC's overlay leaderboard is turned off, system messages hidden and shown as notifications, flag window
+do
+  local notify2 = require('src/notify')
+  env.overlayBoard.displayMode = 2
+  for _ = 1, 90 do frame(1) end
+  check(env.overlayBoard.displayMode == 0, 'AC overlay leaderboard turned off')
+  local edited = false
+  for _, e in ipairs(env.configEdits or {}) do if e:find('HIDE_SYSTEM_MESSAGES=1', 1, true) then edited = true end end
+  check(edited, 'AC system messages hidden through gui.ini [HIDE]')
+  env.callbacks.message('ABS', 'Level 3', 'info', 2)
+  check(notify2.get(1).kind == notify2.SYSTEM and notify2.get(1).title == 'ABS', 'AC system message shown as a notification')
+  env.callbacks.message('Penalty', 'Cut', 'illegal', 2)
+  check(notify2.get(1).kind == notify2.PENALTY, 'illegal message shown as a penalty')
+  local flags = require('src/flag_window')
+  env.sim.raceFlagType = ac.FlagType.Caution
+  frame(1)
+  check(notify2.flagKind == notify2.YELLOW, 'active flag known to the flag window')
+  env.windowW, env.windowH = 260, 80
+  local before = env.calls.rect or 0
+  local ok5, err5 = pcall(script.windowFlags, DT)
+  check(ok5 and (env.calls.rect or 0) > before and tracker.diag.error == nil, 'flag window draws the yellow flag: ' .. tostring(err5 or tracker.diag.error))
+  env.sim.raceFlagType = ac.FlagType.Finished
+  frame(1)
+  pcall(script.windowFlags, DT)
+  env.sim.raceFlagType = 0
+  frame(1)
+  check(notify2.flagKind == 0, 'flag cleared')
 end
 
 print(string.format('%d passed, %d failed', passed, failed))

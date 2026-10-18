@@ -11,13 +11,14 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 | **MirrorDelta Tyres** | Teplota jádra pneumatik a teploty pláště (vnitřní / střed / vnější) |
 | **MirrorDelta Damage** | Poškození ve tvaru auta, 12 vzhledů: karoserie, pneumatiky a stav motoru v % |
 | **MirrorDelta Gear** | Ukazatel otáček z 12 dílků, pod ním převod na barevné dlaždici a pod převodem rychlost |
+| **MirrorDelta Flags** | Aktuální vlajka v pravém horním rohu: vlajka a její název, dokud platí |
 | **MirrorDelta Notifications** | Krátké zprávy nahoře: vlajky, nejrychlejší kolo, předjetí, boxy, neplatné kolo, odpojení |
 
 ## Instalace
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.7.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.8.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -45,6 +46,12 @@ U výchozí instalace Steamu je to `C:\Program Files (x86)\Steam\steamapps\commo
 5. **Nastavení:** při najetí myší klikněte v titulku na ozubené kolečko.
 
 Po instalaci nové verze se všechna okna MirrorDelta jednou sama zobrazí a rozmístí kolem středu obrazovky. Kdykoli je tam vrátíte tlačítkem **Zobrazit všechna okna uprostřed obrazovky** nahoře v nastavení.
+
+### Vypnutí původních ukazatelů AC
+
+- **Pořadí AC (F9)** aplikace vypne sama, stejně jako to dělá oficiální aplikace CSP Unbound.
+- **Systémové zprávy AC** (ABS, TC, penalizace, připojení…) se pokusí skrýt sama. Zprávy pak ukáže okno MirrorDelta Notifications, takže o nic nepřijdete. Pokud CSP aplikaci skrytí nedovolí (stav uvidíte v nastavení na záložce Notifikace), zapněte ho jednou ručně: **Content Manager > Nastavení > Custom Shaders Patch > GUI > Hide system messages**.
+- **Vlajky** ukazuje okno MirrorDelta Flags v pravém horním rohu. Po instalaci se tam samo otevře.
 
 Když některé okno narazí na chybu, ukáže ji červeně přímo v sobě a ostatní okna běží dál. Chyba je i v záložce Diagnostika.
 

@@ -18,7 +18,7 @@ local STOP = rgbm(0.12, 0.13, 0.15, 1)
 local STRIP = rgbm(0.957, 0.961, 0.969, 0.95)
 local STRIP_LABEL = rgbm(0.29, 0.32, 0.38, 1)
 
-local TAGS = { 'NEJ', 'DNF', 'BOX', 'OUT', '▲', '▼', '!', '»', 'STOP', '1', 'CÍL', '✕', 'PEN' }
+local TAGS = { 'NEJ', 'DNF', 'BOX', 'OUT', '▲', '▼', '!', '»', 'STOP', '1', 'CÍL', '✕', 'PEN', 'AC' }
 
 local function kindColor(k)
   if k == notify.FASTEST then return S.colPurple end
@@ -32,7 +32,8 @@ end
 
 -- Text colour on the coloured tag.
 local function tagInk(k)
-  if k == notify.GAIN or k == notify.LOSS or k == notify.YELLOW or k == notify.LAST_LAP or k == notify.FINISH then return INK end
+  if k == notify.GAIN or k == notify.LOSS or k == notify.YELLOW or k == notify.LAST_LAP or k == notify.FINISH
+    or k == notify.SYSTEM then return INK end
   return WHITE
 end
 

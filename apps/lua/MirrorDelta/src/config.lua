@@ -63,7 +63,10 @@ local defaults = {
   notifyFastest = true,     -- fastest lap of the session (any car)
   notifyPositions = true,   -- own position gained or lost
   notifyPits = true,        -- other cars entering and leaving the pit lane
-  notifyFlags = true,       -- yellow, blue, black flag, penalty, last lap, finish
+  notifyFlags = false,      -- also as notifications (the flag window shows them anyway)
+  notifySystem = true,      -- AC's own system messages (ABS, TC, penalties...) as notifications
+  hideOverlayLeaderboard = true, -- turn off AC's overlay leaderboard (F9)
+  hideSystemMessages = true, -- hide AC's own system messages (CSP option gui.ini [HIDE] HIDE_SYSTEM_MESSAGES)
   notifyInvalid = true,     -- own lap invalidated (track cut)
   notifyConnections = true, -- driver disconnected (online)
   notifyRaceOnly = true,    -- positions and pits only in a race session
@@ -99,7 +102,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.7.0' }
+local M = { S = S, defaults = defaults, VERSION = '1.8.0' }
 
 function M.set(key, value)
   S[key] = value

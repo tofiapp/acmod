@@ -6,6 +6,7 @@ local notify = require('src/notify')
 local tyres = require('src/tyres_window')
 local damage = require('src/damage_window')
 local layout = require('src/layout')
+local originals = require('src/originals')
 local D = require('src/draw')
 local S = config.S
 
@@ -210,10 +211,19 @@ local function tabNotify()
   checkbox('notifyFastest', 'Nejrychlejší kolo session (kdokoli)')
   checkbox('notifyPositions', 'Moje pozice: předjetí a ztráta')
   checkbox('notifyPits', 'Ostatní auta v boxech a z boxů')
-  checkbox('notifyFlags', 'Vlajky: žlutá, modrá, černá, penalizace, poslední kolo, cíl')
+  checkbox('notifySystem', 'Systémové zprávy AC (ABS, TC, penalizace, připojení…)')
+  checkbox('notifyFlags', 'Vlajky i jako notifikace (okno MirrorDelta Flags je ukazuje vždy)')
   checkbox('notifyInvalid', 'Moje neplatné kolo (řezání trati)')
   checkbox('notifyConnections', 'Odpojení jezdce (online)')
   checkbox('notifyRaceOnly', 'Pozice a boxy jen v závodě')
+  gap()
+  ui.header('Původní ukazatele AC')
+  checkbox('hideOverlayLeaderboard', 'Vypnout původní pořadí AC (F9)')
+  ui.text('Stav: ' .. originals.leaderboard)
+  checkbox('hideSystemMessages', 'Skrýt původní systémové zprávy AC')
+  ui.text('Stav: ' .. originals.messages)
+  ui.textWrapped('Kdyby se původní zprávy dál zobrazovaly: Content Manager > Nastavení > Custom Shaders Patch > GUI > '
+    .. 'zapnout „Hide system messages“. Zprávy pak ukáže okno MirrorDelta Notifications.')
 end
 
 local function yesNo(v) return v and 'ano' or 'ne' end

@@ -74,7 +74,8 @@ for i = 0, 3 do
   }
 end
 M.sim = { isReplayActive = false, isPaused = false, carsCount = 12, currentSessionIndex = 0, damageDisplayerShown = true, raceFlagType = 0 }
-M.cars = {}                   -- other cars by index (1..); missing ones are nil like unused slots
+M.cars = {}
+M.overlayBoard = { displayMode = 2, verticalLayout = false }                   -- other cars by index (1..); missing ones are nil like unused slots
 M.session = { laps = 15, isTimedRace = false, type = 3 }
 
 ac = {
@@ -101,10 +102,13 @@ ac = {
     if cmd == 'Hide Damage' then M.sim.damageDisplayerShown = not M.sim.damageDisplayerShown end
   end,
   getUI = function () return { windowSize = vec2(1920, 1080) } end,
+  accessOverlayLeaderboardParams = function () return M.overlayBoard end,
+  applyLiveConfigEdit = function (file, text) M.configEdits = M.configEdits or {}; M.configEdits[#M.configEdits + 1] = file .. ':' .. text end,
+  onMessage = function (cb) M.callbacks.message = cb end,
   getAppWindows = function ()
     local list = {}
     for i, title in ipairs({ 'MirrorDelta', 'MirrorDelta Timing', 'MirrorDelta Tyres', 'MirrorDelta Gear',
-      'MirrorDelta Damage', 'MirrorDelta Notifications', 'Some Other App' }) do
+      'MirrorDelta Damage', 'MirrorDelta Notifications', 'MirrorDelta Flags', 'Some Other App' }) do
       list[i] = { name = 'w' .. i, title = title, visible = false, layer = 0 }
     end
     return list
