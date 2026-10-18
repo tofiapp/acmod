@@ -1,7 +1,7 @@
 -- Mirror window: AC's rear view (ui.drawVirtualMirror, as CSP's own OBS view draws it) in a movable rectangle, with
 -- car markers like a GT3 digital rear view mirror with radar:
--- - every car behind gets corner brackets around it, sized by distance, coloured by threat (white: not closing in,
---   yellow: closing in, red: close or about to reach us), the nearest one also a time gap label;
+-- - the two nearest cars behind get corner brackets, sized by distance, coloured by threat (green: not closing in,
+--   orange: closing in, red: close or about to reach us), the nearest one also a time gap label;
 -- - a car behind but outside the shown crop gets a small arrow at that edge;
 -- - a car alongside lights a bar at that side of the frame, the lit part shows where it is (ahead, level, behind).
 -- Positions use a perspective projection of the car's position relative to ours (look/side/up), the field of view
@@ -27,16 +27,23 @@ local WHITE = rgbm(1, 1, 1, 1)
 local FRAME = rgbm(0.07, 0.08, 0.1, 0.9)
 local NONE = rgbm(0.07, 0.08, 0.1, 0.55)
 local TEXT = rgbm(0.85, 0.87, 0.9, 0.9)
-local FAR = rgbm(0.96, 0.96, 0.97, 0.9)
-local YELLOW = rgbm(1, 0.78, 0.15, 1)
-local RED = rgbm(1, 0.25, 0.22, 1)
-local LABEL_BG = rgbm(0.05, 0.06, 0.08, 0.75)
+-- strong colours that stand out on any picture: green (not closing in), orange (closing in), red (close)
+local FAR = rgbm(0.15, 1, 0.4, 1)
+local YELLOW = rgbm(1, 0.6, 0, 1)
+local RED = rgbm(1, 0.1, 0.1, 1)
+local SHADOW = rgbm(0, 0, 0, 0.65)
+local LABEL_BG = rgbm(0.03, 0.03, 0.04, 0.85)
 local COLORS = { FAR, YELLOW, RED }
+local SHOWN_MAX = 2            -- only the nearest cars behind get brackets
 local tint = rgbm()
 
 -- per car (index 1..MAX_CARS-1): smoothed screen box, visibility fade, threat
 local sx, sy, sw, sh, vis, threat = {}, {}, {}, {}, {}, {}
-for i = 1, MAX_CARS do sx[i], sy[i], sw[i], sh[i], vis[i], threat[i] = 0, 0, 0, 0, 0, 1 end
+local tx, ty, tw, th, candBack = {}, {}, {}, {}, {}     -- this frame's raw box and distance (1e9: not a candidate)
+for i = 1, MAX_CARS do
+  sx[i], sy[i], sw[i], sh[i], vis[i], threat[i] = 0, 0, 0, 0, 0, 1
+  tx[i], ty[i], tw[i], th[i], candBack[i] = 0, 0, 0, 0, 1e9
+end
 local lastClock = nil
 local gapStrings = {}
 
@@ -109,14 +116,14 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
   local tanV = tanH / 4                          -- the rear view is 4:1 with square pixels
   local cx, cy = dx + dw / 2, oy + mh / 2        -- centre of the whole rear view
   local fx, fy = dw / 2 / tanH, dw / 8 / tanV    -- pixels per unit of tangent
-  local t = math.max(1.5, 2 * sc)
+  local t = math.max(2, 3 * sc)
   local hasL, hasR, sideL, sideR = false, false, 0, 0   -- alongside: position -1 ahead .. +1 behind
   local edgeL, edgeR = 0, 0                      -- cars behind outside the crop (threat level)
-  local nearest, nearestBack = 0, 1e9
+  local nearest, nearestBack, second, secondBack = 0, 1e9, 0, 1e9
   local shown = 0
   for i = 1, n - 1 do
     local c = ac.getCar(i)
-    local target = 0
+    candBack[i] = 1e9
     if c and not c.isInPit and c.isConnected ~= false then
       local p = c.position
       local rx, ry, rz = p.x - mp.x, p.y - mp.y, p.z - mp.z
@@ -148,18 +155,29 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
           if x + hw < ox or x - hw > ox + mw then
             if x < ox then edgeL = math.max(edgeL, level) else edgeR = math.max(edgeR, level) end
           else
-            target = 1
-            if vis[i] <= 0.01 then sx[i], sy[i], sw[i], sh[i] = x, yTop, hw, yBot - yTop end
-            sx[i] = sx[i] + (x - sx[i]) * k
-            sy[i] = sy[i] + (yTop - sy[i]) * k
-            sw[i] = sw[i] + (hw - sw[i]) * k
-            sh[i] = sh[i] + ((yBot - yTop) - sh[i]) * k
-            if back < nearestBack then nearest, nearestBack = i, back end
+            tx[i], ty[i], tw[i], th[i], candBack[i] = x, yTop, hw, yBot - yTop, back
+            if back < nearestBack then
+              second, secondBack, nearest, nearestBack = nearest, nearestBack, i, back
+            elseif back < secondBack then
+              second, secondBack = i, back
+            end
           end
         end
       end
     end
-    vis[i] = vis[i] + (target - vis[i]) * (dt > 0 and (1 - math.exp(-dt / 0.15)) or 1)
+  end
+  -- only the nearest SHOWN_MAX cars get brackets; the rest fade out
+  local fade = dt > 0 and (1 - math.exp(-dt / 0.15)) or 1
+  for i = 1, n - 1 do
+    local target = (i == nearest or (SHOWN_MAX > 1 and i == second)) and 1 or 0
+    if target == 1 then
+      if vis[i] <= 0.01 then sx[i], sy[i], sw[i], sh[i] = tx[i], ty[i], tw[i], th[i] end
+      sx[i] = sx[i] + (tx[i] - sx[i]) * k
+      sy[i] = sy[i] + (ty[i] - sy[i]) * k
+      sw[i] = sw[i] + (tw[i] - sw[i]) * k
+      sh[i] = sh[i] + (th[i] - sh[i]) * k
+    end
+    vis[i] = vis[i] + (target - vis[i]) * fade
     if target == 0 and vis[i] < 0.02 then vis[i] = 0 end
   end
 
@@ -170,8 +188,13 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
         local hw = math.max(5 * sc, sw[i])
         local x1, x2 = sx[i] - hw, sx[i] + hw
         local y1, y2 = sy[i], sy[i] + math.max(6 * sc, sh[i])
-        local color = col(COLORS[threat[i]], a * vis[i])
-        brackets(x1, y1, x2, y2, t, color)
+        -- a light fill, a dark outline for contrast, then the coloured brackets
+        local base = COLORS[threat[i]]
+        tint:set(base)
+        tint.mult = 0.16 * a * vis[i]
+        D.rect(x1, y1, x2, y2, tint, 2 * sc)
+        brackets(x1 - 1, y1 - 1, x2 + 1, y2 + 1, t + 2, col(SHADOW, a * vis[i]))
+        brackets(x1, y1, x2, y2, t, col(base, a * vis[i]))
         if threat[i] == 3 then   -- red: a chevron above, pointing at the car
           local s = math.max(5 * sc, math.min(10 * sc, hw * 0.25))
           local ty = math.max(oy + s * 1.2, y1 - s * 0.4)

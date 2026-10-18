@@ -129,7 +129,7 @@ ac = {
     local list = {}
     for i, title in ipairs({ 'MirrorDelta', 'MirrorDelta Timing', 'MirrorDelta Tyres', 'MirrorDelta Gear',
       'MirrorDelta Damage', 'MirrorDelta Notifications', 'MirrorDelta Flags', 'Some Other App', 'MirrorDelta Setup',
-      'MirrorDelta Mirror', 'Virtual Mirror', 'Race Flags', 'Car Mirrors Configurator' }) do
+      'MirrorDelta Mirror', 'Virtual Mirror', 'Race Flags', 'Car Mirrors Configurator', 'MirrorDelta Standings' }) do
       list[i] = { name = 'w' .. i, title = title, visible = false, layer = 0 }
     end
     return list

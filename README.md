@@ -13,6 +13,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 | **MirrorDelta Gear** | Ukazatel otáček z 12 dílků, pod ním převod na barevné dlaždici a pod převodem rychlost |
 | **MirrorDelta Flags** | Aktuální vlajka v pravém horním rohu: vlajka a její název, dokud platí |
 | **MirrorDelta Mirror** | Zpětné zrcátko v posuvném obdélníku se šipkami nad auty za vámi (jako kamera v GT3) |
+| **MirrorDelta Standings** | Pořadí dole místo původního pořadí AC (F9): vy a auta kolem vás, odstupy |
 | **MirrorDelta Setup** | Jeden řádek nahoře uprostřed při změně nastavení auta (TC, ABS, brzdy…) |
 | **MirrorDelta Notifications** | Krátké zprávy nahoře: vlajky, nejrychlejší kolo, předjetí, boxy, neplatné kolo, odpojení |
 
@@ -20,7 +21,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.15.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.16.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -82,6 +83,10 @@ Nastavení je společné pro všechna okna a má osm záložek.
   - **Předchozí kolo** porovnává jen s kolem těsně před tím a s ničím jiným (ani s uloženým kolem, ani s deltou z AC). Out lap tedy deltu nemá. Druhé kolo se porovná s out lapem: delta naskočí v místě, kde jste vyjeli z boxů, a počítá celý čas out lapu včetně boxové uličky, takže na cílové čáře se rovná rozdílu časů kol. Před tím místem delta není a sektory jsou šedé.
 - Tlačítko **Smazat uložená data** smaže uložené nejlepší kolo a mini sektory pro aktuální auto a trať. Potvrdíte ho druhým kliknutím.
 
+**Pořadí dole (MirrorDelta Standings)**
+- Vy uprostřed a auta před vámi a za vámi v pořadí AC (výchozí 7 aut, nastavitelné v záložce Časy). Každé auto: pozice, zkratka jména (tři písmena příjmení) a odstup.
+- V závodě odstup na trati v sekundách (auto před vámi záporně, červeně; za vámi kladně, zeleně; o kolo a víc „+1 KOLO“). V tréninku a kvalifikaci rozdíl nejlepších kol proti vašemu nejlepšímu. Auto v boxech ukazuje BOX.
+
 **Časy**
 - Zobrazit: pozici, počet kol, aktuální čas, poslední kolo a nejrychlejší čas (každé zvlášť). Smazané poslední kolo je červené.
 - Uspořádání: vedle sebe (výchozí), nebo pod sebou.
@@ -116,7 +121,7 @@ Nastavení je společné pro všechna okna a má osm záložek.
 **Zrcátko**
 - Okno MirrorDelta Mirror ukazuje zpětný pohled AC (stejný obraz jako virtuální zrcátko) v rámečku, který jde posunout a zvětšit kamkoli. Výchozí tvar je obdélník 400 × 150. Obraz se nikdy nedeformuje: okno ukáže výřez zrcátka ve svém poměru stran (užší okno prostředek šířky), přiblížení jde zvýšit. Obraz zrcátka dává CSP v HDR (před úpravou obrazu AC), proto jsou čtyři způsoby, jak z něj udělat normální obraz: gamma (výchozí), YEBIS jako pohled pro OBS, tonemapping UI a bez úprav. Přepínají se kliknutím do okna; po najetí myší okno ukáže verzi a aktivní způsob. Jas jde zvýšit i snížit.
 - Původní zrcátko AC se vypíná ve hře volbou virtual cockpit / virtuální zrcátko.
-- Každé auto za vámi má kolem sebe rohový rámeček jako radar v GT3: bílý (nedotahuje), žlutý (dotahuje), červený (blízko, méně než 8 m nebo u vás do 1,5 s; navíc šipka nad ním). Velikost rámečku odpovídá vzdálenosti, značky se pohybují plynule. U nejbližšího auta je odstup v sekundách.
+- Dvě nejbližší auta za vámi mají kolem sebe rohový rámeček jako radar v GT3, ve výrazných barvách s tmavým obrysem: zelený (nedotahuje), oranžový (dotahuje), červený (blízko, méně než 8 m nebo u vás do 1,5 s; navíc šipka nad ním). Velikost rámečku odpovídá vzdálenosti, značky se pohybují plynule. U nejbližšího auta je odstup v sekundách.
 - Počítají se jen auta, která jsou za vámi i podle polohy na trati, takže auto na vedlejší rovince se neoznačí.
 - Auto za vámi mimo zobrazený výřez: šipka u toho okraje. Auto vedle vás: červený pruh na té straně, jeho jasná část ukazuje, jestli je auto vepředu, na úrovni nebo vzadu.
 - Šířka záběru (výchozí 50°) se nastavuje tak, aby šipky seděly přesně nad auty; hlídaná vzdálenost výchozí 60 m.

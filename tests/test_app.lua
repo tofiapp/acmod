@@ -603,7 +603,8 @@ do
   for _ = 1, 300 do frame(1) end      -- arranged a few seconds after start
   local moved = 0
   for _ in pairs(env.moved or {}) do moved = moved + 1 end
-  check(moved == 9 and config.S.layoutVersion == 8, 'all nine windows placed: ' .. moved)
+  check(moved == 10 and config.S.layoutVersion == 9, 'all ten windows placed: ' .. moved)
+  check(env.moved.w14 and math.abs(env.moved.w14.x + 431 - 960) < 2 and env.moved.w14.y > 1000, 'standings at the bottom centre')
   check(env.moved.w10 and math.abs(env.moved.w10.x + 200 - 960) < 2 and env.moved.w10.y > 40 and env.moved.w10.y < 100
     and env.resized and env.resized.w10 and env.resized.w10.x == 400, 'mirror at the top centre under the settings line, a rectangle')
   check(env.shown and env.shown.w11 == false and env.shown.w12 == false and env.shown.w13 == nil and env.shown.w10 ~= false,
@@ -961,6 +962,13 @@ do
   env.cars[1] = carAt(2.5, -1, 50)     -- alongside on the left, a bit behind
   script.windowMirror(DT)
   check(mirror.sideLeft and mirror.sideLeft > 0 and mirror.sideRight == nil, 'car alongside on the left: left side bar, slightly behind')
+  env.cars[1] = carAt(1, -8, 58)
+  env.cars[2] = carAt(-2, -20, 55)
+  env.cars[3] = carAt(0.5, -40, 50)
+  local saved3 = env.cars[3]
+  script.windowMirror(DT)
+  check(mirror.shown == 2, 'three cars behind: only the two nearest get brackets: ' .. mirror.shown)
+  env.cars[3] = nil
   local ok3, err3 = pcall(function ()
     env.windowW, env.windowH = 60, 30
     script.windowMirror(DT)
@@ -972,6 +980,47 @@ do
   env.mirrorAvailable = nil
   check(ok and tracker.diag.error == nil, 'no rear view available: the window says so, no error')
   env.cars[1], env.cars[2] = saved1, saved2
+end
+
+-- 30. Standings row: the player and the cars around them in AC's order, gaps, replaces AC's F9 leaderboard
+do
+  local standings = require('src/standings_window')
+  local saved = {}
+  for i = 1, 6 do saved[i] = env.cars[i] end
+  env.sim.carsCount = 7
+  car.racePosition, car.bestLapTimeMs = 4, 90000
+  for i = 1, 6 do
+    env.cars[i] = { index = i, racePosition = i < 4 and i or i + 1, bestLapTimeMs = 89000 + i * 400, isInPitlane = i == 6,
+      isConnected = true, lapCount = car.lapCount, splinePosition = car.splinePosition, isLapValid = true, isInPit = false }
+  end
+  env.windowW, env.windowH = 862, 40
+  local savedSession = env.session
+  env.session = { type = 'practice' }   -- not a race: best lap differences
+  env.lastTexts = {}
+  for _ = 1, 200 do frame(1) end
+  local ok, err = pcall(script.windowStandings, DT)
+  local seen = {}
+  for _, t in ipairs(env.lastTexts) do seen[t] = true end
+  check(ok and standings.count == 7 and standings.first == 1, 'seven tiles from P1 with the player in the middle: ' .. tostring(err))
+  check(seen['JEZ'] and seen['HRÁ'] and seen['BOX'] and seen['-0,600'] and seen['+0,600'],
+    'short names, pit and best lap differences shown')
+  -- race: gaps on track in seconds, the car ahead negative
+  env.session = { type = ac.SessionType.Race }
+  env.sim.trackLengthM = 5000
+  for _ = 1, 200 do frame(1) end
+  env.cars[3].splinePosition = (car.splinePosition + 50 / 5000) % 1    -- 50 m ahead of the player
+  env.cars[3].lapCount = car.lapCount + ((car.splinePosition + 50 / 5000) >= 1 and 1 or 0)
+  env.lastTexts = {}
+  script.windowStandings(DT)
+  seen = {}
+  for _, t in ipairs(env.lastTexts) do seen[t] = true end
+  local gapAhead = false
+  for t in pairs(seen) do if t:match('^%-%d,%d$') and t ~= '-0,0' then gapAhead = true end end
+  check(gapAhead, 'race: car ahead shown with a negative gap in seconds')
+  env.session, env.sim.trackLengthM = savedSession, nil
+  car.racePosition = 4
+  for i = 1, 6 do env.cars[i] = saved[i] end
+  env.sim.carsCount = 12
 end
 
 print(string.format('%d passed, %d failed', passed, failed))

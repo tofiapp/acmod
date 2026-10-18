@@ -5,7 +5,7 @@
 local config = require('src/config')
 local S = config.S
 
-local LAYOUT_VERSION = 8
+local LAYOUT_VERSION = 9
 
 -- Each window's top left corner: offset from the screen centre ('c'), the top right corner ('tr'), the top edge
 -- at the horizontal middle ('tc') or the left edge at the vertical middle ('l'), px,
@@ -19,7 +19,8 @@ local PLACES = {
   ['MirrorDelta Damage'] = { 30, -100, 'l', 4 },            -- left edge, vertical middle
   ['MirrorDelta Flags'] = { -290, 40, 'tr', 2 },
   ['MirrorDelta Setup'] = { -150, 8, 'tc', 5 },
-  ['MirrorDelta Mirror'] = { -200, 60, 'tc', 8, 400, 150 }, -- rear view under the settings line, a rectangle             -- one line at the top centre
+  ['MirrorDelta Mirror'] = { -200, 60, 'tc', 8, 400, 150 }, -- rear view under the settings line, a rectangle
+  ['MirrorDelta Standings'] = { -431, -70, 'bc', 9, 862, 40 }, -- standings row at the bottom, instead of AC's F9             -- one line at the top centre
 }
 
 local M = { lastResult = '-' }
@@ -38,8 +39,8 @@ function M.arrange(after)
       local window = ac.accessAppWindow(v.name)
       if window then
         local anchor = place[3]
-        local x = anchor == 'tr' and screen.x + place[1] or anchor == 'l' and place[1] or cx + place[1]
-        local y = (anchor == 'tr' or anchor == 'tc') and place[2] or cy + place[2]
+        local x = anchor == 'tr' and screen.x + place[1] or anchor == 'l' and place[1] or cx + place[1]   -- 'tc', 'bc', 'c': from the centre
+        local y = (anchor == 'tr' or anchor == 'tc') and place[2] or anchor == 'bc' and screen.y + place[2] or cy + place[2]
         window:move(vec2(math.max(0, x), math.max(0, y)))
         if place[5] and window.resize then window:resize(vec2(place[5], place[6])) end
         window:setVisible(true)

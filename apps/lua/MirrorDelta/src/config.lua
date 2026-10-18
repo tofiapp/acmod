@@ -31,6 +31,7 @@ local defaults = {
   showLast = true,
   setupLine = true,           -- car settings line at the top (TC, ABS, brake bias...) and AC's system messages
   setupTime = 2.5,            -- s the line stays
+  standingsCount = 7,         -- standings window: cars shown (the player in the middle)
   mirrorMarkers = true,       -- mirror window: triangles above the cars behind
   mirrorSideArrows = true,    -- mirror window: red arrow at the side when a car is alongside
   mirrorFov = 50,             -- degrees the rear view covers horizontally (markers line up with the cars)
@@ -117,7 +118,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.15.0' }
+local M = { S = S, defaults = defaults, VERSION = '1.16.0' }
 
 function M.set(key, value)
   S[key] = value
