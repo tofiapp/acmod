@@ -964,11 +964,30 @@ do
   check(mirror.sideLeft and mirror.sideLeft > 0 and mirror.sideRight == nil, 'car alongside on the left: left side bar, slightly behind')
   env.cars[1] = carAt(1, -8, 58)
   env.cars[2] = carAt(-2, -20, 55)
+  local savedCount = env.sim.carsCount
+  env.sim.carsCount = 4
   env.cars[3] = carAt(0.5, -40, 50)
-  local saved3 = env.cars[3]
   script.windowMirror(DT)
   check(mirror.shown == 2, 'three cars behind: only the two nearest get brackets: ' .. mirror.shown)
+  config.set('mirrorTargets', 1)
+  script.windowMirror(DT)
+  check(mirror.shown == 1, 'one target: only the nearest car is marked')
+  config.set('mirrorTargets', 3)
+  local styleOk = true
+  for style = 1, 3 do
+    for palette = 1, 3 do
+      config.set('mirrorMarkerStyle', style)
+      config.set('mirrorPalette', palette)
+      local okS = pcall(script.windowMirror, DT)
+      styleOk = styleOk and okS and mirror.shown == 3
+    end
+  end
+  check(styleOk and tracker.diag.error == nil, 'all marker styles and colour schemes draw three targets')
+  config.set('mirrorTargets', 2)
+  config.set('mirrorMarkerStyle', 1)
+  config.set('mirrorPalette', 1)
   env.cars[3] = nil
+  env.sim.carsCount = savedCount
   local ok3, err3 = pcall(function ()
     env.windowW, env.windowH = 60, 30
     script.windowMirror(DT)
@@ -1004,7 +1023,8 @@ do
   check(ok and standings.count == 7 and standings.first == 1, 'seven tiles from P1 with the player in the middle: ' .. tostring(err))
   check(seen['JEZ'] and seen['HRÁ'] and seen['BOX'] and seen['-0,600'] and seen['+0,600'],
     'short names, pit and best lap differences shown')
-  -- race: gaps on track in seconds, the car ahead negative
+  -- race, live mode: gaps on track in seconds, the car ahead negative
+  config.set('standingsGapMode', 1)
   env.session = { type = ac.SessionType.Race }
   env.sim.trackLengthM = 5000
   for _ = 1, 200 do frame(1) end
@@ -1017,6 +1037,33 @@ do
   local gapAhead = false
   for t in pairs(seen) do if t:match('^%-%d,%d$') and t ~= '-0,0' then gapAhead = true end end
   check(gapAhead, 'race: car ahead shown with a negative gap in seconds')
+  -- timing loop (after every sector): car 2 follows the player exactly 1.5 s behind on the same line
+  config.set('standingsGapMode', 2)
+  local hist = {}
+  local follower = env.cars[2]
+  follower.isInPitlane = false
+  for f = 1, 60 * 40 do
+    frame(1)
+    hist[f] = car.lapCount + car.splinePosition
+    local back = hist[math.max(1, f - 90)]
+    follower.lapCount, follower.splinePosition = math.floor(back), back % 1
+  end
+  env.lastTexts = {}
+  script.windowStandings(DT)
+  local loopGap = false
+  for _, t in ipairs(env.lastTexts) do if t == '+1,5' then loopGap = true end end
+  check(loopGap, 'timing loop: car 1.5 s behind shows +1,5 after a sector')
+  config.set('standingsGapTo', 2)
+  ok, err = pcall(script.windowStandings, DT)
+  check(ok, 'interval to the car ahead draws: ' .. tostring(err))
+  config.set('standingsGapTo', 1)
+  config.set('standingsNames', 2)
+  env.lastTexts = {}
+  script.windowStandings(DT)
+  local fullName = false
+  for _, t in ipairs(env.lastTexts) do if t == 'JEZDEC' then fullName = true end end
+  check(fullName, 'surname mode shows the whole surname')
+  config.set('standingsNames', 1)
   env.session, env.sim.trackLengthM = savedSession, nil
   car.racePosition = 4
   for i = 1, 6 do env.cars[i] = saved[i] end

@@ -43,6 +43,8 @@ function script.update(dt)
   if not ok and not tracker.diag.error then tracker.diag.error = 'notifikace: ' .. tostring(err) end
   ok, err = pcall(originals.update)
   if not ok and not tracker.diag.error then tracker.diag.error = 'původní prvky AC: ' .. tostring(err) end
+  ok, err = pcall(standingsWindow.update, dt)
+  if not ok and not tracker.diag.error then tracker.diag.error = 'pořadí: ' .. tostring(err) end
   ok, err = pcall(setupLine.update)
   if not ok and not tracker.diag.error then tracker.diag.error = 'nastavení auta: ' .. tostring(err) end
   ok, err = pcall(layout.update)

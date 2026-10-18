@@ -32,6 +32,17 @@ local defaults = {
   setupLine = true,           -- car settings line at the top (TC, ABS, brake bias...) and AC's system messages
   setupTime = 2.5,            -- s the line stays
   standingsCount = 7,         -- standings window: cars shown (the player in the middle)
+  standingsGapMode = 2,       -- race gaps: 1 live, 2 after every sector (timing loop), 3 at the line only
+  standingsSectors = 3,       -- checkpoints per lap for mode 2
+  standingsGapTo = 1,         -- 1 gap to me, 2 interval to the car ahead
+  standingsNames = 1,         -- 1 three letters, 2 surname, 3 no names
+  standingsGapColors = true,  -- cars ahead red, behind green
+  mirrorTargets = 2,          -- rear view: how many of the nearest cars get a marker
+  mirrorMarkerStyle = 1,      -- 1 corner brackets, 2 full frame, 3 arrow above the car
+  mirrorPalette = 1,          -- 1 green/orange/red, 2 white/yellow/red, 3 blue/yellow/red
+  mirrorLineWidth = 3,        -- px (at 400 px window width)
+  mirrorFill = true,          -- light fill inside the marker
+  mirrorGapLabel = true,      -- time gap of the nearest car
   mirrorMarkers = true,       -- mirror window: triangles above the cars behind
   mirrorSideArrows = true,    -- mirror window: red arrow at the side when a car is alongside
   mirrorFov = 50,             -- degrees the rear view covers horizontally (markers line up with the cars)
@@ -118,7 +129,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.16.0' }
+local M = { S = S, defaults = defaults, VERSION = '1.17.0' }
 
 function M.set(key, value)
   S[key] = value

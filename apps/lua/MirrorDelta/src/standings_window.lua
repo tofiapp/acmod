@@ -1,7 +1,10 @@
 -- Standings window (bottom centre): replaces AC's overlay leaderboard (F9), which originals.lua turns off.
 -- One row: the player and the cars around them in AC's order (car.racePosition), each a tile with the position,
--- a short name and a gap: in a race the gap on track to the player (from lap count and spline position, in seconds
--- at the player's speed), otherwise the best lap difference to the player's best lap.
+-- a name and a gap to the player or to the car ahead (setting). In a race the gap is either live (distance on track
+-- at the player's speed) or measured like a timing loop: every car's crossing time of evenly spaced checkpoints
+-- (S.standingsSectors per lap) is recorded each frame (interpolated inside the frame), and the gap is the
+-- difference of two cars' times at the last checkpoint both passed: after every sector, or only at the line.
+-- Outside a race: best lap difference.
 -- Fields as in the official apps / notify.lua: racePosition, lapCount, splinePosition, bestLapTimeMs, isInPitlane,
 -- isConnected, ac.getDriverName, ac.getSession(i).type, sim.trackLengthM. The order is refreshed 4 times a second,
 -- names every few seconds; strings are cached, nothing is allocated per frame.
@@ -16,7 +19,14 @@ local REFRESH, NAME_REFRESH = 0.25, 5
 
 local order, count = {}, 0                -- car indices in AC's order
 for i = 1, MAX_CARS do order[i] = 0 end
-local names, nameSource = {}, {}          -- short names per car index
+local names, fullNames, nameSource = {}, {}, {}   -- per car index: 3 letters, surname
+
+-- timing loop: per car the continuous progress (laps + spline), the last checkpoint index passed and a ring of
+-- crossing times (RING slots, enough for two laps at the most checkpoints)
+local RING = 32
+local loopClock = 0
+local prevQ, lastIdx, ringT, ringP = {}, {}, {}, {}
+local loopK = 0
 local gapKey, gapStr = {}, {}             -- per car index: last gap key and its text
 local nextRefresh, nextNames = 0, 0
 local isRace, raceCheck = false, -100
@@ -43,17 +53,12 @@ end
 -- "Jan Novák" -> "NOV" (last word, three letters, upper case incl. Czech letters via originals-style map).
 local UPPER = { ['á'] = 'Á', ['č'] = 'Č', ['ď'] = 'Ď', ['é'] = 'É', ['ě'] = 'Ě', ['í'] = 'Í', ['ň'] = 'Ň',
   ['ó'] = 'Ó', ['ř'] = 'Ř', ['š'] = 'Š', ['ť'] = 'Ť', ['ú'] = 'Ú', ['ů'] = 'Ů', ['ý'] = 'Ý', ['ž'] = 'Ž' }
-local function shortName(full)
-  local last = full
-  for word in full:gmatch('[^%s]+') do
-    if word:find('[%a\128-\255]') then last = word end      -- the last word with a letter ("Jezdec 1" -> "Jezdec")
-  end
+local function upperWord(word, maxLetters)
   local out, letters, i = {}, 0, 1
-  while i <= #last and letters < 3 do
-    local c = last:sub(i, i)
-    local b = c:byte()
-    if b >= 0xC0 then                      -- two-byte UTF-8 letter
-      local ch = last:sub(i, i + 1)
+  while i <= #word and letters < maxLetters do
+    local c = word:sub(i, i)
+    if c:byte() >= 0xC0 then               -- two-byte UTF-8 letter
+      local ch = word:sub(i, i + 1)
       out[#out + 1] = UPPER[ch] or ch
       i = i + 2
     else
@@ -65,11 +70,22 @@ local function shortName(full)
   return table.concat(out)
 end
 
+local function lastWord(full)
+  local last = full
+  for word in full:gmatch('[^%s]+') do
+    if word:find('[%a\128-\255]') then last = word end      -- the last word with a letter ("Jezdec 1" -> "Jezdec")
+  end
+  return last
+end
+
 local function refreshNames(n)
   for i = 0, n - 1 do
     local ok, name = pcall(ac.getDriverName, i)
     name = ok and type(name) == 'string' and name ~= '' and name or ('AUTO ' .. (i + 1))
-    if nameSource[i] ~= name then nameSource[i], names[i] = name, shortName(name) end
+    if nameSource[i] ~= name then
+      local last = lastWord(name)
+      nameSource[i], names[i], fullNames[i] = name, upperWord(last, 3), upperWord(last, 9)
+    end
   end
 end
 
@@ -107,30 +123,52 @@ local function refresh(sim, now)
   for j = 1, count do if order[j] == 0 then playerRank = j end end
 end
 
--- Gap text of car i relative to the player, cached by its value (tenths of a second / milliseconds / laps).
-local function gapText(i, me, sim)
-  local c = ac.getCar(i)
-  if not c then return '' end
+-- Crossing time of car i at checkpoint index p (nil when not recorded).
+local function crossTime(i, p)
+  local rp = ringP[i]
+  if not rp then return nil end
+  local slot = p % RING + 1
+  if rp[slot] ~= p then return nil end
+  return ringT[i][slot]
+end
+
+local function cacheGap(i, key, fmt, value)
+  if gapKey[i] ~= key then gapKey[i], gapStr[i] = key, (string.format(fmt, value):gsub('%.', ',')) end
+  return gapStr[i]
+end
+
+-- Gap text of car i relative to car r (the player or the car ahead), cached by value. Negative: i is ahead of r.
+local function gapText(i, r, sim)
+  local c, ref = ac.getCar(i), ac.getCar(r)
+  if not c or not ref then return '' end
   if isRace then
-    local length = sim.trackLengthM or 0
-    if length <= 0 then return '' end
-    local laps = (c.lapCount + c.splinePosition) - (me.lapCount + me.splinePosition)   -- + = ahead of the player
+    local laps = (c.lapCount + c.splinePosition) - (ref.lapCount + ref.splinePosition)   -- + = i ahead of r
     if math.abs(laps) >= 1 then
       local whole = laps > 0 and math.floor(laps) or -math.floor(-laps)
-      local key = 100000 + whole
-      if gapKey[i] ~= key then
-        gapKey[i], gapStr[i] = key, string.format('%+d KOLO', whole)
+      if gapKey[i] ~= 100000 + whole then
+        gapKey[i], gapStr[i] = 100000 + whole, string.format('%+d KOLO', -whole)
       end
       return gapStr[i]
     end
-    local seconds = laps * length / math.max(20, me.speedKmh / 3.6)
-    local key = math.floor(seconds * 10 + 0.5)
-    if gapKey[i] ~= key then
-      gapKey[i], gapStr[i] = key, (string.format('%+.1f', -key / 10):gsub('%.', ','))
+    if S.standingsGapMode == 1 or loopK == 0 then
+      local length = sim.trackLengthM or 0
+      if length <= 0 then return '' end
+      local me = ac.getCar(0)
+      local seconds = laps * length / math.max(20, me.speedKmh / 3.6)
+      local key = math.floor(-seconds * 10 + 0.5)
+      return cacheGap(i, key, '%+.1f', key / 10)
     end
-    return gapStr[i]
+    -- timing loop: the last checkpoint both cars passed (only the line in mode 3)
+    local pi, pr = lastIdx[i], lastIdx[r]
+    if not pi or not pr then return gapStr[i] or '–' end
+    local common = math.min(pi, pr)
+    if S.standingsGapMode == 3 then common = math.floor(common / loopK) * loopK end
+    local ti, tr = crossTime(i, common), crossTime(r, common)
+    if not ti or not tr then return gapStr[i] or '–' end
+    local key = math.floor((ti - tr) * 10 + 0.5)
+    return cacheGap(i, key, '%+.1f', key / 10)
   end
-  local best, mine = c.bestLapTimeMs, me.bestLapTimeMs
+  local best, mine = c.bestLapTimeMs, ref.bestLapTimeMs
   if best <= 0 then
     if gapKey[i] ~= -1e9 then gapKey[i], gapStr[i] = -1e9, '–' end
     return gapStr[i]
@@ -141,8 +179,46 @@ local function gapText(i, me, sim)
     return gapStr[i]
   end
   local key = best - mine
-  if gapKey[i] ~= key then gapKey[i], gapStr[i] = key, (string.format('%+.3f', key / 1000):gsub('%.', ',')) end
-  return gapStr[i]
+  return cacheGap(i, key, '%+.3f', key / 1000)
+end
+
+-- Runs every frame from script.update: records checkpoint crossing times of every car (timing loop).
+function M.update(dt)
+  local sim = ac.getSim()
+  if not sim or sim.isPaused or sim.isReplayActive then return end
+  loopClock = loopClock + dt
+  local k = math.max(1, math.min(12, math.floor(S.standingsSectors)))
+  if k ~= loopK then
+    loopK = k
+    for i in pairs(prevQ) do prevQ[i] = nil end
+  end
+  local n = math.min(MAX_CARS, sim.carsCount)
+  for i = 0, n - 1 do
+    local c = ac.getCar(i)
+    if c and c.splinePosition and c.lapCount then
+      local q = c.lapCount + c.splinePosition
+      local pq = prevQ[i]
+      if not pq or math.abs(q - pq) > 0.5 or c.isInPit then
+        lastIdx[i] = math.floor(q * k)              -- start (or teleport, pits): nothing crossed yet
+      else
+        local p = math.floor(q * k)
+        if p > lastIdx[i] and q > pq then
+          if not ringT[i] then
+            ringT[i], ringP[i] = {}, {}
+            for j = 1, RING do ringT[i][j], ringP[i][j] = 0, -1 end
+          end
+          while lastIdx[i] < p do
+            local idx = lastIdx[i] + 1
+            local frac = (idx / k - pq) / (q - pq)
+            local slot = idx % RING + 1
+            ringT[i][slot], ringP[i][slot] = loopClock - dt * (1 - math.max(0, math.min(1, frac))), idx
+            lastIdx[i] = idx
+          end
+        end
+      end
+      prevQ[i] = q
+    end
+  end
 end
 
 local myBestCache = { key = -1, str = '' }
@@ -179,11 +255,15 @@ function M.draw()
   -- the player and the cars around them, as many as the setting says (odd number, player in the middle)
   local want = math.max(1, math.min(count, math.floor(S.standingsCount)))
   local first = math.max(1, math.min(playerRank - math.floor(want / 2), count - want + 1))
-  local baseW = want * BASE_TILE_W + (want - 1) * GAP
+  local nameMode = S.standingsNames
+  local tileW = nameMode == 2 and BASE_TILE_W + 34 or nameMode == 3 and BASE_TILE_W - 36 or BASE_TILE_W
+  local baseW = want * tileW + (want - 1) * GAP
   local sc = math.min(w / baseW, h / BASE_H)
   local x = (w - baseW * sc) / 2
   local a = S.opacity
-  local tw, th = BASE_TILE_W * sc, BASE_H * sc
+  local tw, th = tileW * sc, BASE_H * sc
+  local nameW = nameMode == 2 and 74 or nameMode == 3 and 0 or 40
+  local toAhead = S.standingsGapTo == 2
   ui.pushDWriteFont(D.FONT)
   for j = first, first + want - 1 do
     local i = order[j]
@@ -194,16 +274,24 @@ function M.draw()
       local ink = mine and INK or NAME
       D.text(posText(c.racePosition > 0 and c.racePosition or j), 18 * sc, x + 6 * sc, 0, 30 * sc, th, D.ALIGN_CENTER,
         col(mine and INK or POS, a))
-      D.text(names[i] or '', 15 * sc, x + 38 * sc, 0, 40 * sc, th, D.ALIGN_START, col(ink, a))
+      if nameMode ~= 3 then
+        D.text((nameMode == 2 and fullNames[i] or names[i]) or '', 15 * sc, x + 38 * sc, 0, nameW * sc, th, D.ALIGN_START, col(ink, a))
+      end
       local gap, gapColor
       if c.isInPitlane and not mine then
         gap, gapColor = 'BOX', PIT
+      elseif toAhead then
+        -- interval to the car ahead (the leader shows its own best lap / nothing)
+        if j > 1 then gap = gapText(i, order[j - 1], sim) else gap = mine and myText(me) or '' end
+        gapColor = mine and INK or NAME
       elseif mine then
         gap, gapColor = myText(me), INK
       else
-        gap, gapColor = gapText(i, me, sim), j < playerRank and AHEAD or BEHIND
+        gap = gapText(i, 0, sim)
+        gapColor = not S.standingsGapColors and NAME or j < playerRank and AHEAD or BEHIND
       end
-      D.text(gap, 13 * sc, x + 70 * sc, 0, tw - 76 * sc, th, D.ALIGN_END, col(gapColor, a))
+      local gx = x + (38 + nameW + 4) * sc
+      D.text(gap, 13 * sc, gx, 0, x + tw - 6 * sc - gx, th, D.ALIGN_END, col(gapColor, a))
     end
     x = x + tw + GAP * sc
   end

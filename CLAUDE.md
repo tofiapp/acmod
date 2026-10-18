@@ -14,7 +14,7 @@ each with its own taskbar icon:
   engine brake, fuel map, turbo, MGU-K/H, limiters, auto shift/clutch; fields as in the official Unbound app, each
   probed once under pcall) plus AC's non-penalty system messages (`src/setup_line.lua`).
 - **mirror** (`MirrorDelta Mirror`): AC's rear view via `ui.drawVirtualMirror` (ac_apps.lua, used by CSP's OBS view);
-  GT3-style radar markers: corner brackets around the two nearest cars behind from a perspective projection (look/side/up, `S.mirrorFov`,
+  GT3-style radar markers on the `S.mirrorTargets` nearest cars behind (style, palette, line width, fill, gap label settings) from a perspective projection (look/side/up, `S.mirrorFov`,
   camera 0.6 m up, 4:1 square pixels), smoothed, threat colours, time gap label on the nearest, edge arrows for cars
   outside the crop, side bars for cars alongside; cars must also be behind by spline gap (`sim.trackLengthM`). Left/right from `wheels[0/1].position` vs `car.side`. The mirror texture is HDR (pre post-processing). `S.mirrorMode`
   (click in the window cycles, hover shows version + mode): 1 gamma = `ui.drawVirtualMirror` into a float `ui.ExtraCanvas`, then
@@ -23,8 +23,10 @@ each with its own taskbar icon:
   `display.mirror()`; 4 raw. Always cropped to the window's aspect via UVs or a clip rect, never stretched (`S.mirrorZoom`). Hiding AC's own
   virtual mirror / flags: no verified API; app windows titled like a mirror or flag are hidden via `ac.accessAppWindow`.
 - **standings** (`MirrorDelta Standings`, `src/standings_window.lua`): bottom centre row replacing AC's F9 overlay leaderboard:
-  player and neighbours by `racePosition`, short names (last word with a letter, 3 letters), race gap on track in seconds
-  (lapCount + splinePosition, `sim.trackLengthM`, player's speed), otherwise best lap difference. Refreshed 4 Hz.
+  player and neighbours by `racePosition`, names (3 letters / surname / none), gap to me or to the car ahead. Race gap
+  modes: live (lapCount + splinePosition, `sim.trackLengthM`, player's speed) or a timing loop (`M.update(dt)` from
+  script.update records every car's crossing time of `S.standingsSectors` checkpoints, interpolated in the frame; gap =
+  difference at the last checkpoint both passed, every sector or only the line). Otherwise best lap difference.
 - **gear** (`MirrorDelta Gear`): 12-segment RPM bar lighting from both edges to the centre (range from
   `car.rpmLimiter`), gear on a rounded tile coloured by revs (white/yellow/red, blinking blue at the limiter),
   calm speed (changes only by whole steps) on a dark bar under it. Font: bundled Unbounded Bold.

@@ -21,7 +21,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.16.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.17.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -85,7 +85,9 @@ Nastavení je společné pro všechna okna a má osm záložek.
 
 **Pořadí dole (MirrorDelta Standings)**
 - Vy uprostřed a auta před vámi a za vámi v pořadí AC (výchozí 7 aut, nastavitelné v záložce Časy). Každé auto: pozice, zkratka jména (tři písmena příjmení) a odstup.
-- V závodě odstup na trati v sekundách (auto před vámi záporně, červeně; za vámi kladně, zeleně; o kolo a víc „+1 KOLO“). V tréninku a kvalifikaci rozdíl nejlepších kol proti vašemu nejlepšímu. Auto v boxech ukazuje BOX.
+- V závodě odstup v sekundách (auto před vámi záporně, červeně; za vámi kladně, zeleně; o kolo a víc „KOLO“). Odstup se počítá podle nastavení: průběžně z polohy na trati, po každém sektoru, nebo jen po projetí cílem. Po sektoru a cíli se měří jako na časomíře: z časů, kdy obě auta projela stejný bod trati (počet sektorů na kolo nastavitelný, výchozí 3).
+- Odstup k vám, nebo k autu před ním (interval). Jména: zkratka, celé příjmení, nebo bez jmen. Barvy odstupů jdou vypnout.
+- V tréninku a kvalifikaci rozdíl nejlepších kol. Auto v boxech ukazuje BOX.
 
 **Časy**
 - Zobrazit: pozici, počet kol, aktuální čas, poslední kolo a nejrychlejší čas (každé zvlášť). Smazané poslední kolo je červené.
@@ -124,7 +126,8 @@ Nastavení je společné pro všechna okna a má osm záložek.
 - Dvě nejbližší auta za vámi mají kolem sebe rohový rámeček jako radar v GT3, ve výrazných barvách s tmavým obrysem: zelený (nedotahuje), oranžový (dotahuje), červený (blízko, méně než 8 m nebo u vás do 1,5 s; navíc šipka nad ním). Velikost rámečku odpovídá vzdálenosti, značky se pohybují plynule. U nejbližšího auta je odstup v sekundách.
 - Počítají se jen auta, která jsou za vámi i podle polohy na trati, takže auto na vedlejší rovince se neoznačí.
 - Auto za vámi mimo zobrazený výřez: šipka u toho okraje. Auto vedle vás: červený pruh na té straně, jeho jasná část ukazuje, jestli je auto vepředu, na úrovni nebo vzadu.
-- Šířka záběru (výchozí 50°) se nastavuje tak, aby šipky seděly přesně nad auty; hlídaná vzdálenost výchozí 60 m.
+- Šířka záběru (výchozí 50°) se nastavuje tak, aby značky seděly přesně na autech; hlídaná vzdálenost výchozí 60 m.
+- Nastavitelné: kolik nejbližších aut se označí (1–6, výchozí 2), značka (rohový rámeček, celý rámeček, šipka nad autem), barvy (zelená/oranžová/červená, bílá/žlutá/červená, modrá/žlutá/červená), tloušťka čar, výplň a odstup u nejbližšího auta.
 - Okna jiných aplikací, která vypadají jako zpětné zrcátko nebo vlajky, aplikace skryje (pokud je AC vede jako okna aplikací) a jednou to oznámí notifikací. Vestavěné virtuální zrcátko a vlajky AC, které okny nejsou, CSP aplikacím vypnout nedovolí. Když AC zpětný pohled zrovna nevykresluje (třeba mimo kokpit), okno to napíše.
 
 **Notifikace**

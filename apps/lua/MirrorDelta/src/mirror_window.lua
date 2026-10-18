@@ -1,7 +1,7 @@
 -- Mirror window: AC's rear view (ui.drawVirtualMirror, as CSP's own OBS view draws it) in a movable rectangle, with
 -- car markers like a GT3 digital rear view mirror with radar:
--- - the two nearest cars behind get corner brackets, sized by distance, coloured by threat (green: not closing in,
---   orange: closing in, red: close or about to reach us), the nearest one also a time gap label;
+-- - the nearest cars behind (S.mirrorTargets) get a marker (corner brackets, a frame or an arrow), sized by distance,
+--   coloured by threat (palette setting: not closing in / closing in / close), the nearest one a time gap label;
 -- - a car behind but outside the shown crop gets a small arrow at that edge;
 -- - a car alongside lights a bar at that side of the frame, the lit part shows where it is (ahead, level, behind).
 -- Positions use a perspective projection of the car's position relative to ours (look/side/up), the field of view
@@ -33,8 +33,23 @@ local YELLOW = rgbm(1, 0.6, 0, 1)
 local RED = rgbm(1, 0.1, 0.1, 1)
 local SHADOW = rgbm(0, 0, 0, 0.65)
 local LABEL_BG = rgbm(0.03, 0.03, 0.04, 0.85)
-local COLORS = { FAR, YELLOW, RED }
-local SHOWN_MAX = 2            -- only the nearest cars behind get brackets
+-- colour schemes (setting S.mirrorPalette): not closing in / closing in / close
+local PALETTES = {
+  { FAR, YELLOW, RED },
+  { rgbm(1, 1, 1, 1), rgbm(1, 0.85, 0.1, 1), RED },
+  { rgbm(0.2, 0.75, 1, 1), rgbm(1, 0.85, 0.1, 1), RED },
+}
+local COLORS = PALETTES[1]
+local chosen = {}
+for i = 1, 64 do chosen[i] = false end
+
+-- A full frame (setting style 2).
+local function frame(x1, y1, x2, y2, t, color)
+  D.rect(x1, y1, x2, y1 + t, color, 0)
+  D.rect(x1, y2 - t, x2, y2, color, 0)
+  D.rect(x1, y1, x1 + t, y2, color, 0)
+  D.rect(x2 - t, y1, x2, y2, color, 0)
+end
 local tint = rgbm()
 
 -- per car (index 1..MAX_CARS-1): smoothed screen box, visibility fade, threat
@@ -116,7 +131,8 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
   local tanV = tanH / 4                          -- the rear view is 4:1 with square pixels
   local cx, cy = dx + dw / 2, oy + mh / 2        -- centre of the whole rear view
   local fx, fy = dw / 2 / tanH, dw / 8 / tanV    -- pixels per unit of tangent
-  local t = math.max(2, 3 * sc)
+  local t = math.max(1, S.mirrorLineWidth * sc)
+  COLORS = PALETTES[S.mirrorPalette] or PALETTES[1]
   local hasL, hasR, sideL, sideR = false, false, 0, 0   -- alongside: position -1 ahead .. +1 behind
   local edgeL, edgeR = 0, 0                      -- cars behind outside the crop (threat level)
   local nearest, nearestBack, second, secondBack = 0, 1e9, 0, 1e9
@@ -166,10 +182,19 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
       end
     end
   end
-  -- only the nearest SHOWN_MAX cars get brackets; the rest fade out
+  -- only the nearest S.mirrorTargets cars get markers; the rest fade out
+  for i = 1, n - 1 do chosen[i] = false end
+  for _ = 1, math.max(1, math.min(6, math.floor(S.mirrorTargets))) do
+    local best, bestBack = 0, 1e9
+    for i = 1, n - 1 do
+      if not chosen[i] and candBack[i] < bestBack then best, bestBack = i, candBack[i] end
+    end
+    if best == 0 then break end
+    chosen[best] = true
+  end
   local fade = dt > 0 and (1 - math.exp(-dt / 0.15)) or 1
   for i = 1, n - 1 do
-    local target = (i == nearest or (SHOWN_MAX > 1 and i == second)) and 1 or 0
+    local target = chosen[i] and 1 or 0
     if target == 1 then
       if vis[i] <= 0.01 then sx[i], sy[i], sw[i], sh[i] = tx[i], ty[i], tw[i], th[i] end
       sx[i] = sx[i] + (tx[i] - sx[i]) * k
@@ -188,17 +213,30 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
         local hw = math.max(5 * sc, sw[i])
         local x1, x2 = sx[i] - hw, sx[i] + hw
         local y1, y2 = sy[i], sy[i] + math.max(6 * sc, sh[i])
-        -- a light fill, a dark outline for contrast, then the coloured brackets
+        -- a light fill, a dark outline for contrast, then the coloured marker (style setting)
         local base = COLORS[threat[i]]
-        tint:set(base)
-        tint.mult = 0.16 * a * vis[i]
-        D.rect(x1, y1, x2, y2, tint, 2 * sc)
-        brackets(x1 - 1, y1 - 1, x2 + 1, y2 + 1, t + 2, col(SHADOW, a * vis[i]))
-        brackets(x1, y1, x2, y2, t, col(base, a * vis[i]))
-        if threat[i] == 3 then   -- red: a chevron above, pointing at the car
+        local style = S.mirrorMarkerStyle
+        if S.mirrorFill and style ~= 3 then
+          tint:set(base)
+          tint.mult = 0.16 * a * vis[i]
+          D.rect(x1, y1, x2, y2, tint, 2 * sc)
+        end
+        if style == 2 then
+          frame(x1 - 1, y1 - 1, x2 + 1, y2 + 1, t + 2, col(SHADOW, a * vis[i]))
+          frame(x1, y1, x2, y2, t, col(base, a * vis[i]))
+        elseif style == 3 then
+          local s = math.max(6 * sc, math.min(14 * sc, hw * 0.45))
+          local ty = math.max(oy + s * 1.3, y1 - 2 * sc)
+          triangle(sx[i] - s - 1, ty - s * 1.25 - 1, sx[i] + s + 1, ty - s * 1.25 - 1, sx[i], ty + 1, col(SHADOW, a * vis[i]))
+          triangle(sx[i] - s, ty - s * 1.25, sx[i] + s, ty - s * 1.25, sx[i], ty, col(base, a * vis[i]))
+        else
+          brackets(x1 - 1, y1 - 1, x2 + 1, y2 + 1, t + 2, col(SHADOW, a * vis[i]))
+          brackets(x1, y1, x2, y2, t, col(base, a * vis[i]))
+        end
+        if threat[i] == 3 and style ~= 3 then   -- red: a chevron above, pointing at the car
           local s = math.max(5 * sc, math.min(10 * sc, hw * 0.25))
           local ty = math.max(oy + s * 1.2, y1 - s * 0.4)
-          triangle(sx[i] - s, ty - s * 1.1, sx[i] + s, ty - s * 1.1, sx[i], ty, col(RED, a * vis[i]))
+          triangle(sx[i] - s, ty - s * 1.1, sx[i] + s, ty - s * 1.1, sx[i], ty, col(COLORS[3], a * vis[i]))
         end
         shown = shown + 1
         M.drawnX[shown], M.drawnThreat[shown] = sx[i], threat[i]
@@ -208,7 +246,7 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
   for j = shown + 1, #M.drawnX do M.drawnX[j], M.drawnThreat[j] = nil, nil end
 
   -- time gap of the nearest car under its brackets
-  if nearest > 0 and vis[nearest] > 0.5 then
+  if S.mirrorGapLabel and nearest > 0 and vis[nearest] > 0.5 then
     local str = gapText(nearestBack / mySpeed)
     local lx, ly = sx[nearest], sy[nearest] + math.max(6 * sc, sh[nearest]) + 3 * sc
     if ly + 15 * sc > oy + mh then                                     -- no room under the car: above it (and its chevron)

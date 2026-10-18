@@ -130,7 +130,13 @@ local function tabTiming()
   gap()
   ui.header('Pořadí dole (okno MirrorDelta Standings)')
   slider('standingsCount', 'Počet aut', 3, 11, '%.0f', 1)
-  ui.textWrapped('Nahrazuje původní pořadí AC (F9). V závodě ukazuje odstup na trati, jinak rozdíl nejlepších kol.')
+  combo('standingsGapMode', 'Odstup v závodě', { 'Průběžně', 'Po každém sektoru', 'Po projetí cílem' })
+  if S.standingsGapMode == 2 then slider('standingsSectors', 'Sektorů na kolo', 2, 12, '%.0f', 1) end
+  combo('standingsGapTo', 'Odstup k', { 'Mně', 'Autu před ním' })
+  combo('standingsNames', 'Jména', { 'Zkratka (3 písmena)', 'Příjmení', 'Bez jmen' })
+  checkbox('standingsGapColors', 'Barevné odstupy (před mnou červeně, za mnou zeleně)')
+  ui.textWrapped('Nahrazuje původní pořadí AC (F9). Po sektoru / cíli se odstup měří jako na časomíře: z časů, kdy obě '
+    .. 'auta projela stejný bod trati. Mimo závod rozdíl nejlepších kol.')
   gap()
   combo('timingLayout', 'Uspořádání', { 'Pod sebou', 'Vedle sebe' })
   gap()
@@ -217,7 +223,16 @@ end
 local function tabMirror()
   ui.textWrapped('Okno MirrorDelta Mirror ukazuje zpětný pohled AC v posuvném rámečku.')
   gap()
-  checkbox('mirrorMarkers', 'Rámečky kolem aut za mnou (bílý, žlutý když dotahuje, červený když je blízko) a odstup')
+  checkbox('mirrorMarkers', 'Označovat auta za mnou')
+  if S.mirrorMarkers then
+    slider('mirrorTargets', 'Kolik nejbližších aut', 1, 6, '%.0f', 1)
+    combo('mirrorMarkerStyle', 'Značka', { 'Rohový rámeček', 'Celý rámeček', 'Šipka nad autem' })
+    combo('mirrorPalette', 'Barvy (nedotahuje / dotahuje / blízko)',
+      { 'Zelená / oranžová / červená', 'Bílá / žlutá / červená', 'Modrá / žlutá / červená' })
+    slider('mirrorLineWidth', 'Tloušťka čar', 1, 6, '%.0f px', 1)
+    checkbox('mirrorFill', 'Průhledná výplň uvnitř značky')
+    checkbox('mirrorGapLabel', 'Odstup v sekundách u nejbližšího auta')
+  end
   checkbox('mirrorSideArrows', 'Červený pruh na straně, když je auto vedle mě')
   slider('mirrorFov', 'Šířka záběru', 20, 90, '%.0f°', 1)
   ui.textWrapped('Šířku záběru nastavte tak, aby rámečky seděly přesně na autech v zrcátku.')
