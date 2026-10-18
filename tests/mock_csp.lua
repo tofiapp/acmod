@@ -7,7 +7,8 @@ local function count(name)
   M.calls[name] = (M.calls[name] or 0) + 1
 end
 
-render = { AntialiasingMode = { None = 0, SimplifiedYEBIS = 7 },
+render = { AntialiasingMode = { None = 0, SimplifiedYEBIS = 7 }, ShadersType = { Main = 0, SimplifiedWithLights = 14 },
+  onSceneReady = function (cb) M.sceneReady = cb end,
   TextureFormat = { R16G16B16A16 = { Float = 10 }, R8G8B8A8 = { UNorm = 28 } } }
 
 -- vec2
@@ -108,6 +109,21 @@ M.overlayBoard = { displayMode = 2, verticalLayout = false }                   -
 M.session = { laps = 15, isTimedRace = false, type = 3 }
 
 ac = {
+  findNodes = function (filter) return { filter = filter } end,
+  GeometryShot = function (scene, size, mips, depth, aa, format)
+    local shot = { scene = scene, size = size, aa = aa, updates = 0 }
+    function shot:setBestSceneShotQuality() return self end
+    function shot:setShadersType(t) self.shaders = t; return self end
+    function shot:setClippingPlanes(near, far) self.near, self.far = near, far; return self end
+    function shot:update(pos, look, up, fov)
+      self.updates = self.updates + 1
+      self.pos, self.look, self.up, self.fov = pos, look, up, fov
+      return self
+    end
+    M.shots = M.shots or {}
+    M.shots[#M.shots + 1] = shot
+    return shot
+  end,
   FolderID = { ScriptConfig = 1, ExtCfgUser = 18 },
   INIConfig = {
     carData = function (i, name) return M.carIni and M.carIni[name] and { get = function (_, section, key, default) local v = M.carIni[name][section .. '/' .. key]; if v == nil then return default end; return v end } or nil end,

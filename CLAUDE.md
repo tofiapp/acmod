@@ -17,12 +17,15 @@ each with its own taskbar icon:
   GT3-style radar markers on the `S.mirrorTargets` nearest cars behind (style, palette, line width, fill, gap label settings; nearest first, a marker overlapping a nearer one is skipped with `S.mirrorHideOverlap`) from a perspective projection (look/side/up, `S.mirrorFov`, 4:1 square pixels; camera at car.ini `[GRAPHICS] MIRROR_POSITION`
   via `ac.INIConfig.carData`, else `car.driverEyesPosition`, through `car.transform:transformPointTo`, else origin + 0.6 m; the box is
   the 8 projected corners of `aabbCenter`/`aabbSize` through the other car's transform, each probed under pcall; manual
-  `S.mirrorOffsetX/Y`), smoothed, threat colours, time gap label on the nearest, edge arrows for cars
+  `S.mirrorOffsetX/Y`), threat colours, time gap label on the nearest, edge arrows for cars
   outside the crop, side bars for cars alongside; cars must also be behind by spline gap (`sim.trackLengthM`). Left/right from `wheels[0/1].position` vs `car.side`. The mirror texture is HDR (pre post-processing). `S.mirrorMode`
   (click in the window cycles, hover shows version + mode): 1 gamma = `ui.drawVirtualMirror` into a float `ui.ExtraCanvas`, then
   `ui.renderShader` with `pow(saturate(c * exposure), 0.4545)` (SDK example in ac_wfx_impl.lua); 2 YEBIS canvas with exposure 30
   as CSP's OBS "Virtual mirror" view (obs_integration.lua; user reported no change with it); 3 `ui.beginTonemapping` like
-  `display.mirror()`; 4 raw. Always cropped to the window's aspect via UVs or a clip rect, never stretched (`S.mirrorZoom`). Hiding AC's own
+  `display.mirror()`; 4 raw; 5 own camera = `ac.GeometryShot(ac.findNodes('sceneRoot:yes'))` updated in `render.onSceneReady` as
+  CSP's OBS camera views (obs_integration.lua: setBestSceneShotQuality + SimplifiedWithLights, SimplifiedYEBIS, float), from the
+  markers' camera with vertical FOV from `S.mirrorFov` (4:1), near plane past our own car, drawn mirrored (u reversed), so
+  markers are exact (`M.exact`, offsets off); 6 the same shot without YEBIS through the gamma shader. Markers are not smoothed. Always cropped to the window's aspect via UVs or a clip rect, never stretched (`S.mirrorZoom`). Hiding AC's own
   virtual mirror / flags: no verified API; app windows titled like a mirror or flag are hidden via `ac.accessAppWindow`.
 - **standings** (`MirrorDelta Standings`, `src/standings_window.lua`): bottom centre row replacing AC's F9 overlay leaderboard:
   player and neighbours by `racePosition`, names (3 letters / surname / none), gap to me or to the car ahead. Race gap

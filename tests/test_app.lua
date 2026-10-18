@@ -1041,6 +1041,57 @@ do
   config.set('mirrorOffsetY', 0)
   local x5, _, y5 = only(carAt(0, -20, 50))
   check(math.abs(x4 - x5 - 20) < 0.5 and math.abs(y4 - y5 + 10) < 0.5, 'manual offset moves the markers')
+  -- own camera (mode 5): the app renders the rear view itself from the markers' camera, mirrored, own car clipped
+  config.set('mirrorMode', 5)
+  config.set('mirrorOffsetX', 25)                     -- calibration offsets do not apply to the own camera
+  local x7 = only(carAt(1, -20, 50))
+  local shot = env.shots and env.shots[#env.shots]
+  check(shot and env.sceneReady and shot.aa == 7 and shot.shaders == 14 and shot.scene.filter == 'sceneRoot:yes',
+    'own camera: scene shot like CSP\'s OBS camera views, updated when the scene is ready')
+  env.sceneReady()
+  local tanH = math.tan(math.rad(config.S.mirrorFov / 2))
+  check(shot.updates == 1 and math.abs(shot.fov - math.deg(2 * math.atan(tanH / 4))) < 0.01
+    and shot.look.z == -1 and math.abs(shot.pos.y - 0.6) < 1e-6 and shot.near > 2,
+    string.format('own camera: looks back from the mirror camera, vertical FOV %.2f, own car clipped (near %.2f)',
+      shot.fov or -1, shot.near or -1))
+  local im = env.lastImage
+  check(im and im.img == shot and im[5] > im[7] and math.abs((im[3] - im[1]) / (im[4] - im[2]) - (im[5] - im[7]) * 4 / (im[8] - im[6])) < 0.01
+    and mirror.exact,
+    'own camera: picture mirrored left to right, not stretched')
+  check(x7 < centre - 3 and mirror.shown == 1, string.format('own camera: car behind on the left marked on the left, no offset (%.1f)', x7))
+  config.set('mirrorOffsetX', 0)
+  config.set('mirrorMode', 6)
+  only(carAt(1, -20, 50))
+  env.sceneReady()
+  local shot6 = env.shots[#env.shots]
+  check(shot6 ~= shot and shot6.aa == 0 and shot6.updates == 1 and env.lastShader, 'own camera gamma: own shot through the HDR shader')
+  shot.updates = 0
+  env.sceneReady()
+  check(shot.updates == 0, 'the unused shot is not rendered')
+  -- no allocation per frame with the own camera either (markers + shot update)
+  config.set('mirrorMode', 5)
+  env.cars[1], env.cars[2] = carAt(1, -20, 50), carAt(-2, -30, 50)
+  local function mirrorFrame() env.clock = env.clock + DT; script.windowMirror(DT); env.sceneReady() end
+  local sharedSize = vec2(10, 10)                     -- the mocks' text functions allocate themselves
+  local savedMeasure, savedText = ui.measureDWriteText, ui.dwriteTextAligned
+  ui.measureDWriteText = function () return sharedSize end
+  ui.dwriteTextAligned = function () end
+  for _ = 1, 100 do mirrorFrame() end
+  jit.off()
+  collectgarbage('collect')
+  collectgarbage('stop')
+  local before = collectgarbage('count')
+  for _ = 1, 200 do mirrorFrame() end
+  local perFrame = (collectgarbage('count') - before) * 1024 / 200
+  collectgarbage('restart')
+  jit.on()
+  ui.measureDWriteText, ui.dwriteTextAligned = savedMeasure, savedText
+  check(perFrame < 1, string.format('own camera: no per-frame allocation (%.1f bytes)', perFrame))
+  config.set('mirrorMode', 1)
+  env.clock = env.clock + 1
+  shot6.updates = 0
+  env.sceneReady()
+  check(shot6.updates == 0, 'no shots rendered while AC\'s mirror picture is used')
   local noBox = plainCarAt(0, -20, 50)              -- older CSP without the fields: the old estimate
   noBox.aabbSize = nil
   local x6 = only(noBox)

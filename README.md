@@ -21,7 +21,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.19.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.20.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -123,12 +123,13 @@ Nastavení je společné pro všechna okna a má osm záložek.
 
 **Zrcátko**
 - Okno MirrorDelta Mirror ukazuje zpětný pohled AC (stejný obraz jako virtuální zrcátko) v rámečku, který jde posunout a zvětšit kamkoli. Výchozí tvar je obdélník 400 × 150. Obraz se nikdy nedeformuje: okno ukáže výřez zrcátka ve svém poměru stran (užší okno prostředek šířky), přiblížení jde zvýšit. Obraz zrcátka dává CSP v HDR (před úpravou obrazu AC), proto jsou čtyři způsoby, jak z něj udělat normální obraz: gamma (výchozí), YEBIS jako pohled pro OBS, tonemapping UI a bez úprav. Přepínají se kliknutím do okna; po najetí myší okno ukáže verzi a aktivní způsob. Jas jde zvýšit i snížit.
+- **Vlastní kamera (obraz 5 a 6):** aplikace si pohled dozadu vykreslí sama (stejně jako kamery v OBS integraci CSP), z místa kamery zrcátka a se zvolenou šířkou záběru. Značky se počítají ze stejné kamery, takže sedí na autech přesně a nic se nekalibruje; šířka záběru mění i obraz. Vlastní auto se do obrazu nedostane. 5 = s úpravou obrazu jako hra (YEBIS), 6 = přes gammu jako obraz 1. Výkonově je to podobné jako druhé zrcátko.
 - Původní zrcátko AC se vypíná ve hře volbou virtual cockpit / virtuální zrcátko.
 - Dvě nejbližší auta za vámi mají kolem sebe rohový rámeček jako radar v GT3, ve výrazných barvách s tmavým obrysem: zelený (nedotahuje), oranžový (dotahuje), červený (blízko, méně než 8 m nebo u vás do 1,5 s; navíc šipka nad ním). Velikost rámečku odpovídá vzdálenosti, značky se pohybují plynule. U nejbližšího auta je odstup v sekundách.
 - Počítají se jen auta, která jsou za vámi i podle polohy na trati, takže auto na vedlejší rovince se neoznačí.
 - Auto za vámi mimo zobrazený výřez: šipka u toho okraje. Auto vedle vás: červený pruh na té straně, jeho jasná část ukazuje, jestli je auto vepředu, na úrovni nebo vzadu.
 - Rámeček obepíná skutečný obrys auta: promítnou se rohy karoserie (rozměry auta z CSP) podle toho, jak je auto natočené, takže sedí na střed i na auto v zatáčce nebo ve smyku. Díváme se z místa kamery zrcátka (`MIRROR_POSITION` v `car.ini`, jinak z očí řidiče), ne ze středu auta, proto rámečky sedí i u blízkých aut.
-- Šířka záběru (výchozí 50°) se nastavuje tak, aby značky seděly přesně na autech; když jsou všechny značky trochu vedle, srovná je posun do strany a nahoru/dolů. Hlídaná vzdálenost výchozí 60 m.
+- Šířka záběru (výchozí 50°) se nastavuje tak, aby značky seděly přesně na autech; když jsou všechny značky trochu vedle, srovná je posun do strany a nahoru/dolů (jen u obrazu 1–4, vlastní kamera ho nepotřebuje). Značky se nevyhlazují, takže v zatáčce za autem nezaostávají. Hlídaná vzdálenost výchozí 60 m.
 - Nastavitelné: kolik nejbližších aut se označí (1–6, výchozí 2), značka (rohový rámeček, celý rámeček, šipka nad autem), barvy (zelená/oranžová/červená, bílá/žlutá/červená, modrá/žlutá/červená), tloušťka čar, výplň a odstup u nejbližšího auta. Když by se značky aut překrývaly (auto schované za jiným), ukáže se jen značka bližšího auta a místo vzdálenějšího se označí další volné auto (jde vypnout).
 - Okna jiných aplikací, která vypadají jako zpětné zrcátko nebo vlajky, aplikace skryje (pokud je AC vede jako okna aplikací) a jednou to oznámí notifikací. Vestavěné virtuální zrcátko a vlajky AC, které okny nejsou, CSP aplikacím vypnout nedovolí. Když AC zpětný pohled zrovna nevykresluje (třeba mimo kokpit), okno to napíše.
 

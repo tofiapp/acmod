@@ -20,7 +20,6 @@ local ALONGSIDE_SIDE = 6       -- m
 local SIDE_LIMIT = 14          -- m: further to the side than this is not a car on our piece of track
 local CAM_UP = 0.6             -- m: rear view camera above the car's origin (driver's eye height, roughly)
 local CAR_HALF_W, CAR_TOP, CAR_BOTTOM = 1.0, 0.75, -0.35   -- m around another car's origin
-local SMOOTH = 0.07            -- s: smoothing of marker positions (no jitter)
 
 local p1, p2 = vec2(), vec2()
 local WHITE = rgbm(1, 1, 1, 1)
@@ -226,7 +225,6 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
   local now = os.preciseClock()
   local dt = lastClock and math.min(0.2, math.max(0, now - lastClock)) or 0
   lastClock = now
-  local k = dt > 0 and (1 - math.exp(-dt / SMOOTH)) or 1
   local n = math.min(MAX_CARS, sim.carsCount)
   local mp, lk, sd, up, mv = me.position, me.look, me.side, me.up, me.velocity
   local ls = leftSign(me)
@@ -242,7 +240,9 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
   local camFwd = crx * lk.x + cry * lk.y + crz * lk.z
   local camLat = (crx * sd.x + cry * sd.y + crz * sd.z) * ls
   local camHgt = crx * up.x + cry * up.y + crz * up.z
-  local offX, offY = S.mirrorOffsetX * sc, S.mirrorOffsetY * sc   -- manual calibration (px at 400x150)
+  -- manual calibration (px at 400x150), only for AC's own mirror picture: the own camera needs none
+  local offX, offY = 0, 0
+  if not M.exact then offX, offY = S.mirrorOffsetX * sc, S.mirrorOffsetY * sc end
   local fx, fy = dw / 2 / tanH, dw / 8 / tanV    -- pixels per unit of tangent
   local t = math.max(1, S.mirrorLineWidth * sc)
   COLORS = PALETTES[S.mirrorPalette] or PALETTES[1]
@@ -331,13 +331,7 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
   local fade = dt > 0 and (1 - math.exp(-dt / 0.15)) or 1
   for i = 1, n - 1 do
     local target = chosen[i] and 1 or 0
-    if target == 1 then
-      if vis[i] <= 0.01 then sx[i], sy[i], sw[i], sh[i] = tx[i], ty[i], tw[i], th[i] end
-      sx[i] = sx[i] + (tx[i] - sx[i]) * k
-      sy[i] = sy[i] + (ty[i] - sy[i]) * k
-      sw[i] = sw[i] + (tw[i] - sw[i]) * k
-      sh[i] = sh[i] + (th[i] - sh[i]) * k
-    end
+    if target == 1 then sx[i], sy[i], sw[i], sh[i] = tx[i], ty[i], tw[i], th[i] end
     vis[i] = vis[i] + (target - vis[i]) * fade
     if target == 0 and vis[i] < 0.02 then vis[i] = 0 end
   end
@@ -434,8 +428,11 @@ end
 -- 2 YEBIS: a canvas with render.AntialiasingMode.SimplifiedYEBIS and exposure 30, as CSP's OBS "Virtual mirror" view;
 -- 3 UI tonemapping: ui.beginTonemapping / setShadingOffset / endTonemapping, as CSP's display.mirror();
 -- 4 raw: ui.drawVirtualMirror as it is.
-local MODES = 4
-local MODE_NAMES = { 'gamma', 'YEBIS', 'tonemapping UI', 'bez úprav' }
+-- 5 own camera: the app renders the scene itself (ac.GeometryShot of sceneRoot, as CSP's OBS integration renders its
+--   camera views: SimplifiedWithLights shaders, SimplifiedYEBIS, float texture) from the same camera the markers use,
+--   so the markers sit exactly on the cars; 6 the same shot without YEBIS, through the gamma shader of mode 1.
+local MODES = 6
+local MODE_NAMES = { 'gamma', 'YEBIS', 'tonemapping UI', 'bez úprav', 'vlastní kamera', 'vlastní kamera gamma' }
 local LABELS = {}
 local CANVAS_W, CANVAS_H = 1024, 256
 local cp1, cp2 = vec2(0, 0), vec2(CANVAS_W, CANVAS_H)
@@ -471,11 +468,121 @@ local SHADER = {
   ]],
 }
 
+-- ---------------------------------------------------------------- own rear camera (modes 5 and 6)
+local shots, shotFailed = {}, {}
+local shotMode, shotWanted = 0, -100           -- mode of the last frame that wanted a shot, and when
+local shotPos, shotLook, shotUp = vec3(), vec3(), vec3()
+local shotNear = 0
+local callbackSet = false
+M.shotUpdates, M.shotFov = 0, 0                -- for tests and Diagnostika
+
+-- Vertical FOV of the 4:1 shot for the horizontal S.mirrorFov (CSP camera FOVs are vertical, ac_gameplay.lua).
+local function shotFov()
+  local tanH = math.tan(math.rad(math.max(10, S.mirrorFov) / 2))
+  return math.deg(2 * math.atan(tanH / 4))
+end
+
+local function newShot(mode)
+  local shot = ac.GeometryShot(ac.findNodes('sceneRoot:yes'), vec2(CANVAS_W, CANVAS_H), 1, false,
+    mode == 5 and render.AntialiasingMode.SimplifiedYEBIS or render.AntialiasingMode.None,
+    render.TextureFormat.R16G16B16A16.Float)
+  shot:setBestSceneShotQuality()
+  shot:setShadersType(render.ShadersType.SimplifiedWithLights)
+  return shot
+end
+
+local function getShot(mode)
+  if shots[mode] or shotFailed[mode] then return shots[mode] end
+  local ok, result = pcall(newShot, mode)
+  if ok and result then shots[mode] = result else shotFailed[mode] = tostring(result) end
+  return shots[mode]
+end
+
+-- Distance from the camera to the end of our own car: everything nearer is clipped, so the shot does not show our car.
+-- Half length of our car plus the bounding box offset (read once per session, the fields are probed under pcall).
+local ownHalf, ownHalfSession = 2.6, -1
+local function readOwnHalf(me)
+  local size, centre = me.aabbSize, me.aabbCenter
+  if size and size.z > 0 then ownHalf = size.z / 2 + math.abs(centre and centre.z or 0) end
+end
+local function ownCarClip(me, sim)
+  if ownHalfSession ~= sim.currentSessionIndex then
+    ownHalfSession, ownHalf = sim.currentSessionIndex, 2.6
+    pcall(readOwnHalf, me)
+  end
+  local half = ownHalf
+  local p, lk = me.position, me.look
+  local camFwd = (camWorld.x - p.x) * lk.x + (camWorld.y - p.y) * lk.y + (camWorld.z - p.z) * lk.z
+  return math.max(0.3, half + camFwd + 0.15)
+end
+
+local function updateShot()
+  local shot = shots[shotMode]
+  if not shot or os.preciseClock() - shotWanted > 0.5 then return end
+  local me, sim = ac.getCar(0), ac.getSim()
+  if not me or not sim then return end
+  cameraPosition(me, sim)
+  local near = ownCarClip(me, sim)
+  if math.abs(near - shotNear) > 0.05 then
+    shotNear = near
+    shot:setClippingPlanes(near, 3000)
+  end
+  local lk, u = me.look, me.up
+  shotPos:set(camWorld.x, camWorld.y, camWorld.z)
+  shotLook:set(-lk.x, -lk.y, -lk.z)
+  shotUp:set(u.x, u.y, u.z)
+  M.shotFov = shotFov()
+  shot:update(shotPos, shotLook, shotUp, M.shotFov)
+  M.shotUpdates = M.shotUpdates + 1
+end
+
+local function shotCallback()
+  local ok, err = pcall(updateShot)
+  if not ok then
+    shotFailed[shotMode] = tostring(err)
+    shots[shotMode] = nil
+  end
+end
+
+-- Draws the own camera picture, mirrored left to right like a mirror; false when it cannot.
+local function drawShot(mode, ox, oy, mw, mh, fw, fh, a)
+  local shot = getShot(mode)
+  if not shot then return false end
+  if not callbackSet then
+    callbackSet = true
+    if not pcall(render.onSceneReady, shotCallback) then
+      shotFailed[5], shotFailed[6], shots[5], shots[6] = 'render.onSceneReady', 'render.onSceneReady', nil, nil
+      return false
+    end
+  end
+  shotMode, shotWanted = mode, os.preciseClock()
+  uv1:set(0.5 + fw / 2, 0.5 - fh / 2)            -- u runs backwards: a mirror
+  uv2:set(0.5 - fw / 2, 0.5 + fh / 2)
+  if mode == 6 then
+    SHADER.p1:set(ox, oy)
+    SHADER.p2:set(ox + mw, oy + mh)
+    SHADER.uv1:set(uv1.x, uv1.y)
+    SHADER.uv2:set(uv2.x, uv2.y)
+    SHADER.textures.txMirror = shot
+    SHADER.values.gExposure = S.mirrorBrightness
+    SHADER.values.gAlpha = a
+    ui.renderShader(SHADER)
+  else
+    ui.drawImage(shot, p1:set(ox, oy), p2:set(ox + mw, oy + mh), col(WHITE, a), uv1, uv2)
+  end
+  return true
+end
+
 local hasTonemapping = type(ui.beginTonemapping) == 'function' and type(ui.endTonemapping) == 'function'
   and type(ui.setShadingOffset) == 'function' and type(ui.resetShadingOffset) == 'function'
 
 -- Draws the picture; returns false when AC has no rear view right now.
 local function drawPicture(mode, ox, oy, mw, mh, fw, fh, dx, dw, a)
+  M.exact = false
+  if mode >= 5 then
+    if drawShot(mode, ox, oy, mw, mh, fw, fh, a) then M.exact = true; return true end
+    mode = 1                                     -- this CSP cannot: the virtual mirror instead
+  end
   uv1:set(0.5 - fw / 2, 0.5 - fh / 2)
   uv2:set(0.5 + fw / 2, 0.5 + fh / 2)
   local c = (mode == 1 or mode == 2) and getCanvas(mode) or nil
@@ -516,7 +623,7 @@ local function drawPicture(mode, ox, oy, mw, mh, fw, fh, dx, dw, a)
 end
 
 local function modeLabel(mode)
-  local key = mode * 10 + ((failed[mode] or (mode == 3 and not hasTonemapping)) and 1 or 0)
+  local key = mode * 10 + ((failed[mode] or shotFailed[mode] or (mode == 3 and not hasTonemapping)) and 1 or 0)
   local str = LABELS[key]
   if not str then
     str = string.format('MirrorDelta %s · obraz %d/%d: %s%s · klik = další', config.VERSION, mode, MODES,
