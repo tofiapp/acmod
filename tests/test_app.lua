@@ -39,12 +39,15 @@ local lateCallback = false  -- ac.onLapCompleted arriving one frame late
 local pendingPrev, pendingCb = nil, nil
 local splitEvent = false    -- lapCount changes one frame before the timer restarts
 local pendingTimer = nil
+local lateCount = false     -- lapCount changes one frame after the timer restarts
+local pendingCount = false
 
 local function frame(pace)
   env.clock = env.clock + DT
   if pendingPrev then car.previousLapTimeMs, pendingPrev = pendingPrev, nil end
   if pendingCb then env.callbacks.lap(0, pendingCb[1], pendingCb[2]); pendingCb = nil end
   if pendingTimer then car.lapTimeMs = pendingTimer - DT * 1000; pendingTimer = nil end
+  if pendingCount then car.lapCount = car.lapCount + 1; pendingCount = false end
   local p0 = car.splinePosition
   local p1 = p0 + DT * speed(p0) * pace
   local before = (p0 - LINE) % 1
@@ -56,7 +59,7 @@ local function frame(pace)
     local lapMs = car.lapTimeMs - DT * 1000 + f * DT * 1000
     if lateLapTime then pendingPrev = lapMs else car.previousLapTimeMs = lapMs end
     if splitEvent then pendingTimer = (1 - f) * DT * 1000 + DT * 1000 else car.lapTimeMs = (1 - f) * DT * 1000 end
-    car.lapCount = car.lapCount + 1
+    if lateCount then pendingCount = true else car.lapCount = car.lapCount + 1 end
     if car.isLapValid and not car.wasPit and (car.bestLapTimeMs == 0 or lapMs < car.bestLapTimeMs) then
       car.bestLapTimeMs = lapMs
     end
@@ -74,6 +77,7 @@ local function driveLaps(n, pace, onFrame)
   while car.lapCount < target do
     frame(pace)
     if onFrame then onFrame() end
+    if lateCount and pendingCount then frame(pace) end
   end
 end
 
@@ -194,6 +198,8 @@ local ok, err = pcall(function ()
     car.engineLifeLeft = layout == 1 and 1000 or 420
     config.set('damageAutoHide', layout == 2)
     script.windowDamage(DT)
+    env.windowW, env.windowH = 520, 110
+    script.windowNotify(DT)
     env.windowW, env.windowH = 600, 80
   end
   settings.draw()
@@ -227,6 +233,8 @@ do
     script.windowGear(DT)
     env.windowW, env.windowH = 150, 168
     script.windowDamage(DT)
+    env.windowW, env.windowH = 520, 110
+    script.windowNotify(DT)
   end
   for _ = 1, 300 do frameAndDraw() end
   jit.off()
@@ -284,6 +292,176 @@ check(tracker.diag.acDelta == true and tracker.status == nil, 'AC delta detected
 ok, err = pcall(script.windowDelta, DT)
 check(ok and tracker.diag.error == nil, 'delta window draws with the AC delta: ' .. tostring(err or tracker.diag.error))
 config.set('deltaSource', 1)
+
+-- 11. A lap that starts in the pit lane is a provisional reference until the first valid lap
+tracker.clearSaved()
+env.callbacks.release()
+tracker = loadApp()
+config = require('src/config')
+config.set('deltaSource', 2)
+env.callbacks.session(0, false)
+frame(1)
+car.isInPitlane = true
+driveLaps(1, 0.8)                   -- line crossed inside the pit lane
+car.isInPitlane = false
+check(tracker.flying and not tracker.clean, 'lap starting in the pit lane is recorded but not clean')
+driveLaps(1, 1)                     -- that lap ends: nothing valid yet, so it becomes provisional
+for _ = 1, 30 do frame(1) end
+check(tracker.provisionalMs > 0 and tracker.refKind == 3, 'pit lane lap becomes the provisional reference')
+check(tracker.hasDelta, 'delta available on the first flying lap')
+driveLaps(1, 1)
+for _ = 1, 120 do frame(1) end
+check(tracker.allTimeRefMs > 0 and tracker.refKind == 2, 'first valid lap replaces the provisional reference')
+config.set('deltaSource', 1)
+
+-- 12. Mini sectors and the delta line blink blue at the rev limiter
+do
+  local blue = 0
+  local saved = ui.drawRectFilled
+  ui.drawRectFilled = function (p1, p2, color)
+    if color.b > 0.99 and color.r < 0.3 and color.g > 0.5 and color.g < 0.6 then blue = blue + 1 end
+  end
+  car.rpm = car.rpmLimiter
+  env.clock = math.floor(env.clock) + 0.01   -- the "on" half of the 8 Hz blink
+  env.windowW, env.windowH = 600, 80
+  script.windowDelta(DT)
+  ui.drawRectFilled = saved
+  car.rpm = 6000
+  check(blue >= tracker.sectorCount + 1, 'sectors and line blink blue at the limiter: ' .. blue)
+end
+
+-- 13. Notifications
+local notify = require('src/notify')
+env.cars[1] = { index = 1, bestLapTimeMs = 0, isInPitlane = false, isConnected = true, racePosition = 1, lapCount = 0, isLapValid = true }
+env.cars[2] = { index = 2, bestLapTimeMs = 0, isInPitlane = false, isConnected = true, racePosition = 2, lapCount = 0, isLapValid = true }
+env.sim.carsCount = 3
+car.racePosition = 3
+env.sim.currentSessionIndex = 1     -- new session: notify takes a fresh snapshot
+for _ = 1, 200 do frame(1) end      -- past the quiet start
+local function newest() return notify.get(1) end
+env.cars[1].bestLapTimeMs = 30000   -- faster than anything the player drove
+for _ = 1, 10 do frame(1) end
+check(newest() and newest().kind == notify.FASTEST and newest().sub:find('Jezdec 1', 1, true), 'fastest lap notification')
+env.cars[2].isInPitlane = true
+for _ = 1, 10 do frame(1) end
+check(newest().kind == notify.PIT_IN, 'pit entry notification')
+car.racePosition, env.cars[2].racePosition = 2, 3
+for _ = 1, 80 do frame(1) end
+check(newest().kind == notify.GAIN and newest().title == 'POSUN NA P2' and newest().sub:find('Jezdec 2', 1, true), 'position gained notification')
+env.sim.raceFlagType = ac.FlagType.Caution
+frame(1)
+check(newest().kind == notify.YELLOW, 'yellow flag notification')
+env.sim.raceFlagType = 0
+car.isLapValid = false
+frame(1)
+check(newest().kind == notify.INVALID, 'invalid lap notification')
+env.cars[1].isConnected = false
+for _ = 1, 10 do frame(1) end
+check(newest().kind == notify.DISCONNECT, 'disconnect notification')
+do
+  local notifyWindow = require('src/notify_window')
+  local shared = vec2(10, 10)
+  local savedText = ui.dwriteTextAligned
+  ui.dwriteTextAligned = function () end
+  env.windowW, env.windowH = 520, 110
+  local ok2, err2 = pcall(function ()
+    for style = 1, 3 do config.set('notifyStyle', style); notifyWindow.draw() end
+  end)
+  check(ok2, 'notification window draws all styles: ' .. tostring(err2))
+  check((env.calls.quad or 0) >= 2, 'slanted strip uses quads')
+  for _ = 1, 50 do notifyWindow.draw() end
+  jit.off()
+  collectgarbage('collect')
+  collectgarbage('stop')
+  local before = collectgarbage('count')
+  for _ = 1, 200 do notifyWindow.draw() end
+  local perFrame = (collectgarbage('count') - before) * 1024 / 200
+  collectgarbage('restart')
+  jit.on()
+  ui.dwriteTextAligned = savedText
+  check(perFrame < 1, string.format('notification window allocation %.1f bytes per frame', perFrame))
+  config.set('notifyStyle', 1)
+end
+check(tracker.diag.error == nil, 'no script errors after notifications: ' .. tostring(tracker.diag.error))
+
+-- 14. Out lap: delta and mini sectors from the pit exit; timer restarts off the line are not crossings
+car.isLapValid = true
+env.callbacks.session(0, false)
+car.isInPitlane = true
+frame(0.4)
+car.splinePosition = 0.5            -- line at 0.3: the pit exit is 20 % into the lap
+for _ = 1, 60 do frame(0.4) end
+check(not tracker.flying and not tracker.partial, 'no delta while still in the pit lane')
+car.lapTimeMs = 0                   -- AC restarts the timer in the pit lane without counting a lap
+frame(0.4)
+check(not tracker.flying, 'timer restart in the pit lane is not a line crossing')
+car.isInPitlane = false
+local outColored, outDelta = 0, nil
+for _ = 1, 1200 do frame(1) end
+for i = 1, tracker.sectorCount do
+  if tracker.secState[i] == 2 or tracker.secState[i] == 3 then outColored = outColored + 1 end
+end
+check(tracker.partial and tracker.hasDelta and math.abs(tracker.delta) < 0.15,
+  'out lap delta from the pit exit: ' .. tostring(tracker.hasDelta) .. ' ' .. tostring(tracker.delta))
+check(outColored >= 2, 'out lap mini sectors are coloured: ' .. outColored)
+driveLaps(1, 1)
+check(tracker.flying and tracker.clean, 'flying lap after the out lap')
+for _ = 1, 600 do frame(1) end
+car.lapTimeMs = 0                   -- timer restart mid-lap on track, lapCount unchanged
+frame(1)
+check(not tracker.flying and tracker.diag.lastReset:find('mimo', 1, true) ~= nil, 'timer restart away from the line is not a crossing')
+for _ = 1, 40 do frame(1) end         -- after the 0.5 s wait for a late lapCount
+check(tracker.partial, 'measuring continues as a partial lap until the line')
+check(tracker.diag.error == nil, 'no script errors in the out lap: ' .. tostring(tracker.diag.error))
+
+-- 15. Without any reference, a timer restart on track (no lapCount change) never makes a reference;
+--     lapCount arriving a frame after the timer still confirms a lap
+tracker.clearSaved()
+env.callbacks.session(0, false)
+frame(1)
+car.splinePosition = 0.6
+for _ = 1, 30 do frame(1) end
+car.lapTimeMs = 0                   -- e.g. AC restarting the timer at the pit exit
+for _ = 1, 30 do frame(1) end
+driveLaps(1, 1)                     -- the real line
+for _ = 1, 120 do frame(1) end
+check(tracker.sessionRefMs == 0 and tracker.provisionalMs == 0, 'timer restart off the line gives no reference of any kind')
+lateCount = true
+driveLaps(1, 1)
+check(tracker.flying and tracker.clean, 'lapCount one frame after the timer confirms the new lap')
+for _ = 1, 120 do frame(1) end
+lateCount = false
+check(tracker.sessionRefMs > 0, 'lap confirmed by a lapCount one frame late becomes the reference')
+check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
+
+-- 16. Without an own reference the mini sectors follow AC's delta
+tracker.clearSaved()
+env.callbacks.session(0, false)
+frame(1)
+car.performanceMeter = 0
+driveLaps(1, 1)                     -- start a flying lap, nothing to compare with yet
+for _ = 1, 1500 do
+  car.performanceMeter = car.performanceMeter - 0.0005   -- getting faster than AC's best
+  frame(1)
+end
+local acGreen = 0
+for i = 1, tracker.sectorCount do if tracker.secState[i] == 2 then acGreen = acGreen + 1 end end
+check(tracker.refKind == 0 and tracker.deltaFromAC and acGreen >= 3, 'mini sectors coloured from AC delta: ' .. acGreen)
+
+-- 17. Line crossed in the pit lane with lapCount one frame late: the lap time is still read correctly
+tracker.clearSaved()
+env.callbacks.session(0, false)
+frame(1)
+driveLaps(1, 1)                     -- first crossing on track
+car.isInPitlane = true
+lateCount = true
+driveLaps(1, 1)                     -- this lap ends in the pit lane (timer first, lapCount a frame later)
+lateCount = false
+local pitLapMs = car.previousLapTimeMs
+check(tracker.flying and tracker.flashLapMs > 0 and math.abs(tracker.flashLapMs - pitLapMs) < 30,
+  string.format('lap time read across a late lapCount in the pit lane: %.0f vs %.0f', tracker.flashLapMs, pitLapMs))
+car.isInPitlane = false
+check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
 
 print(string.format('%d passed, %d failed', passed, failed))
 return failed

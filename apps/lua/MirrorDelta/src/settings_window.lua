@@ -2,6 +2,7 @@
 
 local config = require('src/config')
 local tracker = require('src/tracker')
+local notify = require('src/notify')
 local tyres = require('src/tyres_window')
 local D = require('src/draw')
 local S = config.S
@@ -80,7 +81,7 @@ local function tabDelta()
   slider('lineGap', 'Mezera mezi čarami', 0, 30, '%.1f px', 0.5)
   slider('numberSize', 'Velikost čísla', 9, 60, '%.0f px', 1)
   slider('opacity', 'Průhlednost', 0.1, 1, '%.2f')
-  checkbox('deltaLimiterFlash', 'Na omezovači blikat modře (jako okno s převodem)')
+  checkbox('deltaLimiterFlash', 'Na omezovači blikat modře: čára delty i mini sektory')
   checkbox('intensityByDelta', 'Intenzita barvy podle velikosti delty')
   if S.intensityByDelta then
     slider('intensityFullAt', 'Plná barva od', 0.1, 2, '±%.2f s')
@@ -189,7 +190,25 @@ local function tabDamage()
   end
 end
 
+local function tabNotify()
+  combo('notifyStyle', 'Vzhled', { 'Zaoblená pilulka', 'Šikmý pruh', 'Tenká linka' })
+  slider('notifyTime', 'Jak dlouho', 2, 10, '%.1f s', 0.5)
+  slider('notifyCount', 'Najednou nejvýš', 1, 3, '%.0f', 1)
+  if ui.button('Ukázat ukázku') then notify.demo() end
+  ui.textWrapped('Ukázka se zobrazí v okně MirrorDelta Notifications, podle ní okno umístěte.')
+  gap()
+  ui.header('Co oznamovat')
+  checkbox('notifyFastest', 'Nejrychlejší kolo session (kdokoli)')
+  checkbox('notifyPositions', 'Moje pozice: předjetí a ztráta')
+  checkbox('notifyPits', 'Ostatní auta v boxech a z boxů')
+  checkbox('notifyFlags', 'Vlajky: žlutá, modrá, černá, penalizace, poslední kolo, cíl')
+  checkbox('notifyInvalid', 'Moje neplatné kolo (řezání trati)')
+  checkbox('notifyConnections', 'Odpojení jezdce (online)')
+  checkbox('notifyRaceOnly', 'Pozice a boxy jen v závodě')
+end
+
 local function yesNo(v) return v and 'ano' or 'ne' end
+local REF_KINDS = { 'žádná', 'nejlepší kolo session', 'nejlepší kolo vůbec', 'dočasné kolo (out lap / neplatné)' }
 
 local function tabDiagnostics()
   local d = tracker.diag
@@ -199,8 +218,9 @@ local function tabDiagnostics()
     gap()
   end
   ui.header('Měření kola')
-  ui.text('Kolo se měří: ' .. yesNo(tracker.flying) .. '    platné zatím: ' .. yesNo(tracker.clean))
+  ui.text('Kolo se měří: ' .. yesNo(tracker.flying) .. '    out lap od výjezdu: ' .. yesNo(tracker.partial) .. '    platné zatím: ' .. yesNo(tracker.clean))
   ui.text('Delta k dispozici: ' .. yesNo(tracker.hasDelta) .. '    reference: ' .. D.formatLap(tracker.refMs, 3))
+  ui.text('Reference: ' .. REF_KINDS[tracker.refKind + 1] .. '    dočasné kolo: ' .. D.formatLap(tracker.provisionalMs, 3))
   ui.text('Delta z AC (performanceMeter): ' .. (d.acDelta == nil and 'zatím nezjištěno' or yesNo(d.acDelta))
     .. '    právě použitá: ' .. yesNo(tracker.deltaFromAC))
   if tracker.status then ui.textWrapped('Stav: ' .. tracker.status) end
@@ -240,6 +260,7 @@ function M.draw()
     ui.tabItem('Pneumatiky', tabTyres)
     ui.tabItem('Převody', tabGear)
     ui.tabItem('Poškození', tabDamage)
+    ui.tabItem('Notifikace', tabNotify)
     ui.tabItem('Barvy', tabColors)
     ui.tabItem('Diagnostika', tabDiagnostics)
   end)

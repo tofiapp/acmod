@@ -73,8 +73,9 @@ for i = 0, 3 do
     tyreOutsideTemperature = 78, tyreOptimumTemperature = 88,
   }
 end
-M.sim = { isReplayActive = false, isPaused = false, carsCount = 12, currentSessionIndex = 0, damageDisplayerShown = true }
-M.session = { laps = 15, isTimedRace = false }
+M.sim = { isReplayActive = false, isPaused = false, carsCount = 12, currentSessionIndex = 0, damageDisplayerShown = true, raceFlagType = 0 }
+M.cars = {}                   -- other cars by index (1..); missing ones are nil like unused slots
+M.session = { laps = 15, isTimedRace = false, type = 3 }
 
 ac = {
   FolderID = { ScriptConfig = 1 },
@@ -82,7 +83,10 @@ ac = {
   getCarID = function () return 'test_car' end,
   getTrackFullID = function (sep) return 'test_track' .. sep .. 'gp' end,
   getSim = function () return M.sim end,
-  getCar = function () return M.car end,
+  getCar = function (i) if (i or 0) == 0 then return M.car end; return M.cars[i] end,
+  getDriverName = function (i) return i == 0 and 'Hráč' or ('Jezdec ' .. i) end,
+  FlagType = { None = 0, Start = 1, Caution = 2, Stop = 5, ReturnToPits = 8, FasterCar = 12, Finished = 13, OneLapLeft = 14 },
+  SessionType = { Practice = 1, Qualify = 2, Race = 3 },
   getSession = function () return M.session end,
   storage = function (layout)
     local t = {}
@@ -119,6 +123,8 @@ ui = {
     count('rect')
   end,
   setCursor = function () end,
+  pathLineTo = function (p) assert(p.x == p.x and p.y == p.y, 'NaN in path'); count('pathLineTo') end,
+  pathFillConvex = function (color) assert(color and color.mult, 'path without colour'); count('quad') end,
   dwriteTextAligned = function (str, size)
     assert(type(str) == 'string', 'text must be a string')
     assert(size > 0, 'font size must be positive')

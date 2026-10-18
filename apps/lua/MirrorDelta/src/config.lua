@@ -17,7 +17,7 @@ local defaults = {
   intensityByDelta = false,
   intensityFullAt = 0.5,    -- seconds of delta for full colour
   referenceMode = 2,        -- 1: best lap of this session, 2: all-time best lap (saved)
-  deltaLimiterFlash = true, -- the delta line blinks blue at the rev limiter, like the gear window
+  deltaLimiterFlash = true, -- the delta line and the mini sectors blink blue at the rev limiter, like the gear window
   deltaSource = 1,          -- 1: own measurement, AC's delta when it has none; 2: own only; 3: AC only
   deltaShowStatus = true,   -- write in the delta window why there is no delta
 
@@ -54,6 +54,18 @@ local defaults = {
   damageFull = 50,          -- raw car.damage value drawn as full red
   damagePlate = false,
   damageHideOriginal = true, -- hide AC's own damage display while this window is open
+
+  -- Notification window
+  notifyStyle = 1,          -- 1: rounded pill, 2: slanted strip, 3: thin line
+  notifyTime = 4.5,         -- seconds a notification stays
+  notifyCount = 2,          -- notifications shown at once
+  notifyFastest = true,     -- fastest lap of the session (any car)
+  notifyPositions = true,   -- own position gained or lost
+  notifyPits = true,        -- other cars entering and leaving the pit lane
+  notifyFlags = true,       -- yellow, blue, black flag, penalty, last lap, finish
+  notifyInvalid = true,     -- own lap invalidated (track cut)
+  notifyConnections = true, -- driver disconnected (online)
+  notifyRaceOnly = true,    -- positions and pits only in a race session
 
   -- Colours
   colPurple = rgbm(0.69, 0.36, 1, 1),

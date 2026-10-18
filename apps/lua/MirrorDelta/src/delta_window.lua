@@ -78,7 +78,7 @@ local function sectorColor(i)
   return S.colIdle
 end
 
-local function drawSectors(x, y, w, h, sc)
+local function drawSectors(x, y, w, h, sc, blink)
   local count = tracker.sectorCount
   local groups = math.max(1, math.min(math.floor(S.sectorGroups + 0.5), count))
   local gap = math.max(1, 1.2 * sc)
@@ -97,7 +97,7 @@ local function drawSectors(x, y, w, h, sc)
         px = px + gap
       end
     end
-    D.rect(px, y, px + segW, y + h, D.color(sectorColor(i), S.opacity))
+    D.rect(px, y, px + segW, y + h, D.color(blink and LIMITER_BLUE or sectorColor(i), S.opacity))
     px = px + segW
   end
 end
@@ -107,14 +107,14 @@ local function deltaColor()
   return tracker.deltaSign < 0 and S.colGreen or S.colRed
 end
 
-local function drawLine(x, y, w, h)
+local function drawLine(x, y, w, h, blink)
   local alpha = S.opacity
   if S.intensityByDelta and tracker.hasDelta then
     local k = math.min(1, math.abs(tracker.delta) / math.max(0.05, S.intensityFullAt))
     alpha = alpha * (0.22 + 0.78 * k)
   end
   local col = deltaColor()
-  if limiterBlink() then col, alpha = LIMITER_BLUE, S.opacity end
+  if blink then col, alpha = LIMITER_BLUE, S.opacity end
   D.rect(x, y, x + w, y + h, D.color(col, alpha))
 end
 
@@ -131,15 +131,16 @@ local function drawInner()
   local n, contentH = layoutRows()
   if n == 0 or w <= 0 or h <= 0 then return end
   local sc = math.min(w / BASE_W, h / contentH)
+  local blink = limiterBlink()
   local y = (h - contentH * sc) / 2
   for i = 1, n do
     local row = rows[i]
     if i > 1 then y = y + rowSpacing(rows[i - 1], row) * sc end
     local rh = rowHeight(row) * sc
     if row == ROW_SECTORS then
-      drawSectors(0, y, w, rh, sc)
+      drawSectors(0, y, w, rh, sc, blink)
     elseif row == ROW_LINE then
-      drawLine(0, y, w, rh)
+      drawLine(0, y, w, rh, blink)
     else
       drawNumber(0, y, w, rh, S.numberSize * sc)
     end

@@ -29,13 +29,26 @@ function D.rect(x1, y1, x2, y2, color, rounding)
   ui.drawRectFilled(p1:set(x1, y1), p2:set(x2, y2), color, rounding or 0)
 end
 
--- Draws str inside the box (x, y, w, h), vertically centred, with a soft drop shadow.
-function D.text(str, size, x, y, w, h, align, color)
+-- Convex quad (corners in order), e.g. a slanted banner.
+local q = vec2()
+function D.quad(x1, y1, x2, y2, x3, y3, x4, y4, color)
+  ui.pathLineTo(q:set(x1, y1))
+  ui.pathLineTo(q:set(x2, y2))
+  ui.pathLineTo(q:set(x3, y3))
+  ui.pathLineTo(q:set(x4, y4))
+  ui.pathFillConvex(color)
+end
+
+-- Draws str inside the box (x, y, w, h), vertically centred, with a soft drop shadow
+-- (plain = true: without the shadow, for text on a light background).
+function D.text(str, size, x, y, w, h, align, color, plain)
   box:set(w, h)
-  local o = math.max(1, size * 0.05)
-  shadow.mult = 0.6 * color.mult
-  ui.setCursor(cursor:set(x + o, y + o))
-  ui.dwriteTextAligned(str, size, align, D.ALIGN_CENTER, box, false, shadow)
+  if not plain then
+    local o = math.max(1, size * 0.05)
+    shadow.mult = 0.6 * color.mult
+    ui.setCursor(cursor:set(x + o, y + o))
+    ui.dwriteTextAligned(str, size, align, D.ALIGN_CENTER, box, false, shadow)
+  end
   ui.setCursor(cursor:set(x, y))
   ui.dwriteTextAligned(str, size, align, D.ALIGN_CENTER, box, false, color)
 end

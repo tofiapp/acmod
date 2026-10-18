@@ -2,12 +2,14 @@
 
 ## Project
 
-MirrorDelta is a Lua app for Assetto Corsa with Custom Shaders Patch (CSP). It has three windows,
+MirrorDelta is a Lua app for Assetto Corsa with Custom Shaders Patch (CSP). It has several windows,
 each with its own taskbar icon:
 
 - **delta** (`MirrorDelta`): mini sector line, delta line, delta in seconds. Sits above the mirror.
 - **timing** (`MirrorDelta Timing`): position, lap, current time, best lap.
 - **tyres** (`MirrorDelta Tyres`): tyre core temperature (big number) and tread zones (inner/middle/outer).
+- **notify** (`MirrorDelta Notifications`): short messages at the top (flags, fastest lap, positions, pits,
+  invalid lap, disconnects), three styles (pill, slanted strip, thin line).
 - **gear** (`MirrorDelta Gear`): 12-segment RPM bar lighting from both edges to the centre (range from
   `car.rpmLimiter`), gear on a rounded tile coloured by revs (white/yellow/red, blinking blue at the limiter),
   calm speed (changes only by whole steps) on a dark bar under it. Font: bundled Unbounded Bold.
@@ -30,7 +32,9 @@ apps/lua/MirrorDelta/
   src/tyres_window.lua    tyres window (two styles)
   src/damage_window.lua   damage window (car.damage[0..3] front/rear/left/right, car.engineLifeLeft 0..1000)
   src/gear_window.lua     gear window (car.gear: -1 R, 0 N; car.rpm, car.rpmLimiter, car.speedKmh)
-  src/settings_window.lua tabs: Delta, Časy, Pneumatiky, Převody, Poškození, Barvy, Diagnostika
+  src/notify.lua          event detection (flags, other cars polled at 10 Hz) + fixed ring buffer of events
+  src/notify_window.lua   notification window (styles: pill, slanted strip via ui.pathLineTo/pathFillConvex, line)
+  src/settings_window.lua tabs: Delta, Časy, Pneumatiky, Převody, Poškození, Notifikace, Barvy, Diagnostika
 tests/                    mock CSP API + simulated laps, run with LuaJIT via lupa
 build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDelta/...
 ```
@@ -47,7 +51,14 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
 - Delta = `lapTimeMs - grid(u)`, smoothed (0.15 s) with ±20 ms colour hysteresis.
 - Mini sectors are boundaries at `j / N` in `u`; times are interpolated; purple needs a clean lap and an
   existing best; best sector lists are kept per sector count.
-- Out laps, laps that start or pass through the pit lane, and invalid laps are never references.
+- Out laps, laps that start or pass through the pit lane, and invalid laps are never references. A full lap that
+  cannot be a reference (started in the pit lane, cut) is a **provisional** reference until a valid one exists
+  (never saved). `activeRef()` order: chosen reference, the other one, provisional.
+- **Out lap (partial):** with a reference, once the car is on track the lap is measured from there against the
+  reference's line position: delta = (t - t0) - (ref(u) - ref(u0)); the sector containing u0 stays grey.
+- A lap counts only if lapCount changed within 0.5 s of the timer restart (a later lapCount confirms it); a timer
+  restart in the pit lane or away from the known line is not a crossing. Without an own reference, mini sectors
+  are coloured by the change of AC's `performanceMeter` over the sector.
   Teleport (`ac.onCarJumped`), replay and session start reset the lap until the next line crossing.
 - The lap event is the **timer restart** (`lapTimeMs` drops). AC can change `lapCount` a frame before or
   after the timer; a lapCount change only counts on its own when the timer is already small, and a second
@@ -79,7 +90,9 @@ Poškození tab shows the live raw values for calibration.
   are checked with `pcall` at runtime. `car.performanceMeter` (AC's own delta in seconds, see
   `acc-lua-examples/cars/dash_display_8100`) is the fallback delta (`S.deltaSource`), also read under `pcall`.
   AC's damage displayer is hidden like the official Unbound app does it: `sim.damageDisplayerShown` +
-  `ac.trySimKeyPressCommand('Hide Damage')`. AC's leaderboard cannot be hidden on its own. If someone provides `extension/internal/lua-sdk` from a CSP install,
+  `ac.trySimKeyPressCommand('Hide Damage')`. AC's leaderboard cannot be hidden on its own.
+  Notifications use `sim.raceFlagType` + `ac.FlagType` (Radar, RGBControl), `ac.getDriverName(i)`, `car.isConnected`,
+  `car.bestLapTimeMs` of any car and `ac.getSession(i).type == ac.SessionType.Race` (RGBControl). If someone provides `extension/internal/lua-sdk` from a CSP install,
   confirm them there.
 - Drawing uses `ui.drawRectFilled(p1, p2, color, rounding)` and `ui.dwriteTextAligned` after
   `ui.setCursor`. Rounded stripes are built by overlapping rects instead of corner flags.
