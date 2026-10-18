@@ -940,21 +940,33 @@ do
   ok, err = pcall(script.windowMirror, DT)
   check(ok and env.tonemapDepth == 0, 'UI tonemapping mode draws: ' .. tostring(err))
   config.set('mirrorMode', 1)
-  check(mirror.shown == 2, 'two cars behind get a marker: ' .. mirror.shown)
-  local left, right
-  for _, f in ipairs(env.fills) do
-    local x = f.pts[5]
-    if x and x < 200 then left = f elseif x then right = f end
+  local function markerAt(test)
+    for j = 1, mirror.shown do if test(mirror.drawnX[j]) then return mirror.drawnThreat[j] end end
   end
-  check(left and left.r > 0.9 and left.g < 0.5, 'close car closing in on the left: red marker on the left')
-  check(right and right.r > 0.9 and right.g > 0.9 and right.b > 0.9, 'slower car far behind on the right: white marker on the right')
-  env.cars[1] = carAt(2.5, -1, 50)     -- alongside on the left
-  env.recordFills, env.fills = true, {}
   script.windowMirror(DT)
-  env.recordFills = false
-  local arrow = false
-  for _, f in ipairs(env.fills) do if f.pts[1] and f.pts[1] < 20 and f.r > 0.9 and f.g < 0.5 then arrow = true end end
-  check(arrow, 'car alongside on the left: red arrow at the left edge')
+  check(mirror.shown == 2, 'two cars behind get brackets: ' .. mirror.shown)
+  check(markerAt(function (x) return x < 200 end) == 3, 'close car closing in on the left: red, on the left')
+  check(markerAt(function (x) return x > 200 end) == 1, 'slower car far behind on the right: white, on the right')
+  -- a car on another part of the track (parallel straight) is not a car behind us
+  env.sim.trackLengthM = 5000
+  env.cars[2].splinePosition = (car.splinePosition + 0.3) % 1
+  env.cars[1].splinePosition = (car.splinePosition - 8 / 5000) % 1
+  script.windowMirror(DT)
+  check(mirror.shown == 1, 'car on a parallel straight ignored, the one really behind kept: ' .. mirror.shown)
+  env.sim.trackLengthM = nil
+  env.cars[1] = carAt(10, -15, 52)     -- behind, far to the left, outside the shown crop
+  env.cars[2] = carAt(-50, -20, 40)    -- far to the side: not on our piece of track
+  script.windowMirror(DT)
+  check(mirror.edgeLeft and not mirror.edgeRight, 'car behind outside the crop: arrow at the left edge only')
+  env.cars[1] = carAt(2.5, -1, 50)     -- alongside on the left, a bit behind
+  script.windowMirror(DT)
+  check(mirror.sideLeft and mirror.sideLeft > 0 and mirror.sideRight == nil, 'car alongside on the left: left side bar, slightly behind')
+  local ok3, err3 = pcall(function ()
+    env.windowW, env.windowH = 60, 30
+    script.windowMirror(DT)
+    env.windowW, env.windowH = 400, 150
+  end)
+  check(ok3 and tracker.diag.error == nil, 'tiny window draws without errors: ' .. tostring(err3 or tracker.diag.error))
   env.mirrorAvailable = false
   ok = pcall(script.windowMirror, DT)
   env.mirrorAvailable = nil

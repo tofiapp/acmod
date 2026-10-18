@@ -20,7 +20,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.14.5.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.15.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -116,7 +116,9 @@ Nastavení je společné pro všechna okna a má osm záložek.
 **Zrcátko**
 - Okno MirrorDelta Mirror ukazuje zpětný pohled AC (stejný obraz jako virtuální zrcátko) v rámečku, který jde posunout a zvětšit kamkoli. Výchozí tvar je obdélník 400 × 150. Obraz se nikdy nedeformuje: okno ukáže výřez zrcátka ve svém poměru stran (užší okno prostředek šířky), přiblížení jde zvýšit. Obraz zrcátka dává CSP v HDR (před úpravou obrazu AC), proto jsou čtyři způsoby, jak z něj udělat normální obraz: gamma (výchozí), YEBIS jako pohled pro OBS, tonemapping UI a bez úprav. Přepínají se kliknutím do okna; po najetí myší okno ukáže verzi a aktivní způsob. Jas jde zvýšit i snížit.
 - Původní zrcátko AC se vypíná ve hře volbou virtual cockpit / virtuální zrcátko.
-- Nad každým autem za vámi je trojúhelník: bílý, žlutý když se rychle blíží, červený když je blízko (méně než 10 m nebo za méně než 1,2 s u vás). Když je auto vedle vás, mimo záběr, svítí na té straně rámečku červená šipka.
+- Každé auto za vámi má kolem sebe rohový rámeček jako radar v GT3: bílý (nedotahuje), žlutý (dotahuje), červený (blízko, méně než 8 m nebo u vás do 1,5 s; navíc šipka nad ním). Velikost rámečku odpovídá vzdálenosti, značky se pohybují plynule. U nejbližšího auta je odstup v sekundách.
+- Počítají se jen auta, která jsou za vámi i podle polohy na trati, takže auto na vedlejší rovince se neoznačí.
+- Auto za vámi mimo zobrazený výřez: šipka u toho okraje. Auto vedle vás: červený pruh na té straně, jeho jasná část ukazuje, jestli je auto vepředu, na úrovni nebo vzadu.
 - Šířka záběru (výchozí 50°) se nastavuje tak, aby šipky seděly přesně nad auty; hlídaná vzdálenost výchozí 60 m.
 - Okna jiných aplikací, která vypadají jako zpětné zrcátko nebo vlajky, aplikace skryje (pokud je AC vede jako okna aplikací) a jednou to oznámí notifikací. Vestavěné virtuální zrcátko a vlajky AC, které okny nejsou, CSP aplikacím vypnout nedovolí. Když AC zpětný pohled zrovna nevykresluje (třeba mimo kokpit), okno to napíše.
 

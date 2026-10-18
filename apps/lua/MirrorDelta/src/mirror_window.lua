@@ -1,8 +1,14 @@
--- Mirror window: AC's rear view (ui.drawVirtualMirror, as CSP's own OBS view draws it) in a movable rectangle,
--- with car markers like a GT3 rear view camera: a triangle above every car behind (white, yellow when it closes
--- in, red when it is close), and a red arrow at the side of the frame when a car is alongside, out of the picture.
--- Car fields as in the official apps: position, look, up, side, velocity (Radar, gamepad assist), wheels[i].position
--- (ghost) decides which side is left. All maths on plain numbers, no allocation per frame.
+-- Mirror window: AC's rear view (ui.drawVirtualMirror, as CSP's own OBS view draws it) in a movable rectangle, with
+-- car markers like a GT3 digital rear view mirror with radar:
+-- - every car behind gets corner brackets around it, sized by distance, coloured by threat (white: not closing in,
+--   yellow: closing in, red: close or about to reach us), the nearest one also a time gap label;
+-- - a car behind but outside the shown crop gets a small arrow at that edge;
+-- - a car alongside lights a bar at that side of the frame, the lit part shows where it is (ahead, level, behind).
+-- Positions use a perspective projection of the car's position relative to ours (look/side/up), the field of view
+-- is a setting (S.mirrorFov), the camera height a constant. Cars are matched to the track: only cars whose track
+-- position is really behind us (spline, sim.trackLengthM) count, so a car on a parallel straight is ignored.
+-- Car fields as in the official apps: position, look, up, side, velocity, splinePosition (Radar, gamepad assist,
+-- RallyCopilot), wheels[i].position (ghost) decides which side is left. No allocation per frame.
 
 local config = require('src/config')
 local D = require('src/draw')
@@ -10,19 +16,32 @@ local S = config.S
 
 local MAX_CARS = 64
 local ALONGSIDE_BACK = 6       -- m: a car this far behind or ahead of us and close to the side is "alongside"
-local ALONGSIDE_SIDE = 7       -- m
+local ALONGSIDE_SIDE = 6       -- m
+local SIDE_LIMIT = 14          -- m: further to the side than this is not a car on our piece of track
+local CAM_UP = 0.6             -- m: rear view camera above the car's origin (driver's eye height, roughly)
+local CAR_HALF_W, CAR_TOP, CAR_BOTTOM = 1.0, 0.75, -0.35   -- m around another car's origin
+local SMOOTH = 0.07            -- s: smoothing of marker positions (no jitter)
 
 local p1, p2 = vec2(), vec2()
 local WHITE = rgbm(1, 1, 1, 1)
 local FRAME = rgbm(0.07, 0.08, 0.1, 0.9)
 local NONE = rgbm(0.07, 0.08, 0.1, 0.55)
 local TEXT = rgbm(0.85, 0.87, 0.9, 0.9)
-local FAR = rgbm(0.96, 0.96, 0.97, 0.85)
+local FAR = rgbm(0.96, 0.96, 0.97, 0.9)
 local YELLOW = rgbm(1, 0.78, 0.15, 1)
 local RED = rgbm(1, 0.25, 0.22, 1)
+local LABEL_BG = rgbm(0.05, 0.06, 0.08, 0.75)
+local COLORS = { FAR, YELLOW, RED }
 local tint = rgbm()
 
-local M = { shown = 0 }   -- markers drawn last frame (tests, Diagnostika)
+-- per car (index 1..MAX_CARS-1): smoothed screen box, visibility fade, threat
+local sx, sy, sw, sh, vis, threat = {}, {}, {}, {}, {}, {}
+for i = 1, MAX_CARS do sx[i], sy[i], sw[i], sh[i], vis[i], threat[i] = 0, 0, 0, 0, 0, 1 end
+local lastClock = nil
+local gapStrings = {}
+
+-- For tests: what was drawn last frame (screen x of each marker and its threat 1 white, 2 yellow, 3 red).
+local M = { shown = 0, drawnX = {}, drawnThreat = {}, edgeLeft = false, edgeRight = false, sideLeft = nil, sideRight = nil }
 
 local function col(c, a)
   tint:set(c)
@@ -44,53 +63,169 @@ local function leftSign(car)
   return d >= 0 and 1 or -1
 end
 
+-- Corner brackets around a box (like a radar target frame).
+local function brackets(x1, y1, x2, y2, t, color)
+  local lw, lh = math.max(t * 2, (x2 - x1) * 0.28), math.max(t * 2, (y2 - y1) * 0.32)
+  D.rect(x1, y1, x1 + lw, y1 + t, color, 0)
+  D.rect(x1, y1, x1 + t, y1 + lh, color, 0)
+  D.rect(x2 - lw, y1, x2, y1 + t, color, 0)
+  D.rect(x2 - t, y1, x2, y1 + lh, color, 0)
+  D.rect(x1, y2 - t, x1 + lw, y2, color, 0)
+  D.rect(x1, y2 - lh, x1 + t, y2, color, 0)
+  D.rect(x2 - lw, y2 - t, x2, y2, color, 0)
+  D.rect(x2 - t, y2 - lh, x2, y2, color, 0)
+end
+
+local function gapText(seconds)
+  local key = math.min(99, math.floor(seconds * 10 + 0.5))
+  local str = gapStrings[key]
+  if not str then
+    str = string.format('%.1f s', key / 10):gsub('%.', ',')
+    gapStrings[key] = str
+  end
+  return str
+end
+
+-- Metres the other car is behind us along the track (negative: ahead), from spline positions.
+local function trackGap(mySpline, other, length)
+  local d = (mySpline - other.splinePosition) % 1
+  if d > 0.5 then d = d - 1 end
+  return d * length
+end
+
 local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
   local sim = ac.getSim()
+  local now = os.preciseClock()
+  local dt = lastClock and math.min(0.2, math.max(0, now - lastClock)) or 0
+  lastClock = now
+  local k = dt > 0 and (1 - math.exp(-dt / SMOOTH)) or 1
   local n = math.min(MAX_CARS, sim.carsCount)
-  local mp, lk, sd, mv = me.position, me.look, me.side, me.velocity
+  local mp, lk, sd, up, mv = me.position, me.look, me.side, me.up, me.velocity
   local ls = leftSign(me)
-  local halfFov = math.rad(math.max(10, S.mirrorFov) / 2)
-  local cx = dx + dw / 2          -- centre of the whole (wider) rear view
-  local leftNear, rightNear = false, false
+  local length = sim.trackLengthM or 0
+  local mySpline = me.splinePosition
+  local mySpeed = math.max(5, me.speedKmh / 3.6)
+  local tanH = math.tan(math.rad(math.max(10, S.mirrorFov) / 2))
+  local tanV = tanH / 4                          -- the rear view is 4:1 with square pixels
+  local cx, cy = dx + dw / 2, oy + mh / 2        -- centre of the whole rear view
+  local fx, fy = dw / 2 / tanH, dw / 8 / tanV    -- pixels per unit of tangent
+  local t = math.max(1.5, 2 * sc)
+  local hasL, hasR, sideL, sideR = false, false, 0, 0   -- alongside: position -1 ahead .. +1 behind
+  local edgeL, edgeR = 0, 0                      -- cars behind outside the crop (threat level)
+  local nearest, nearestBack = 0, 1e9
   local shown = 0
   for i = 1, n - 1 do
     local c = ac.getCar(i)
+    local target = 0
     if c and not c.isInPit and c.isConnected ~= false then
       local p = c.position
-      local dx, dy, dz = p.x - mp.x, p.y - mp.y, p.z - mp.z
-      local fwd = dx * lk.x + dy * lk.y + dz * lk.z
-      local lat = (dx * sd.x + dy * sd.y + dz * sd.z) * ls       -- + = to our left
+      local rx, ry, rz = p.x - mp.x, p.y - mp.y, p.z - mp.z
+      local fwd = rx * lk.x + ry * lk.y + rz * lk.z
+      local lat = (rx * sd.x + ry * sd.y + rz * sd.z) * ls       -- + = to our left
+      local hgt = rx * up.x + ry * up.y + rz * up.z
       local back = -fwd
-      if math.abs(fwd) < ALONGSIDE_BACK and math.abs(lat) < ALONGSIDE_SIDE then
-        if lat > 0 then leftNear = true else rightNear = true end
-      elseif back > 2 and back < S.mirrorRange then
-        local angle = math.atan(lat / back)
-        local x0 = cx - angle / halfFov * dw / 2
-        if math.abs(angle) < halfFov and x0 > ox + 6 * sc and x0 < ox + mw - 6 * sc then
-          -- mirror: a car behind on our left is on the left of the picture
-          local x = cx - angle / halfFov * dw / 2
+      local onTrack = length <= 0 or math.abs(trackGap(mySpline, c, length) - back) < 25
+      if onTrack and math.abs(lat) < SIDE_LIMIT then
+        if math.abs(fwd) < ALONGSIDE_BACK and math.abs(lat) < ALONGSIDE_SIDE then
+          local pos = math.max(-1, math.min(1, back / ALONGSIDE_BACK))
+          if lat > 0 then
+            sideL, hasL = hasL and math.min(sideL, pos) or pos, true
+          else
+            sideR, hasR = hasR and math.min(sideR, pos) or pos, true
+          end
+        elseif back > 2.5 and back < S.mirrorRange then
           local v = c.velocity
           local closing = (v.x - mv.x) * lk.x + (v.y - mv.y) * lk.y + (v.z - mv.z) * lk.z   -- m/s it gains on us
-          local color = FAR
-          if back < 10 or (closing > 0.5 and back / closing < 1.2) then color = RED
-          elseif closing > 1 and back < 45 then color = YELLOW end
-          local k = 1 - back / S.mirrorRange
-          local s = (8 + 10 * k) * sc
-          local y = oy + mh * 0.12
-          triangle(x - s, y, x + s, y, x, y + s * 1.2, col(color, a))
-          shown = shown + 1
+          local level = 1
+          if back < 8 or (closing > 0.5 and back / closing < 1.5) then level = 3
+          elseif closing > 1 then level = 2 end
+          threat[i] = level
+          -- perspective projection (mirror: a car behind on our left is on the left of the picture)
+          local x = cx - (lat / back) * fx
+          local hw = CAR_HALF_W / back * fx
+          local yTop = cy - ((hgt + CAR_TOP - CAM_UP) / back) * fy
+          local yBot = cy - ((hgt + CAR_BOTTOM - CAM_UP) / back) * fy
+          if x + hw < ox or x - hw > ox + mw then
+            if x < ox then edgeL = math.max(edgeL, level) else edgeR = math.max(edgeR, level) end
+          else
+            target = 1
+            if vis[i] <= 0.01 then sx[i], sy[i], sw[i], sh[i] = x, yTop, hw, yBot - yTop end
+            sx[i] = sx[i] + (x - sx[i]) * k
+            sy[i] = sy[i] + (yTop - sy[i]) * k
+            sw[i] = sw[i] + (hw - sw[i]) * k
+            sh[i] = sh[i] + ((yBot - yTop) - sh[i]) * k
+            if back < nearestBack then nearest, nearestBack = i, back end
+          end
         end
       end
     end
+    vis[i] = vis[i] + (target - vis[i]) * (dt > 0 and (1 - math.exp(-dt / 0.15)) or 1)
+    if target == 0 and vis[i] < 0.02 then vis[i] = 0 end
   end
-  if S.mirrorSideArrows then
-    local s, y = 16 * sc, oy + mh / 2
-    if leftNear then triangle(ox + 4 * sc, y, ox + 4 * sc + s * 1.2, y - s, ox + 4 * sc + s * 1.2, y + s, col(RED, a)) end
-    if rightNear then
-      local x = ox + mw - 4 * sc
-      triangle(x, y, x - s * 1.2, y + s, x - s * 1.2, y - s, col(RED, a))
+
+  -- brackets, far ones first so near ones stay on top
+  for pass = 1, 2 do
+    for i = 1, n - 1 do
+      if vis[i] > 0.02 and ((pass == 1) == (sw[i] < 14 * sc)) then
+        local hw = math.max(5 * sc, sw[i])
+        local x1, x2 = sx[i] - hw, sx[i] + hw
+        local y1, y2 = sy[i], sy[i] + math.max(6 * sc, sh[i])
+        local color = col(COLORS[threat[i]], a * vis[i])
+        brackets(x1, y1, x2, y2, t, color)
+        if threat[i] == 3 then   -- red: a chevron above, pointing at the car
+          local s = math.max(5 * sc, math.min(10 * sc, hw * 0.25))
+          local ty = math.max(oy + s * 1.2, y1 - s * 0.4)
+          triangle(sx[i] - s, ty - s * 1.1, sx[i] + s, ty - s * 1.1, sx[i], ty, col(RED, a * vis[i]))
+        end
+        shown = shown + 1
+        M.drawnX[shown], M.drawnThreat[shown] = sx[i], threat[i]
+      end
     end
   end
+  for j = shown + 1, #M.drawnX do M.drawnX[j], M.drawnThreat[j] = nil, nil end
+
+  -- time gap of the nearest car under its brackets
+  if nearest > 0 and vis[nearest] > 0.5 then
+    local str = gapText(nearestBack / mySpeed)
+    local lx, ly = sx[nearest], sy[nearest] + math.max(6 * sc, sh[nearest]) + 3 * sc
+    if ly + 15 * sc > oy + mh then                                     -- no room under the car: above it (and its chevron)
+      ly = sy[nearest] - (threat[nearest] == 3 and 32 or 18) * sc
+    end
+    lx = math.max(ox + 20 * sc, math.min(ox + mw - 20 * sc, lx))
+    ly = math.max(oy, math.min(oy + mh - 15 * sc, ly))
+    ui.pushDWriteFont(D.FONT)
+    D.rect(lx - 20 * sc, ly, lx + 20 * sc, ly + 15 * sc, col(LABEL_BG, a), 3 * sc)
+    D.text(str, 12 * sc, lx - 20 * sc, ly, 40 * sc, 15 * sc, D.ALIGN_CENTER, col(COLORS[threat[nearest]], a))
+    ui.popDWriteFont()
+  end
+
+  -- cars behind outside the crop: an arrow at that edge
+  local s = 7 * sc
+  if edgeL > 0 then triangle(ox + 3 * sc, cy, ox + 3 * sc + s * 1.3, cy - s, ox + 3 * sc + s * 1.3, cy + s, col(COLORS[edgeL], a)) end
+  if edgeR > 0 then
+    local x = ox + mw - 3 * sc
+    triangle(x, cy, x - s * 1.3, cy + s, x - s * 1.3, cy - s, col(COLORS[edgeR], a))
+  end
+  M.edgeLeft, M.edgeRight = edgeL > 0, edgeR > 0
+
+  -- alongside: a red bar along that side; its bright part shows where the car is (top = ahead, bottom = behind)
+  if S.mirrorSideArrows then
+    local bw = 5 * sc
+    if hasL then
+      D.rect(ox, oy, ox + bw, oy + mh, col(RED, a * 0.35), 0)
+      local yc = oy + mh * (0.5 + 0.4 * sideL)
+      D.rect(ox, yc - mh * 0.18, ox + bw, yc + mh * 0.18, col(RED, a), 0)
+      triangle(ox + bw + 2 * sc, yc, ox + bw + 2 * sc + 9 * sc, yc - 8 * sc, ox + bw + 2 * sc + 9 * sc, yc + 8 * sc, col(RED, a))
+    end
+    if hasR then
+      local x = ox + mw
+      D.rect(x - bw, oy, x, oy + mh, col(RED, a * 0.35), 0)
+      local yc = oy + mh * (0.5 + 0.4 * sideR)
+      D.rect(x - bw, yc - mh * 0.18, x, yc + mh * 0.18, col(RED, a), 0)
+      triangle(x - bw - 2 * sc, yc, x - bw - 2 * sc - 9 * sc, yc + 8 * sc, x - bw - 2 * sc - 9 * sc, yc - 8 * sc, col(RED, a))
+    end
+  end
+  M.sideLeft, M.sideRight = hasL and sideL or nil, hasR and sideR or nil
   M.shown = shown
 end
 

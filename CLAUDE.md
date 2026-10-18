@@ -13,9 +13,10 @@ each with its own taskbar icon:
 - **setup** (`MirrorDelta Setup`): one line at the top centre when a car setting changes (TC, TC2, ABS, brake bias,
   engine brake, fuel map, turbo, MGU-K/H, limiters, auto shift/clutch; fields as in the official Unbound app, each
   probed once under pcall) plus AC's non-penalty system messages (`src/setup_line.lua`).
-- **mirror** (`MirrorDelta Mirror`): AC's rear view via `ui.drawVirtualMirror` (ac_apps.lua, used by CSP's OBS view) in a
-  4:1 frame; triangles above cars behind (angle from position/look/side, `S.mirrorFov` calibrates), red side arrows for
-  cars alongside. Left/right from `wheels[0/1].position` vs `car.side`. The mirror texture is HDR (pre post-processing). `S.mirrorMode`
+- **mirror** (`MirrorDelta Mirror`): AC's rear view via `ui.drawVirtualMirror` (ac_apps.lua, used by CSP's OBS view);
+  GT3-style radar markers: corner brackets around cars behind from a perspective projection (look/side/up, `S.mirrorFov`,
+  camera 0.6 m up, 4:1 square pixels), smoothed, threat colours, time gap label on the nearest, edge arrows for cars
+  outside the crop, side bars for cars alongside; cars must also be behind by spline gap (`sim.trackLengthM`). Left/right from `wheels[0/1].position` vs `car.side`. The mirror texture is HDR (pre post-processing). `S.mirrorMode`
   (click in the window cycles, hover shows version + mode): 1 gamma = `ui.drawVirtualMirror` into a float `ui.ExtraCanvas`, then
   `ui.renderShader` with `pow(saturate(c * exposure), 0.4545)` (SDK example in ac_wfx_impl.lua); 2 YEBIS canvas with exposure 30
   as CSP's OBS "Virtual mirror" view (obs_integration.lua; user reported no change with it); 3 `ui.beginTonemapping` like
