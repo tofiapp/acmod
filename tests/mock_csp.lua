@@ -9,6 +9,13 @@ end
 
 render = { AntialiasingMode = { None = 0, YEBIS = 104, SimplifiedYEBIS = 105 }, ShadersType = { Main = 0, SimplifiedWithLights = 14 },
   onSceneReady = function (cb) M.sceneReady = cb end,
+  on = function (name, cb) M.renderCallbacks = M.renderCallbacks or {}; M.renderCallbacks[name] = cb end,
+  circle = function (pos, dir, radius, color, outline)
+    M.circles = M.circles or {}
+    M.circles[#M.circles + 1] = { x = pos.x, y = pos.y, z = pos.z, r = color.r, g = color.g, b = color.b, radius = radius }
+  end,
+  setDepthMode = function () end,
+  DepthMode = { Normal = 0 },
   TextureFormat = { R16G16B16A16 = { Float = 10 }, R8G8B8A8 = { UNorm = 28 } } }
 
 -- vec2
@@ -113,7 +120,7 @@ M.car.side, M.car.velocity = { x = 1, y = 0, z = 0 }, { x = 0, y = 0, z = 50 }
 M.car.transform = M.transformOf(M.car)
 M.car.driverEyesPosition = { x = 0, y = 0.6, z = 0 }   -- like the old fixed camera height
 M.car.aabbCenter, M.car.aabbSize = { x = 0, y = 0.5, z = -0.1 }, { x = 1.9, y = 1.2, z = 4.5 }   -- bottom at y -0.1
-M.sim = { isReplayActive = false, isPaused = false, carsCount = 12, currentSessionIndex = 0, damageDisplayerShown = true, raceFlagType = 0 }
+M.sim = { cameraPosition = { x = 0, y = 1, z = 0.2 }, isReplayActive = false, isPaused = false, carsCount = 12, currentSessionIndex = 0, damageDisplayerShown = true, raceFlagType = 0 }
 M.cars = {}
 M.overlayBoard = { displayMode = 2, verticalLayout = false }                   -- other cars by index (1..); missing ones are nil like unused slots
 M.session = { laps = 15, isTimedRace = false, type = 3 }
@@ -133,6 +140,18 @@ ac = {
         return ref(out)
       end
       function r:at(k) return ref({ self[k] }) end
+      -- mesh position: M.meshPos[name] (in its parent's space; the parent's world matrix is the identity)
+      function r:boundingSphere(index, out)
+        local p = (M.meshPos or {})[self[index or 1]]
+        if not p then return nil, nil end
+        out:set(p[1], p[2], p[3])
+        return out, 0.01
+      end
+      function r:getParent()
+        return { getWorldTransformationRaw = function ()
+          return { transformPointTo = function (_, dst, v) dst.x, dst.y, dst.z = v.x, v.y, v.z; return dst end }
+        end }
+      end
       function r:setMaterialProperty(prop, value)
         M.emissive = M.emissive or {}
         for k = 1, #self do M.emissive[self[k]] = { value.r, value.g, value.b } end

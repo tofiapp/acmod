@@ -1350,11 +1350,15 @@ do
   frame(1)
 end
 
--- 33. Pit lane: the car's own shift LEDs blink in turn in orange (digital_instruments.ini LEDs, else CSP's LED marks)
+-- 33. Pit lane: a light runs across the car's own shift LEDs (digital_instruments.ini, else CSP's LED marks), drawn as
+--     glowing discs over them in the 3D pass; the LEDs' own material is never written (AC drives it by RPM)
 do
   local carLeds = require('src/car_leds')
   local savedIni, savedSession = env.carIni, env.sim.currentSessionIndex
   env.carMeshes = { LED_A = true, LED_B = true, LED_C = true, LED_D = true, ABS_LIGHT = true }
+  -- side points to +x (left): LED_A is the leftmost, D the rightmost; their RPM order is different on purpose
+  env.meshPos = { LED_A = { 0.3, 1, 0.5 }, LED_B = { 0.1, 1, 0.5 }, LED_C = { -0.1, 1, 0.5 }, LED_D = { -0.3, 1, 0.5 },
+    ABS_LIGHT = { 0, 0.9, 0.5 } }
   env.carIni = { ['digital_instruments.ini'] = {
     ['LED_0/OBJECT_NAME'] = 'LED_C', ['LED_0/RPM_SWITCH'] = 7000, ['LED_0/EMISSIVE'] = { '40', '0', '0' },
     ['LED_1/OBJECT_NAME'] = 'LED_A', ['LED_1/RPM_SWITCH'] = 6000,
@@ -1364,27 +1368,40 @@ do
   env.sim.currentSessionIndex = savedSession + 7
   env.emissive = {}
   car.isInPitlane = true
-  env.clock = 200.05
   frame(1)
-  local e = env.emissive
-  local function lit(n) return e[n] and e[n][1] > 0 end
-  check(carLeds.count == 4 and carLeds.source == 'digital_instruments.ini' and not e.ABS_LIGHT,
-    'shift LEDs from digital_instruments.ini, other LEDs untouched: ' .. carLeds.count .. ' ' .. carLeds.source)
-  local first = { lit('LED_A'), lit('LED_B'), lit('LED_C'), lit('LED_D') }   -- in RPM order
-  local litName = first[1] and 'LED_A' or 'LED_B'
-  local c = e[litName]
-  check(first[1] ~= first[2] and first[1] == first[3] and first[2] == first[4] and c[1] > c[2] * 1.5 and c[2] > c[3] * 3,
-    string.format('every other LED lit, orange (%.1f, %.1f, %.1f)', c[1], c[2], c[3]))
-  check(e.LED_C[1] == 0 or e.LED_C[1] > 30, 'brightness from the LED\'s own EMISSIVE')
-  env.clock = 200.35
-  frame(1)
-  check(lit('LED_A') ~= first[1] and lit('LED_B') ~= first[2], 'then the other LEDs (in turn)')
+  local draw3D = env.renderCallbacks and env.renderCallbacks['main.root.transparent']
+  check(carLeds.count == 4 and carLeds.source == 'digital_instruments.ini' and draw3D ~= nil,
+    'shift LEDs from digital_instruments.ini, drawn in the 3D pass: ' .. carLeds.count .. ' ' .. carLeds.source)
+  local function brightestX()
+    env.circles = {}
+    draw3D()
+    local best, bx = -1, nil
+    for _, c in ipairs(env.circles) do if c.r > best then best, bx = c.r, c.x end end
+    return bx, #env.circles
+  end
+  env.clock = 1.4 * 215                -- scanner at one end (whole periods)
+  local x1 = brightestX()
+  env.clock = 1.4 * 215.5              -- half a period later: the other end
+  local x2, n2 = brightestX()
+  check(x1 and x2 and math.abs(x1 - x2) > 0.35 and n2 >= 1,
+    string.format('the light runs from side to side over the LEDs (%.2f -> %.2f)', x1 or 0, x2 or 0))
+  local c = env.circles[1]
+  check(c and c.r > c.g * 1.5 and c.g > c.b * 3, 'orange glow')
+  check(next(env.emissive) == nil, 'the LEDs\' own material is not touched (no fight with AC)')
+  config.set('carLedsStyle', 2)
+  env.clock = 300.05
+  local _, nA = brightestX()
+  local litA = {}
+  for _, cc in ipairs(env.circles) do litA[#litA + 1] = cc.x end
+  env.clock = 300.35
+  local _, nB = brightestX()
+  check(nA == 2 and nB == 2 and math.abs(env.circles[1].x - litA[1]) > 0.1, 'every other LED in turn')
+  config.set('carLedsStyle', 1)
   car.isInPitlane = false
   frame(1)
-  check(not lit('LED_A') and not lit('LED_B') and not lit('LED_C') and not lit('LED_D'), 'leaving the pit lane: all off, AC takes over')
-  env.emissive = {}
-  frame(1)
-  check(next(env.emissive) == nil, 'nothing written on track')
+  env.circles = {}
+  draw3D()
+  check(#env.circles == 0, 'on track: nothing drawn')
   -- no digital_instruments.ini: the meshes CSP marks as LEDs
   env.carIni = nil
   env.sim.currentSessionIndex = savedSession + 8
@@ -1392,16 +1409,14 @@ do
   frame(1)
   check(carLeds.count == 5 and carLeds.source == 'CSP (actsAsLED)', 'fallback to CSP LED marks: ' .. carLeds.count)
   config.set('carLedsPit', false)
-  car.isInPitlane = false
   frame(1)
-  car.isInPitlane = true
-  env.emissive = {}
-  frame(1)
-  check(next(env.emissive) == nil, 'turned off: the car\'s LEDs are left alone')
+  env.circles = {}
+  draw3D()
+  check(#env.circles == 0, 'turned off: nothing drawn')
   config.set('carLedsPit', true)
   car.isInPitlane = false
   frame(1)
-  env.carIni, env.carMeshes = savedIni, nil
+  env.carIni, env.carMeshes, env.meshPos = savedIni, nil, nil
   env.sim.currentSessionIndex = savedSession
   frame(1)
 end

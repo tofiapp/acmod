@@ -89,10 +89,12 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
 - Pit lane (`car.isInPitlane`): `src/pit_lights.lua` gives a brightness 0..1 per place on the delta line and per mini
   sector (`S.pitStyle`: 1 scanner, 2 waves from the centre, 3 breathing, 4 halves in turn with `S.pitSectorPattern`),
   colour `S.pitColor` (blue default, orange, white, yellow); the timing window shows BOX in that colour (`S.pitBox`).
-  `src/car_leds.lua` blinks the car's own shift LEDs in turn (`S.carLedsPit`, `S.carLedsColor` orange): digital_instruments.ini
-  `[LED_n] OBJECT_NAME` (sorted by RPM_SWITCH, power from EMISSIVE) found with `ac.findNodes('carRoot:0'):findMeshes(name)`,
-  else `{ actsAsLED:yes }` (CSP's show_important_wheels filter) split with `:at(k)`; `:setMaterialProperty('ksEmissive', rgb)`
-  every frame in the pit lane (AC drives them by RPM), all off once when leaving. Not for script/texture dashboards.
+  `src/car_leds.lua` runs a light over the car's own shift LEDs (`S.carLedsPit`, `S.carLedsStyle` scanner / every other,
+  `S.carLedsColor` orange): digital_instruments.ini `[LED_n] OBJECT_NAME` (power from EMISSIVE) found with
+  `ac.findNodes('carRoot:0'):findMeshes(name)`, else `{ actsAsLED:yes }` (CSP's show_important_wheels filter) split with
+  `:at(k)`; position = `:boundingSphere()` through the parent's kept `:getWorldTransformationRaw()` reference, ordered left
+  to right; drawn as `render.circle` discs in `render.on('main.root.transparent')` like CSP's Traffic virtual lights.
+  Writing the LEDs' ksEmissive flickered (AC writes it by RPM every frame), so the material is never touched.
 - Mini sectors are boundaries at `j / N` in `u`; times are interpolated; purple needs a clean lap and an
   existing best; best sector lists are kept per sector count.
 - Deleted laps (cut on track, or AC's callback says invalid) flash red (`flashKind 5`), never become the flash best,

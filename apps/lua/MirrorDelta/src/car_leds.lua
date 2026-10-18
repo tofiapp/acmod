@@ -1,13 +1,13 @@
--- Pit lane lights on the car's own shift LEDs: while our car is in the pit lane, the RPM LEDs in the cockpit blink
--- in turn (every other LED, then the others) in the pit colour, like a pit limiter display. Works for any car whose
--- shift lights are AC's digital instrument LEDs:
--- - digital_instruments.ini [LED_n] OBJECT_NAME (+ RPM_SWITCH for their order, EMISSIVE for their brightness), read
---   with ac.INIConfig.carData; the meshes are found under ac.findNodes('carRoot:0') with :findMeshes(name);
--- - without that file: the meshes CSP marks as LEDs ('{ actsAsLED:yes }', the filter CSP's show_important_wheels uses).
--- The light is set with :setMaterialProperty('ksEmissive', rgb) as CSP's own Traffic and Railworks tools light their
--- lamps. AC drives the same LEDs by RPM, so the pit pattern is written every frame while in the pit lane and all LEDs
--- are switched off once when leaving (AC lights them again with the revs). Cars whose dash is a CSP script or a
--- screen texture are not affected. Everything runs under pcall; no allocation per frame.
+-- Pit lane lights on the car's own shift LEDs: while our car is in the pit lane, a light runs across the cockpit RPM
+-- LEDs from side to side (or every other LED blinks in turn), in the pit colour.
+-- The LEDs are not changed: AC keeps driving them by RPM (writing their ksEmissive as well made them flicker, the two
+-- fought every frame). Instead glowing discs are drawn over them in the main 3D pass (render.on('main.root.transparent'),
+-- render.circle) the way CSP's Traffic tool draws its virtual traffic lights.
+-- LEDs: digital_instruments.ini [LED_n] OBJECT_NAME (ac.INIConfig.carData), meshes found under
+-- ac.findNodes('carRoot:0') with :findMeshes(name); without that file the meshes CSP marks as LEDs ('{ actsAsLED:yes }',
+-- CSP's show_important_wheels filter). Position: the mesh's :boundingSphere() in its parent's coordinates, through the
+-- parent's live world matrix (:getWorldTransformationRaw() returns a reference, kept). Ordered left to right once.
+-- Cars whose dash is a CSP script or a screen texture have no such meshes. Everything under pcall; no per-frame allocation.
 
 local config = require('src/config')
 local pitLights = require('src/pit_lights')
@@ -15,10 +15,11 @@ local S = config.S
 
 local M = { count = 0, source = '', active = false }
 
-local leds = {}                -- { ref = SceneReference, group = 0/1, power = emissive multiplier }
+local leds = {}                -- { centre = vec3 (parent space), radius, matrix = parent world matrix, power }
 local session = -1
-local ON, OFF = rgb(), rgb()
-local wasActive = false
+local worldPos, toCam = vec3(), vec3()
+local fill, edge = rgbm(0, 0, 0, 1), rgbm(0, 0, 0, 0)
+local callbackSet = false
 
 local function maxComponent(v)
   if type(v) == 'table' then
@@ -29,26 +30,25 @@ local function maxComponent(v)
   return tonumber(v) or 0
 end
 
+local function addMesh(ref, power)
+  local centre, radius = ref:boundingSphere(1, vec3())
+  if not centre or not radius or radius <= 0 then return end
+  local matrix = ref:getParent():getWorldTransformationRaw()
+  if not matrix then return end
+  leds[#leds + 1] = { centre = centre, radius = radius, matrix = matrix, power = power > 0 and power or 20, side = 0 }
+end
+
 local function fromInstruments(root)
   local ini = ac.INIConfig.carData(0, 'digital_instruments.ini')
   if not ini then return end
-  local found = {}
   for i = 0, 63 do
     local section = 'LED_' .. i
     local name = ini:get(section, 'OBJECT_NAME', '')
     if type(name) == 'table' then name = name[1] end
     if type(name) == 'string' and name ~= '' then
       local ref = root:findMeshes(name)
-      if ref and #ref > 0 then
-        found[#found + 1] = { ref = ref, rpm = tonumber(ini:get(section, 'RPM_SWITCH', 0)) or 0,
-          power = maxComponent(ini:get(section, 'EMISSIVE', nil)), index = i }
-      end
+      if ref and #ref > 0 then addMesh(ref, maxComponent(ini:get(section, 'EMISSIVE', nil))) end
     end
-  end
-  table.sort(found, function (a, b) if a.rpm ~= b.rpm then return a.rpm < b.rpm end return a.index < b.index end)
-  for k = 1, #found do
-    local f = found[k]
-    leds[#leds + 1] = { ref = f.ref, group = k % 2, power = f.power > 0 and f.power or 20 }
   end
   if #leds > 0 then M.source = 'digital_instruments.ini' end
 end
@@ -56,31 +56,75 @@ end
 local function fromCspMarks(root)
   local all = root:findMeshes('{ actsAsLED:yes }')
   if not all then return end
-  for k = 1, #all do
-    leds[#leds + 1] = { ref = all:at(k), group = k % 2, power = 20 }
-  end
+  for k = 1, #all do addMesh(all:at(k), 20) end
   if #leds > 0 then M.source = 'CSP (actsAsLED)' end
 end
 
-local function load()
+-- Left to right across the car (for the running light).
+local function order(car)
+  local p, sd = car.position, car.side
+  for k = 1, #leds do
+    local led = leds[k]
+    led.matrix:transformPointTo(worldPos, led.centre)
+    led.side = (worldPos.x - p.x) * sd.x + (worldPos.y - p.y) * sd.y + (worldPos.z - p.z) * sd.z
+  end
+  table.sort(leds, function (a, b) return a.side < b.side end)
+end
+
+local function load(car)
   leds, M.source = {}, ''
   local root = ac.findNodes('carRoot:0')
   if not root then return end
   pcall(fromInstruments, root)
   if #leds == 0 then pcall(fromCspMarks, root) end
+  if #leds > 0 then pcall(order, car) end
   M.count = #leds
 end
 
-local function setAll(phase)
+-- Brightness 0..1 of LED k of n at time t.
+local SCAN_PERIOD = 1.4
+local function level(k, n, t)
+  if S.carLedsStyle == 2 then
+    return (k % 2 == math.floor(t / 0.3) % 2) and 1 or 0           -- every other LED, then the others
+  end
+  if n == 1 then return 0.5 + 0.5 * math.cos(t / SCAN_PERIOD * 2 * math.pi) end
+  local u = (k - 1) / (n - 1)
+  local p = 0.5 - 0.5 * math.cos(t / SCAN_PERIOD * 2 * math.pi)  -- eased: slows down at the ends
+  local width = math.max(0.12, 1.3 / n)
+  local x = math.max(0, 1 - math.abs(u - p) / width)
+  return x * x * (3 - 2 * x)
+end
+
+local function draw()
+  if not M.active then return end
+  local cam = ac.getSim().cameraPosition
   local c = pitLights.colorAt(S.carLedsColor)
-  for k = 1, #leds do
+  local n, t = #leds, os.preciseClock()
+  render.setDepthMode(render.DepthMode.Normal)
+  for k = 1, n do
     local led = leds[k]
-    if phase >= 0 and led.group == phase then
-      ON:set(c.r * led.power, c.g * led.power, c.b * led.power)
-      led.ref:setMaterialProperty('ksEmissive', ON)
-    else
-      led.ref:setMaterialProperty('ksEmissive', OFF)
+    local b = level(k, n, t)
+    if b > 0.02 then
+      led.matrix:transformPointTo(worldPos, led.centre)
+      toCam:set(cam.x - worldPos.x, cam.y - worldPos.y, cam.z - worldPos.z)
+      local len = math.max(1e-4, math.sqrt(toCam.x * toCam.x + toCam.y * toCam.y + toCam.z * toCam.z))
+      -- just in front of the LED towards the eye, so the LED's own geometry does not cover the disc
+      local lift = led.radius * 1.1 / len
+      worldPos:set(worldPos.x + toCam.x * lift, worldPos.y + toCam.y * lift, worldPos.z + toCam.z * lift)
+      local power = led.power * b
+      fill.r, fill.g, fill.b, fill.mult = c.r * power, c.g * power, c.b * power, 1
+      render.circle(worldPos, toCam, led.radius, fill, edge)
     end
+  end
+end
+
+local drawFailed = false
+local function safeDraw()
+  if drawFailed then return end
+  local ok, err = pcall(draw)
+  if not ok then
+    drawFailed = true
+    M.source = 'chyba: ' .. tostring(err)
   end
 end
 
@@ -89,16 +133,13 @@ local function step()
   if not car or not sim then return end
   if sim.currentSessionIndex ~= session then
     session = sim.currentSessionIndex
-    load()
+    load(car)
   end
-  local active = S.carLedsPit and car.isInPitlane and #leds > 0
-  M.active = active
-  if active then
-    setAll(math.floor(os.preciseClock() / 0.3) % 2)   -- every other LED, then the others, ~1.7 times a second each
-  elseif wasActive then
-    setAll(-1)                                          -- all off; AC lights them again by RPM
+  M.active = S.carLedsPit and car.isInPitlane and #leds > 0
+  if M.active and not callbackSet then
+    callbackSet = true
+    render.on('main.root.transparent', safeDraw)
   end
-  wasActive = active
 end
 
 local failed = false
@@ -110,5 +151,8 @@ function M.update()
     M.source = 'chyba: ' .. tostring(err)
   end
 end
+
+-- For tests: the brightness pattern.
+M.level = level
 
 return M

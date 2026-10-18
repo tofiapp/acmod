@@ -104,8 +104,9 @@ local function tabDelta()
       combo('pitSectorPattern', 'Mini sektory v boxech', { 'Střídavě jednotlivé', 'Po polovinách s čárou' })
     end
   end
-  checkbox('carLedsPit', 'V boxech blikat i diodami otáček v autě (na střídačku)')
+  checkbox('carLedsPit', 'V boxech světla i na diodách otáček v autě')
   if S.carLedsPit then
+    combo('carLedsStyle', 'Diody v autě', { 'Světlo přejíždí ze strany na stranu', 'Každá druhá na střídačku' })
     combo('carLedsColor', 'Barva diod v autě', pitLights.NAMES)
     ui.textWrapped(carLeds.count > 0
       and string.format('Diody v tomto autě: %d (%s).', carLeds.count, carLeds.source)
