@@ -8,6 +8,7 @@ D.FONT = 'Bahnschrift;Weight=SemiBold;Stretch=SemiCondensed'
 -- Unbounded Bold ships with the app (fonts/, SIL OFL); the path is relative to the AC root,
 -- the same form official CSP code uses for its own fonts.
 D.FONT_GEAR = 'Unbounded:apps/lua/MirrorDelta/fonts;Weight=Bold'
+D.FONT_MONO = 'Consolas;Weight=Bold'
 
 D.ALIGN_START = ui.Alignment.Start
 D.ALIGN_CENTER = ui.Alignment.Center
@@ -16,7 +17,6 @@ D.ALIGN_END = ui.Alignment.End
 local p1, p2 = vec2(), vec2()
 local cursor, box = vec2(), vec2()
 local tint = rgbm()
-local shadow = rgbm(0, 0, 0, 0.6)
 
 -- Returns a shared colour: base with its alpha multiplied by alpha. Use it right away.
 function D.color(base, alpha)
@@ -39,16 +39,9 @@ function D.quad(x1, y1, x2, y2, x3, y3, x4, y4, color)
   ui.pathFillConvex(color)
 end
 
--- Draws str inside the box (x, y, w, h), vertically centred, with a soft drop shadow
--- (plain = true: without the shadow, for text on a light background).
-function D.text(str, size, x, y, w, h, align, color, plain)
+-- Draws str inside the box (x, y, w, h), vertically centred. Plain text, no shadow behind it.
+function D.text(str, size, x, y, w, h, align, color)
   box:set(w, h)
-  if not plain then
-    local o = math.max(1, size * 0.05)
-    shadow.mult = 0.6 * color.mult
-    ui.setCursor(cursor:set(x + o, y + o))
-    ui.dwriteTextAligned(str, size, align, D.ALIGN_CENTER, box, false, shadow)
-  end
   ui.setCursor(cursor:set(x, y))
   ui.dwriteTextAligned(str, size, align, D.ALIGN_CENTER, box, false, color)
 end

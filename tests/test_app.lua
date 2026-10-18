@@ -99,16 +99,20 @@ local refLap = tracker.sessionRefMs
 
 -- 2. A faster lap: delta negative, mini sectors purple
 local minDelta, sawSign = 0, 0
+local liveGreen, liveFrames = 0, 0
 local u0 = car.lapCount
 driveLaps(1, 1.01, function ()
   if tracker.hasDelta then
     minDelta = math.min(minDelta, tracker.delta)
     sawSign = tracker.deltaSign
+    liveFrames = liveFrames + 1
+    if tracker.liveSign < 0 then liveGreen = liveGreen + 1 end
   end
 end)
 local expected = refLap / 1000 * (1 - 1 / 1.01)
 check(near(minDelta, -expected, 0.06), string.format('faster lap delta %.3f, expected about %.3f', minDelta, -expected))
 check(sawSign == -1, 'delta colour is green when faster')
+check(liveGreen > liveFrames * 0.8, string.format('line is green (gaining now) through a faster lap: %d of %d', liveGreen, liveFrames))
 check(tracker.flashKind == 1, 'faster lap flashes purple (new best)')
 for _ = 1, 120 do frame(1.01) end
 check(tracker.sessionRefMs < refLap, 'faster lap becomes the new reference')
@@ -541,6 +545,46 @@ check(tracker.refKind == 4 and tracker.hasDelta and not tracker.deltaFromAC,
   'delta against the AC best time without own reference: kind ' .. tracker.refKind)
 check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
 car.performanceMeter = 0
+
+-- 21. All twelve damage styles draw without errors, balanced clip rects and no per-frame allocation
+do
+  local damage = require('src/damage_window')
+  local savedText = ui.dwriteTextAligned
+  ui.dwriteTextAligned = function () end
+  env.windowW, env.windowH = 160, 200
+  car.damage[0], car.damage[1], car.damage[2], car.damage[3] = 20, 0, 45, 5
+  car.engineLifeLeft = 640
+  car.wheels[1].isBlown = true
+  config.set('damageAutoHide', false)
+  local ok3, err3 = pcall(function ()
+    for style = 1, 12 do config.set('damageStyle', style); damage.draw() end
+    car.damage[1] = 40                -- a fresh hit: the rear flashes
+    for style = 1, 12 do config.set('damageStyle', style); damage.draw() end
+  end)
+  check(ok3, 'all damage styles draw: ' .. tostring(err3))
+  check((env.clipDepth or 0) == 0, 'damage styles pop every clip rect')
+  check(#damage.STYLE_NAMES == 12, 'twelve damage style names')
+  local worst, worstStyle = 0, 0
+  for style = 1, 12 do
+    config.set('damageStyle', style)
+    for _ = 1, 20 do damage.draw() end
+    jit.off()
+    collectgarbage('collect')
+    collectgarbage('stop')
+    local before = collectgarbage('count')
+    for _ = 1, 50 do damage.draw() end
+    local perFrame = (collectgarbage('count') - before) * 1024 / 50
+    collectgarbage('restart')
+    jit.on()
+    if perFrame > worst then worst, worstStyle = perFrame, style end
+  end
+  ui.dwriteTextAligned = savedText
+  check(worst < 1, string.format('damage styles allocate nothing per frame (worst %.1f bytes, style %d)', worst, worstStyle))
+  car.wheels[1].isBlown = false
+  car.damage[0], car.damage[1], car.damage[2], car.damage[3] = 0, 0, 0, 0
+  car.engineLifeLeft = 1000
+  config.set('damageStyle', 1)
+end
 
 print(string.format('%d passed, %d failed', passed, failed))
 return failed

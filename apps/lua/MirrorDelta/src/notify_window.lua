@@ -61,7 +61,7 @@ local function drawPill(e, idx, a, slide, sc, w)
   local k = e.kind
   D.rect(x, y, x + pw, y + ph, D.color(DARK, a), 20 * sc)
   D.rect(x + 5 * sc, y + 5 * sc, x + 51 * sc, y + 35 * sc, D.color(kindColor(k), a), 15 * sc)
-  D.text(TAGS[k], 13 * sc, x + 5 * sc, y + 5 * sc, 46 * sc, 30 * sc, D.ALIGN_CENTER, D.color(tagInk(k), a), true)
+  D.text(TAGS[k], 13 * sc, x + 5 * sc, y + 5 * sc, 46 * sc, 30 * sc, D.ALIGN_CENTER, D.color(tagInk(k), a))
   D.text(e.title, 10 * sc, x + 62 * sc, y + 4 * sc, pw - 72 * sc, 14 * sc, D.ALIGN_START, D.color(titleColor(k), a))
   D.text(e.sub, 15 * sc, x + 62 * sc, y + 16 * sc, pw - 72 * sc, 21 * sc, D.ALIGN_START, D.color(S.colText, a))
 end
@@ -74,14 +74,14 @@ local function drawStrip(e, idx, a, slide, sc, w)
   local k = e.kind
   local tagW = 70 * sc
   D.quad(x + sk, y, x + tagW + sk, y, x + tagW, y + ph, x, y + ph, D.color(kindColor(k), a))
-  D.text(TAGS[k], 13 * sc, x, y, tagW + sk, ph, D.ALIGN_CENTER, D.color(tagInk(k), a), true)
+  D.text(TAGS[k], 13 * sc, x, y, tagW + sk, ph, D.ALIGN_CENTER, D.color(tagInk(k), a))
   local sx = x + tagW + 6 * sc
   D.quad(sx + sk, y, x + pw + sk, y, x + pw, y + ph, sx, y + ph, D.color(STRIP, a))
-  D.text(e.title, 9 * sc, sx + 16 * sc, y + 3 * sc, pw - tagW - 30 * sc, 12 * sc, D.ALIGN_START, D.color(STRIP_LABEL, a), true)
-  D.text(e.sub, 14 * sc, sx + 16 * sc, y + 14 * sc, pw - tagW - 30 * sc, 20 * sc, D.ALIGN_START, D.color(INK, a), true)
+  D.text(e.title, 9 * sc, sx + 16 * sc, y + 3 * sc, pw - tagW - 30 * sc, 12 * sc, D.ALIGN_START, D.color(STRIP_LABEL, a))
+  D.text(e.sub, 14 * sc, sx + 16 * sc, y + 14 * sc, pw - tagW - 30 * sc, 20 * sc, D.ALIGN_START, D.color(INK, a))
 end
 
--- 3: text with a shadow and a short coloured line under it
+-- 3: plain text and a short coloured line under it
 local function drawLine(e, idx, a, slide, sc, w)
   local y = (6 + idx * 46) * sc
   D.text(e.line, 17 * sc, 0, y, w, 24 * sc, D.ALIGN_CENTER, D.color(S.colText, a))

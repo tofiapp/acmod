@@ -70,7 +70,7 @@ M.car = {
 for i = 0, 3 do
   M.car.wheels[i] = {
     tyreCoreTemperature = 80 + i, tyreInsideTemperature = 90, tyreMiddleTemperature = 85,
-    tyreOutsideTemperature = 78, tyreOptimumTemperature = 88,
+    tyreOutsideTemperature = 78, tyreOptimumTemperature = 88, tyreWear = 0.1, isBlown = false,
   }
 end
 M.sim = { isReplayActive = false, isPaused = false, carsCount = 12, currentSessionIndex = 0, damageDisplayerShown = true, raceFlagType = 0 }
@@ -125,6 +125,17 @@ ui = {
   setCursor = function () end,
   pathLineTo = function (p) assert(p.x == p.x and p.y == p.y, 'NaN in path'); count('pathLineTo') end,
   pathFillConvex = function (color) assert(color and color.mult, 'path without colour'); count('quad') end,
+  pathStroke = function (color, closed, thickness)
+    assert(color and color.mult, 'stroke without colour'); assert(thickness and thickness > 0, 'stroke thickness'); count('stroke')
+  end,
+  pathArcTo = function (c, r) assert(c.x == c.x and r > 0, 'bad arc'); count('arc') end,
+  drawLine = function (p1, p2, color, thickness)
+    assert(p1.x == p1.x and p2.y == p2.y, 'NaN in line'); assert(color and color.mult, 'line without colour'); count('line')
+  end,
+  drawRect = function (p1, p2, color) assert(color and color.mult, 'rect outline without colour'); count('rectOutline') end,
+  drawCircleFilled = function (c, r, color) assert(c.x == c.x and r > 0 and color and color.mult, 'bad circle'); count('circle') end,
+  pushClipRect = function (p1, p2) assert(p1.x <= p2.x and p1.y <= p2.y, 'clip rect inverted'); M.clipDepth = (M.clipDepth or 0) + 1 end,
+  popClipRect = function () M.clipDepth = M.clipDepth - 1; assert(M.clipDepth >= 0, 'clip pop without push') end,
   dwriteTextAligned = function (str, size)
     assert(type(str) == 'string', 'text must be a string')
     assert(size > 0, 'font size must be positive')

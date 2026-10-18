@@ -17,6 +17,7 @@ local S = config.S
 local GRID = 1000              -- one point per 0.1 % of the lap
 local MAX_SECTORS = 60
 local HYSTERESIS = 0.02        -- s; delta colour only flips past ±20 ms
+local LIVE_HYSTERESIS = 0.005  -- s; live (current sector) colour flips past ±5 ms
 local SMOOTH_TIME = 0.15       -- s; delta smoothing time constant
 local JUMP_LIMIT = 0.05        -- spline change in one frame treated as a teleport
 local LINE_WAIT = 0.02         -- lap fraction we wait past the measured line for AC to count the lap
@@ -32,6 +33,8 @@ local T = {
   hasDelta = false,
   delta = 0,                   -- smoothed delta in seconds, negative = faster
   deltaSign = 1,               -- -1 faster, +1 slower (with hysteresis)
+  liveDelta = 0,               -- s gained (-) or lost (+) since the current mini sector started
+  liveSign = 1,                -- -1 gaining right now, +1 losing (with hysteresis, kept across sector starts)
   sectorCount = 24,
   curSector = 1,
   secState = {},               -- 0 not passed, 1 best ever, 2 faster than ref, 3 slower, 4 passed, no ref
@@ -102,6 +105,7 @@ local partialU0, partialT0, skipFirstSector = 0, 0, false
 -- A lap only counts when AC also bumped lapCount around the timer restart; a timer restart alone
 -- (pit exit, return to pits) must never produce a reference.
 local lastCountChange, lapConfirmed, cleanIfConfirmed = -100, false, false
+local liveSector, liveStart, liveValid = 0, 0, false
 local acNow, acSecStart = nil, nil -- AC's delta this frame and at the last sector boundary (nil = none)
 local COUNT_WINDOW = 0.5       -- s between lapCount change and timer restart that still belong together
 local heldRawT, heldClock = nil, 0 -- timer value before a rejected restart, kept briefly for a late lapCount
@@ -669,6 +673,18 @@ local function updateInner(dt)
   local u = (T.flying or T.partial) and lapU(s) or s
   T.curSector = math.min(T.sectorCount, math.floor(u * T.sectorCount) + 1)
   updateDelta(dt, s, t, car)
+
+  -- live trend for the delta line: how the delta moved since the current mini sector started
+  if T.hasDelta then
+    if not liveValid or T.curSector ~= liveSector then
+      liveSector, liveStart, liveValid = T.curSector, T.delta, true
+    end
+    T.liveDelta = T.delta - liveStart
+    if T.liveDelta < -LIVE_HYSTERESIS then T.liveSign = -1
+    elseif T.liveDelta > LIVE_HYSTERESIS then T.liveSign = 1 end
+  else
+    liveValid, T.liveDelta = false, 0
+  end
 end
 
 -- Runs the tracker; a script error is kept for the diagnostics tab instead of being lost.

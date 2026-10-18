@@ -9,7 +9,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 | **MirrorDelta** | Čára mini sektorů, čára delty a delta v sekundách (±) |
 | **MirrorDelta Timing** | Pozice, kolo, aktuální čas a nejrychlejší kolo |
 | **MirrorDelta Tyres** | Teplota jádra pneumatik a teploty pláště (vnitřní / střed / vnější) |
-| **MirrorDelta Damage** | Auto shora: čtyři strany karoserie barevně podle poškození a uprostřed stav motoru v % |
+| **MirrorDelta Damage** | Poškození ve tvaru auta, 12 vzhledů: karoserie, pneumatiky a stav motoru v % |
 | **MirrorDelta Gear** | Ukazatel otáček z 12 dílků, pod ním převod na barevné dlaždici a pod převodem rychlost |
 | **MirrorDelta Notifications** | Krátké zprávy nahoře: vlajky, nejrychlejší kolo, předjetí, boxy, neplatné kolo, odpojení |
 
@@ -17,7 +17,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.5.1.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.6.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -57,6 +57,7 @@ Nastavení je společné pro všechna okna a má osm záložek.
   - **B** (výchozí): mini sektory nahoře, čára delty uprostřed, čas dole.
 - Počet mini sektorů (výchozí 24), počet skupin (výchozí 3, tedy 8 | 8 | 8) a mezera mezi skupinami.
 - Tloušťka čar, mezera mezi čarami, velikost čísla a průhlednost. Hodnoty v pixelech platí pro okno široké 600 px a se šířkou okna se škálují.
+- Barva čáry delty (výchozí): podle aktuálního mini sektoru. Zelená znamená, že v úseku, kterým jedete, právě získáváte. Červená znamená, že právě ztrácíte. Číslo pod čarou dál ukazuje celkovou deltu. Jde přepnout na barvu podle celkové delty.
 - Na omezovači blikají modře čára delty i mini sektory, stejně jako okno s převodem (jde vypnout).
 - Intenzita barvy podle velikosti delty: když je zapnutá, plnou barvu má delta od ±0,5 s (nastavitelné).
 - Zdroj delty:
@@ -91,8 +92,10 @@ Nastavení je společné pro všechna okna a má osm záložek.
 - Písmo okna je Unbounded. Je přibalené ve složce `fonts` i s licencí SIL OFL.
 
 **Poškození**
-- Strany karoserie (přední, zadní, levá, pravá) jsou tmavé, dokud nejsou poškozené. S poškozením se barví od žluté po červenou.
-- Uprostřed je dlaždice motoru se zbývající životností v %: bílá, pod 95 % žlutá, pod 50 % červená.
+- 12 vzhledů: GT shora, neonový obrys, oba boky, formule, LMP prototyp, výkres, segmenty jako v AC, rallye hatchback, pohled zezadu, piktogram, drátěný model a termokamera.
+- Strany karoserie (přední, zadní, levá, pravá) mají barvu daného vzhledu, dokud nejsou poškozené. S poškozením se barví od žluté po červenou. Část, do které jste právě narazili, krátce blikne bíle.
+- Kola ukazují pneumatiky: opotřebení od žluté po červenou, defekt červeně.
+- Motor ukazuje zbývající životnost v %: bílá, pod 95 % žlutá, pod 50 % červená.
 - Volba „Ukázat jen při poškození“ okno skryje, dokud je auto v pořádku.
 - Dokud je okno otevřené, aplikace skryje původní ukazatel poškození z AC (jde vypnout).
 - Citlivost: od jaké hodnoty z AC je strana plně červená. Aktuální hodnoty z AC vidíte přímo v nastavení, podle nich jde citlivost doladit.
@@ -122,6 +125,8 @@ Nastavení je společné pro všechna okna a má osm záložek.
 ### Delta
 
 - Referencí je vaše nejlepší **platné** kolo, podle nastavení buď z této session, nebo nejlepší vůbec. Když zvolená reference není, použije se ta druhá.
+- Když AC uzná kolo jako své nejlepší a aplikace ho měla celé změřené, stane se referencí, i když ho vlastní kontrola nevzala.
+- Když vlastní reference není, ale AC nejlepší čas zná, běží delta proti tomuto času. Průběh kola se odhadne podle změřeného kola, nebo rovnoměrně.
 - **Od prvního kola:** dokud platné kolo není, slouží jako dočasná reference celé kolo, které platné být nemůže (kolo začínající v boxové uličce nebo kolo s řezáním). První platné kolo ji nahradí. Dočasná reference se nikdy neukládá.
 - **Out lap:** mini sektory se měří vždy už od výjezdu z boxové uličky. Sektor, ve kterém jste vyjeli, zůstane šedý.
   - S referencí (uloženou nebo z této session) se sektory barví proti ní a běží i delta. Ukazuje, kolik jste od výjezdu ztratili nebo získali proti referenci na stejném úseku trati.
@@ -135,6 +140,8 @@ Nastavení je společné pro všechna okna a má osm záložek.
 - Zelená znamená rychlejší než reference, červená pomalejší. Když reference ještě neexistuje, jsou obě čáry šedé a číslo ukazuje `-.--`.
 
 ### Mini sektory
+
+- Fialový sektor je osobní rekord. Počítá se po sektorech: sektor projetý bez řezání a mimo boxy platí, i když celé kolo platné není.
 
 - Kolo je rozdělené na N stejně dlouhých úseků (výchozí 24). Čas průjezdu hranicí úseku se dopočítá mezi framy.
 - Po projetí se úsek obarví:
@@ -206,6 +213,7 @@ python tests/run_tests.py
 
 ## Známá omezení
 
+- Písmo ve všech oknech je bez stínu.
 - Původní pořadí (leaderboard) z AC aplikace skrýt neumí, protože CSP umí skrýt jen všechny aplikace najednou. Zavřete ho ručně na liště aplikací.
 - Aplikace zatím nebyla vyzkoušená přímo ve hře, jen v simulaci. Prosím o zpětnou vazbu z prvních jízd.
 - Názvy polí pro teploty pneumatik (`tyreCoreTemperature`, `tyreInsideTemperature`, `tyreMiddleTemperature`, `tyreOutsideTemperature`, `tyreOptimumTemperature`) nejsou ve veřejném SDK. Aplikace je proto při startu ověří a bez nich nespadne.

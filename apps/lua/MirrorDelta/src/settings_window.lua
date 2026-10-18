@@ -4,6 +4,7 @@ local config = require('src/config')
 local tracker = require('src/tracker')
 local notify = require('src/notify')
 local tyres = require('src/tyres_window')
+local damage = require('src/damage_window')
 local D = require('src/draw')
 local S = config.S
 
@@ -81,6 +82,10 @@ local function tabDelta()
   slider('lineGap', 'Mezera mezi čarami', 0, 30, '%.1f px', 0.5)
   slider('numberSize', 'Velikost čísla', 9, 60, '%.0f px', 1)
   slider('opacity', 'Průhlednost', 0.1, 1, '%.2f')
+  combo('deltaLineMode', 'Barva čáry delty', {
+    'Podle aktuálního úseku: zelená = teď rychlejší, červená = teď pomalejší',
+    'Podle celkové delty',
+  })
   checkbox('deltaLimiterFlash', 'Na omezovači blikat modře: čára delty i mini sektory')
   checkbox('intensityByDelta', 'Intenzita barvy podle velikosti delty')
   if S.intensityByDelta then
@@ -174,6 +179,8 @@ local function tabGear()
 end
 
 local function tabDamage()
+  combo('damageStyle', 'Vzhled', damage.STYLE_NAMES)
+  gap()
   ui.header('Zobrazit')
   checkbox('damageAutoHide', 'Ukázat jen při poškození')
   checkbox('damagePlate', 'Tmavý podklad')
@@ -187,6 +194,8 @@ local function tabDamage()
       car.damage[0], car.damage[1], car.damage[2], car.damage[3], car.engineLifeLeft))
     ui.textWrapped('Po nárazu podle těchto čísel nastavte, od kolika má být strana plně červená.')
   end
+  ui.textWrapped('Kola ukazují pneumatiky: opotřebení (od žluté po červenou) a defekt (červená).'
+    .. (damage.wheelFieldsOk() == false and ' Tato verze CSP stav pneumatik neposkytuje.' or ''))
 end
 
 local function tabNotify()

@@ -102,18 +102,32 @@ local function drawSectors(x, y, w, h, sc, blink)
   end
 end
 
+-- Number: the total delta.
 local function deltaColor()
   if not tracker.hasDelta then return S.colNeutral end
   return tracker.deltaSign < 0 and S.colGreen or S.colRed
 end
 
+-- Line: by default whether you are gaining or losing right now in the current mini sector.
+local LIVE_FULL = 0.1          -- s gained or lost in a sector for full intensity
+local function lineColor()
+  if not tracker.hasDelta then return S.colNeutral end
+  if S.deltaLineMode == 2 then return deltaColor() end
+  return tracker.liveSign < 0 and S.colGreen or S.colRed
+end
+
 local function drawLine(x, y, w, h, blink)
   local alpha = S.opacity
   if S.intensityByDelta and tracker.hasDelta then
-    local k = math.min(1, math.abs(tracker.delta) / math.max(0.05, S.intensityFullAt))
+    local k
+    if S.deltaLineMode == 2 then
+      k = math.min(1, math.abs(tracker.delta) / math.max(0.05, S.intensityFullAt))
+    else
+      k = math.min(1, math.abs(tracker.liveDelta) / LIVE_FULL)
+    end
     alpha = alpha * (0.22 + 0.78 * k)
   end
-  local col = deltaColor()
+  local col = lineColor()
   if blink then col, alpha = LIMITER_BLUE, S.opacity end
   D.rect(x, y, x + w, y + h, D.color(col, alpha))
 end

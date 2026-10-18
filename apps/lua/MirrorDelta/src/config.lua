@@ -18,6 +18,7 @@ local defaults = {
   intensityFullAt = 0.5,    -- seconds of delta for full colour
   referenceMode = 2,        -- 1: best lap of this session, 2: all-time best lap (saved)
   deltaLimiterFlash = true, -- the delta line and the mini sectors blink blue at the rev limiter, like the gear window
+  deltaLineMode = 1,        -- 1: line colour = live mini sector (green gaining now, red losing now), 2: total delta
   deltaSource = 1,          -- 1: own measurement, AC's delta when it has none; 2: own only; 3: AC only
 
   -- Timing window
@@ -52,6 +53,7 @@ local defaults = {
   damageAutoHide = false,   -- show the window only when something is damaged
   damageFull = 50,          -- raw car.damage value drawn as full red
   damagePlate = false,
+  damageStyle = 1,          -- 1..12, see damage_window.STYLE_NAMES
   damageHideOriginal = true, -- hide AC's own damage display while this window is open
 
   -- Notification window
