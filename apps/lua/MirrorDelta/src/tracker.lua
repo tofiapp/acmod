@@ -40,13 +40,16 @@ local T = {
   secState = {},               -- 0 not passed, 1 best ever, 2 faster than ref, 3 slower, 4 passed, no ref
   refMs = 0,                   -- lap time of the active reference
   refKind = 0,                 -- active reference: 0 none, 1 session, 2 all-time, 3 provisional, 4 AC best (estimate), 5 previous lap
-  prevLapMs = 0,               -- previous fully driven lap (reference kind 5)
+  prevLapMs = 0,               -- previous lap (reference kind 5); an out lap counts from where it was measured
+  prevLapPartial = false,      -- the previous lap is an out lap (compared only from its first measured point)
+  lastLapMs = 0,               -- last finished lap for the timing window (0 = none yet)
+  lastLapState = 0,            -- 0 none, 1 valid, 2 deleted (cut or invalidated by AC), 3 not timed (out lap, pits)
   nowDelta = 0,                -- s gained (-) or lost (+) over the last ~3 s of driving: the split delta line
   estimateMs = 0,              -- AC's best lap time behind the estimated reference (0 = none)
   provisionalMs = 0,           -- best full lap that cannot be a reference (out lap, cut), used until a valid one exists
   sessionRefMs = 0,
   allTimeRefMs = 0,
-  -- lap end flash: 1 new best, 2 faster than previous lap, 3 slower, 4 not a timed lap
+  -- lap end flash: 1 new best, 2 faster than previous lap, 3 slower, 4 not a timed lap, 5 deleted (cut / invalid)
   flashKind = 0,
   flashUntil = 0,
   flashLapMs = 0,
@@ -89,7 +92,13 @@ local estimateRef, estimateStart, estimateShape = newList(GRID + 1), 0, -1
 local estimateStartKnown = false
 -- Last fully recorded lap of any kind; adopted as the reference when AC confirms it as its best lap.
 local lastFull, lastFullMs, lastFullStart, lastFullClock = newList(GRID + 1), 0, 0, -100
-local prevLapRef, prevLapStart = newList(GRID + 1), 0
+local prevLapRef, prevLapStart, prevLapAnchor = newList(GRID + 1), 0, 0   -- anchor: first measured u (out lap)
+local curK0 = 0                -- first grid index recorded in the current lap (0 on a full lap)
+local lapCut = false           -- the current timed lap was cut (AC marked it invalid on track)
+local DELETED_N = 8
+local deletedLaps, deletedHead = newList(DELETED_N), 0   -- times of deleted laps, so AC's best is not taken from them
+local ownBestMs = 0            -- best valid lap seen by the tracker this session
+local cutWait, cutWaitMs, cutWaitClock = false, 0, 0   -- cut lap waiting for AC's verdict (callback)
 local NOW_WINDOW, NOW_STEP = 3, 0.05  -- s: the split line compares the last 3 s, sampled 20 times a second
 local NOW_N = math.floor(NOW_WINDOW / NOW_STEP) + 3
 local NOW_SMOOTH = 0.25                -- s: smoothing of the split line, so it does not jump
@@ -119,7 +128,7 @@ local heldRawT, heldClock = nil, 0 -- timer value before a rejected restart, kep
 local needReset, needSessionReset, wasReplay = false, false, false
 local pendingActive, pendingMs, pendingStart, pendingClock = false, 0, 0, 0
 local cbClock, cbValid, cbMs = -100, true, 0
-local prevLapMs, bestFlashMs = 0, 0
+local prevLapMs, bestFlashMs, bestFlashBefore = 0, 0, 0
 local lastEventClock = -100
 local sessionCheckClock = -100
 
@@ -149,27 +158,34 @@ local function copyList(dst, src, n)
   for i = 1, n do dst[i] = src[i] end
 end
 
--- The chosen reference first, then the other one, then the provisional lap, so there is a delta
--- as soon as any full lap was driven.
+-- "Previous lap" mode compares strictly with the lap driven just before (the out lap too, from where it was
+-- measured) and with nothing else: no saved best, no estimate, no AC delta. The other modes take the chosen
+-- reference first, then the other one, then the estimate and the provisional lap.
+-- Returns grid, lap ms, line position, kind and the anchor (first lap fraction the grid holds).
 local function activeRef()
-  if S.referenceKind == 3 and T.prevLapMs > 0 then return prevLapRef, T.prevLapMs, prevLapStart, 5 end
-  if S.referenceKind == 1 then
-    if T.sessionRefMs > 0 then return sessionRef, T.sessionRefMs, sessionRefStart, 1 end
-    if T.allTimeRefMs > 0 then return allTimeRef, T.allTimeRefMs, allTimeRefStart, 2 end
-  else
-    if T.allTimeRefMs > 0 then return allTimeRef, T.allTimeRefMs, allTimeRefStart, 2 end
-    if T.sessionRefMs > 0 then return sessionRef, T.sessionRefMs, sessionRefStart, 1 end
+  if S.referenceKind == 3 then
+    if T.prevLapMs > 0 then return prevLapRef, T.prevLapMs, prevLapStart, 5, prevLapAnchor end
+    return nil, 0, 0, 0, 0
   end
-  if T.estimateMs > 0 then return estimateRef, T.estimateMs, estimateStart, 4 end
-  if T.provisionalMs > 0 then return provisionalRef, T.provisionalMs, provisionalStart, 3 end
-  return nil, 0, 0, 0
+  if S.referenceKind == 1 then
+    if T.sessionRefMs > 0 then return sessionRef, T.sessionRefMs, sessionRefStart, 1, 0 end
+    if T.allTimeRefMs > 0 then return allTimeRef, T.allTimeRefMs, allTimeRefStart, 2, 0 end
+  else
+    if T.allTimeRefMs > 0 then return allTimeRef, T.allTimeRefMs, allTimeRefStart, 2, 0 end
+    if T.sessionRefMs > 0 then return sessionRef, T.sessionRefMs, sessionRefStart, 1, 0 end
+  end
+  if T.estimateMs > 0 then return estimateRef, T.estimateMs, estimateStart, 4, 0 end
+  if T.provisionalMs > 0 then return provisionalRef, T.provisionalMs, provisionalStart, 3, 0 end
+  return nil, 0, 0, 0, 0
 end
 
--- Best known line position: the reference's, else the measured one (nil when unknown).
+-- Best known line position: the reference's, else the measured one, else a saved lap's (nil when unknown).
 local function linePosition()
   local ref, _, refStart, kind = activeRef()
   if ref and (kind ~= 4 or estimateStartKnown) then return refStart end
   if lineKnown then return knownLine end
+  if T.allTimeRefMs > 0 then return allTimeRefStart end
+  if T.sessionRefMs > 0 then return sessionRefStart end
   return nil
 end
 
@@ -253,19 +269,19 @@ end
 local function finishSector(j, ms)
   local state = 0
   if (T.flying or T.partial) and sectorsLive then
-    local ref, _, _, kind = activeRef()
+    local ref, _, _, kind, anchor = activeRef()
     -- a sector counts on its own: driven without a cut and outside the pits, even if the lap is not clean
     -- (on an out lap only when the line position is known, else the sector would be the wrong stretch)
     local counts = secValidNow and ms > 0 and (T.flying or partialLineKnown)
     local best = S.referenceKind == 1 and sessionBest[j] or allTimeBest[j]
-    local useAC = acNow and acSecStart and (not ref or kind == 3 or kind == 4)
+    local useAC = S.referenceKind ~= 3 and acNow and acSecStart and (not ref or kind == 3 or kind == 4)
+    local n = T.sectorCount
     if counts and best > 0 and ms < best then
       state = 1
     elseif useAC then
       -- AC's delta (to its valid best lap) beats an estimate: colour by how it changed over the sector
       if math.abs(acNow - acSecStart) >= 0.001 then state = acNow < acSecStart and 2 or 3 else state = 4 end
-    elseif ref then
-      local n = T.sectorCount
+    elseif ref and (j - 1) / n >= anchor - 1e-9 then
       local refSec = gridAt(ref, j / n) - gridAt(ref, (j - 1) / n)
       if ms < refSec then
         state = 2
@@ -294,7 +310,7 @@ local function advance(u1, t1)
   if du <= 0 then return end
   if T.flying or T.partial then
     local dt = t1 - t0
-    if T.flying then
+    do   -- full laps from the line, out laps from their first grid point
       while nextK <= GRID and nextK <= u1 * GRID do
         cur[nextK + 1] = t0 + dt * (nextK / GRID - u0) / du
         nextK = nextK + 1
@@ -323,6 +339,8 @@ local function startLap(flying, lineSpline, clean)
   T.partial = false
   skipFirstSector = false
   T.clean = flying and clean ~= false
+  lapCut = false
+  curK0 = 0
   T.hasDelta = false
   sectorsLive = true
   curStart = lineSpline or 0
@@ -341,6 +359,8 @@ local function startPartial(s, t, refStart)
   local u0 = lapU(s)
   partialU0, partialT0 = u0, t
   nextSec = math.floor(u0 * T.sectorCount) + 1
+  curK0 = math.min(GRID, math.ceil(u0 * GRID - 1e-9))
+  nextK = curK0
   skipFirstSector = true
   lastSecT = t
   prevU, prevT = u0, t
@@ -351,19 +371,45 @@ local function resetLap(reason)
   if reason then T.diag.lastReset = reason end
 end
 
-local function lapFinished(lapMs, now)
+local function rememberDeleted(ms)
+  deletedHead = deletedHead % DELETED_N + 1
+  deletedLaps[deletedHead] = ms
+end
+
+-- True when ms is (within 2 ms) the time of a lap that was deleted this session.
+function T.isDeletedLap(ms)
+  if ms <= 0 then return false end
+  for i = 1, DELETED_N do
+    if deletedLaps[i] > 0 and math.abs(deletedLaps[i] - ms) <= 2 then return true end
+  end
+  return false
+end
+
+-- Keeps the just finished lap (full or out lap) as the "previous lap" reference.
+local function keepPreviousLap(lapMs, lineSpline)
+  copyList(prevLapRef, cur, GRID + 1)
+  for i = 1, curK0 do prevLapRef[i] = cur[curK0 + 1] end   -- before the anchor: flat, never compared
+  prevLapRef[GRID + 1] = lapMs
+  T.prevLapMs, prevLapStart, prevLapAnchor = lapMs, lineSpline, curK0 / GRID
+  T.prevLapPartial = curK0 > 0
+end
+
+local function lapFinished(lapMs, now, lineSpline)
   if T.flying or T.partial then advance(1, lapMs) end
-  if T.flying and lapConfirmed and nextK > GRID then
+  local full = nextK > GRID
+  if T.flying and lapConfirmed and full then
     copyList(lastFull, cur, GRID + 1)
     lastFull[GRID + 1] = lapMs
     lastFullMs, lastFullStart, lastFullClock = lapMs, curStart, now
-    -- previous lap reference: any fully driven lap (valid or not), the one just finished
-    copyList(prevLapRef, cur, GRID + 1)
-    prevLapRef[GRID + 1] = lapMs
-    T.prevLapMs, prevLapStart = lapMs, curStart
+    keepPreviousLap(lapMs, curStart)   -- any fully driven lap (valid or not), the one just finished
+  elseif T.partial and full and (partialLineKnown or math.abs(circDiff(lineSpline, curStart)) < 0.003) then
+    -- out lap measured to the line with the right line position: the next lap compares with it
+    keepPreviousLap(lapMs, curStart)
   end
-  local complete = T.flying and T.clean and nextK > GRID
+  local complete = T.flying and T.clean and full
+  T.lastLapMs = lapMs
   if complete then
+    bestFlashBefore = bestFlashMs
     if bestFlashMs == 0 or lapMs < bestFlashMs then
       T.flashKind = 1
       bestFlashMs = lapMs
@@ -373,12 +419,13 @@ local function lapFinished(lapMs, now)
       T.flashKind = 3
     end
     prevLapMs = lapMs
+    T.lastLapState = 1
     -- keep the finished grid until AC confirms the lap (or the wait runs out)
     cur, cand = cand, cur
     pendingActive, pendingMs, pendingStart, pendingClock = true, lapMs, curStart, now
     T.diag.timedLaps = T.diag.timedLaps + 1
   else
-    if T.flying and lapConfirmed and nextK > GRID then offerProvisional(cur, lapMs, curStart) end
+    if T.flying and lapConfirmed and full then offerProvisional(cur, lapMs, curStart) end
     if not T.flying then
       T.diag.lastReject = 'kolo nezačalo průjezdem cílem (out lap z boxu, reset)'
     elseif not T.clean then
@@ -386,14 +433,35 @@ local function lapFinished(lapMs, now)
     else
       T.diag.lastReject = 'chybí část kola (záznam nedošel do konce)'
     end
-    T.flashKind = 4
+    if T.flying and lapCut then
+      -- a cut lap is deleted: red, never the best (unless AC's lap callback still calls it valid)
+      T.flashKind, T.lastLapState = 5, 2
+      cutWait, cutWaitMs, cutWaitClock = true, lapMs, now
+    else
+      T.flashKind, T.lastLapState = 4, 3
+    end
     if dirty then saveData() end
   end
   T.flashLapMs = lapMs
   T.flashUntil = now + S.lapFlashTime
 end
 
+-- A cut lap is deleted once AC's callback agrees (or does not come); AC calling it valid wins.
+local function settleCut(now)
+  local fresh = cbClock >= cutWaitClock - CALLBACK_WAIT
+  if not fresh and now - cutWaitClock < CALLBACK_WAIT then return end
+  cutWait = false
+  if fresh and cbValid then
+    T.lastLapState = 1
+    if T.flashKind == 5 then T.flashKind = (prevLapMs > 0 and cutWaitMs < prevLapMs) and 2 or 3 end
+  else
+    rememberDeleted(cutWaitMs)
+    if fresh and cbMs > 0 then rememberDeleted(cbMs) end
+  end
+end
+
 local function finalizePending(now)
+  if cutWait then settleCut(now) end
   if not pendingActive then return end
   local fresh = cbClock >= pendingClock - CALLBACK_WAIT
   if not fresh and now - pendingClock < CALLBACK_WAIT then return end
@@ -404,12 +472,20 @@ local function finalizePending(now)
     valid = cbValid
     if cbMs > 0 and math.abs(cbMs - ms) < 1000 then ms = cbMs end
   end
+  if T.lastLapMs == pendingMs then T.lastLapMs = ms end
+  if T.flashLapMs == pendingMs then T.flashLapMs = ms end
   if not valid then
     T.diag.lastReject = 'AC kolo po dojetí označilo jako neplatné'
     offerProvisional(cand, ms, pendingStart)   -- only confirmed laps get this far
+    -- the lap was deleted: not the best, shown red
+    if bestFlashMs == pendingMs then bestFlashMs = bestFlashBefore end
+    T.flashKind, T.lastLapState = 5, 2
+    rememberDeleted(ms)
+    rememberDeleted(pendingMs)
   end
   if valid then
     T.diag.references = T.diag.references + 1
+    if ownBestMs == 0 or ms < ownBestMs then ownBestMs = ms end
     cand[GRID + 1] = ms
     if T.sessionRefMs == 0 or ms < T.sessionRefMs then
       copyList(sessionRef, cand, GRID + 1)
@@ -430,6 +506,7 @@ local function adoptACBest(car, now)
   if now - lastFullClock > 3 then lastFullMs = 0; return end
   local best = car.bestLapTimeMs
   if best <= 0 or math.abs(best - lastFullMs) > 15 then return end
+  if T.isDeletedLap(best) then return end
   lastFullMs = 0
   if T.sessionRefMs > 0 and best >= T.sessionRefMs - 1 then return end
   lastFull[GRID + 1] = best
@@ -437,6 +514,7 @@ local function adoptACBest(car, now)
   T.sessionRefMs, sessionRefStart = best, lastFullStart
   T.diag.references = T.diag.references + 1
   T.diag.lastReject = 'kolo uznané podle nejlepšího času AC'
+  if ownBestMs == 0 or best < ownBestMs then ownBestMs = best end
   if T.allTimeRefMs == 0 or best < T.allTimeRefMs then
     copyList(allTimeRef, lastFull, GRID + 1)
     T.allTimeRefMs, allTimeRefStart = best, lastFullStart
@@ -491,11 +569,42 @@ local function smoothInto(raw, dt)
   end
 end
 
+-- Own delta against the reference. Both laps are compared from a common anchor: the line on a full lap,
+-- the first measured point of an out lap (the current one or the reference). Returns nil before the anchor.
+local function ownDelta(ref, refStart, anchor, s, t)
+  local shift = circDiff(curStart, refStart)       -- reference u = current u + shift
+  local u = lapU(s)
+  if T.partial then
+    u = math.max(partialU0, u)
+  elseif prevU > 0.9 and u < 0.5 then
+    u = 1                                          -- just past the line, AC has not counted the lap yet
+  end
+  local uRef = u + shift
+  if uRef < 0 then uRef = 0 elseif uRef > 1 then uRef = 1 end
+  if anchor <= 0 and not T.partial then
+    return (t - gridAt(ref, uRef)) / 1000
+  end
+  local a, tA = anchor - shift, nil
+  if T.partial and a <= partialU0 then
+    a, tA = partialU0, partialT0
+  else
+    if a < curK0 / GRID then a = curK0 / GRID end
+    -- the current lap must be recorded past the anchor (grid points floor(a) and floor(a) + 1)
+    if u < a or math.floor(a * GRID) + 2 > nextK then return nil end
+    tA = gridAt(cur, a)
+  end
+  local aRef = a + shift
+  if aRef < 0 then aRef = 0 elseif aRef > 1 then aRef = 1 end
+  return ((t - tA) - (gridAt(ref, uRef) - gridAt(ref, aRef))) / 1000
+end
+
 local function updateDelta(dt, s, t, car)
-  local ref, refMs, refStart, kind = activeRef()
+  local ref, refMs, refStart, kind, anchor = activeRef()
   T.refMs, T.refKind = refMs, kind
   local own = S.deltaSource ~= 3 and (T.flying or T.partial) and ref
-  if not own or kind == 3 or kind == 4 then
+  -- "previous lap" mode never falls back to AC's delta (that compares with AC's best lap)
+  local strict = S.referenceKind == 3 and S.deltaSource ~= 3
+  if not strict and (not own or kind == 3 or kind == 4) then
     -- AC's delta (to a valid lap) beats our provisional one; with deltaSource = 3 it is the only source
     local v = S.deltaSource ~= 2 and car and acDelta(car)
     if v then
@@ -506,24 +615,19 @@ local function updateDelta(dt, s, t, car)
     end
   end
   T.deltaFromAC = false
-  if own and T.partial then
-    -- out lap: time since the pit exit against the reference over the same stretch
-    local u = math.max(partialU0, lapU(s))
-    local refPart = gridAt(ref, u) - gridAt(ref, partialU0)
-    T.status = nil
-    smoothInto(((t - partialT0) - refPart) / 1000, dt)
-  elseif own then
-    local u = lapU(s)
-    if prevU > 0.9 and u < 0.5 then u = 1 end   -- just past the line, AC has not counted the lap yet
-    local uRef = u + circDiff(curStart, refStart)
-    if uRef < 0 then uRef = 0 elseif uRef > 1 then uRef = 1 end
+  local raw = own and ownDelta(ref, refStart, anchor, s, t)
+  if raw then
     T.status = kind == 3 and 'Delta proti dočasnému kolu (out lap nebo neplatné), platné kolo ho nahradí'
       or kind == 4 and 'Delta proti nejlepšímu času z AC (odhad průběhu kola)' or nil
-    smoothInto((t - gridAt(ref, uRef)) / 1000, dt)
+    smoothInto(raw, dt)
   else
     T.hasDelta = false
-    if S.deltaSource == 3 then
+    if own then
+      T.status = 'Delta: předchozí kolo (out lap) začalo dál, porovnává se od tohoto místa'
+    elseif S.deltaSource == 3 then
       T.status = 'Delta z AC: AC zatím nemá nejlepší kolo'
+    elseif strict then
+      T.status = 'Delta: zatím není předchozí kolo, porovnává se od dalšího kola'
     elseif T.partial then
       T.status = 'Out lap: mini sektory se měří, delta až s referencí'
     elseif not T.flying then
@@ -539,7 +643,10 @@ local function updateTiming(sim, car, now)
   T.carsCount = sim.carsCount
   T.lap = car.lapCount + 1
   T.currentMs = car.lapTimeMs
-  T.bestMs = car.bestLapTimeMs
+  -- AC's best, unless it is a lap that was deleted (then the tracker's own best valid lap)
+  local best = car.bestLapTimeMs
+  if best > 0 and T.isDeletedLap(best) then best = ownBestMs end
+  T.bestMs = best
   if now - sessionCheckClock > 1 then
     sessionCheckClock = now
     local session = ac.getSession(sim.currentSessionIndex)
@@ -626,7 +733,10 @@ local function updateInner(dt)
     T.sessionRefMs, T.provisionalMs, T.estimateMs, estimateShape, lastFullMs = 0, 0, 0, -1, 0
     T.prevLapMs = 0
     for i = 1, MAX_SECTORS do sessionBest[i] = 0 end
-    bestFlashMs, prevLapMs = 0, 0
+    bestFlashMs, prevLapMs, ownBestMs = 0, 0, 0
+    T.lastLapMs, T.lastLapState, T.prevLapPartial = 0, 0, false
+    for i = 1, DELETED_N do deletedLaps[i] = 0 end
+    cutWait = false
     pendingActive = false
     T.flashUntil = 0
     prevLapCount = -1
@@ -687,7 +797,7 @@ local function updateInner(dt)
     elseif lapMs < lo or lapMs > hi then
       lapMs = prevRawT + math.max(0, frameMs - t)
     end
-    lapFinished(lapMs, now)
+    lapFinished(lapMs, now, lineSpline)
     -- a lap starting in the pit lane is recorded too (provisional reference), it just is not clean
     local base = not car.isInPitlane and not car.isInPit
     startLap(true, lineSpline, base)
@@ -725,6 +835,10 @@ local function updateInner(dt)
       advance(u, t)
     end
     if T.clean and (not car.isLapValid or car.isInPitlane) then T.clean = false end
+    -- cut: AC marked the lap invalid on track (not the pits, not the first metres where it may lag)
+    if not lapCut and not car.isLapValid and not car.isInPitlane and not car.isInPit and prevU > 0.01 then
+      lapCut = true
+    end
   end
   prevSpline, prevRawT = s, t
   if heldRawT then

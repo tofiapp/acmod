@@ -103,6 +103,10 @@ local function tabDelta()
     'Jen delta z AC',
   })
   combo('referenceKind', 'Porovnávat s', { 'Nejlepší kolo této session', 'Nejlepší kolo vůbec (uložené)', 'Předchozí kolo' })
+  if S.referenceKind == 3 then
+    ui.textWrapped('Porovnává se jen s kolem těsně před tím. První kolo (out lap) nemá s čím, druhé se porovná '
+      .. 's out lapem od místa výjezdu z boxů.')
+  end
   ui.text('Session: ' .. D.formatLap(tracker.sessionRefMs, 3) .. '    Vůbec: ' .. D.formatLap(tracker.allTimeRefMs, 3))
   ui.textWrapped('Data pro toto auto a trať: ' .. tracker.dataFile())
   if os.preciseClock() < confirmClearUntil then
@@ -120,6 +124,7 @@ local function tabTiming()
   checkbox('showPosition', 'Pozice')
   checkbox('showLaps', 'Počet kol')
   checkbox('showCurrent', 'Aktuální čas')
+  checkbox('showLast', 'Poslední kolo (smazané červeně)')
   checkbox('showBest', 'Nejrychlejší čas')
   gap()
   combo('timingLayout', 'Uspořádání', { 'Pod sebou', 'Vedle sebe' })
@@ -246,6 +251,8 @@ local function tabDiagnostics()
   ui.text('Kolo se měří: ' .. yesNo(tracker.flying) .. '    out lap od výjezdu: ' .. yesNo(tracker.partial) .. '    platné zatím: ' .. yesNo(tracker.clean))
   ui.text('Delta k dispozici: ' .. yesNo(tracker.hasDelta) .. '    reference: ' .. D.formatLap(tracker.refMs, 3))
   ui.text('Reference: ' .. REF_KINDS[tracker.refKind + 1] .. '    dočasné kolo: ' .. D.formatLap(tracker.provisionalMs, 3))
+  ui.text('Předchozí kolo: ' .. D.formatLap(tracker.prevLapMs, 3) .. (tracker.prevLapPartial and ' (out lap od výjezdu)' or '')
+    .. '    poslední kolo: ' .. D.formatLap(tracker.lastLapMs, 3) .. (tracker.lastLapState == 2 and ' (smazané)' or ''))
   ui.text('Delta z AC (performanceMeter): ' .. (d.acDelta == nil and 'zatím nezjištěno' or yesNo(d.acDelta))
     .. '    právě použitá: ' .. yesNo(tracker.deltaFromAC))
   if tracker.status then ui.textWrapped('Stav: ' .. tracker.status) end

@@ -28,6 +28,7 @@ local defaults = {
   showLaps = true,
   showCurrent = true,
   showBest = true,
+  showLast = true,
   timingLayout = 2,         -- 1: stacked, 2: side by side
   bestHighlight = true,
   lapFlash = true,
@@ -105,7 +106,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.10.0' }
+local M = { S = S, defaults = defaults, VERSION = '1.11.0' }
 
 function M.set(key, value)
   S[key] = value

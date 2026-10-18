@@ -1,22 +1,23 @@
--- Timing window: position, lap count, current lap time and best lap.
+-- Timing window: position, lap count, current lap time, last lap and best lap.
 -- The best lap has a purple frame; after the line the current time briefly shows
 -- the finished lap in a coloured pill (purple new best, green faster than the
--- previous lap, red slower, grey not a timed lap).
+-- previous lap, red slower or deleted, grey not a timed lap). A deleted last lap is red.
 
 local config = require('src/config')
 local tracker = require('src/tracker')
 local D = require('src/draw')
 local S = config.S
 
-local ITEM_POS, ITEM_LAPS, ITEM_CUR, ITEM_BEST = 1, 2, 3, 4
-local LABELS = { 'POZ', 'KOLO', 'ČAS', 'NEJ' }
+local ITEM_POS, ITEM_LAPS, ITEM_CUR, ITEM_LAST, ITEM_BEST = 1, 2, 3, 4, 5
+local ITEMS = 5
+local LABELS = { 'POZ', 'KOLO', 'ČAS', 'POSL', 'NEJ' }
 local PAD, PILL = 6, 6
 -- side by side
-local ROW_W = { 64, 60, 104, 104 }
+local ROW_W = { 64, 60, 104, 104, 104 }
 local ROW_GAP, LABEL_H, VALUE_H = 14, 15, 32
 -- stacked
 local STACK_W = 214
-local STACK_H = { 36, 30, 30, 30 }
+local STACK_H = { 36, 30, 30, 30, 30 }
 local STACK_GAP = 3
 
 local LABEL_COLOR = rgbm(0.76, 0.79, 0.84, 1)
@@ -27,6 +28,7 @@ local WHITE = rgbm(1, 1, 1, 1)
 local numStrings, lapStrings = {}, {}
 local curCache = { key = -1, str = '' }
 local bestCache = { key = -1, str = '' }
+local lastCache = { key = -1, str = '' }
 local flashCache = { key = -1, str = '' }
 local mPos, mTail, mBest, mFlash = {}, {}, {}, {}
 
@@ -34,6 +36,7 @@ local function visible(item)
   if item == ITEM_POS then return S.showPosition end
   if item == ITEM_LAPS then return S.showLaps end
   if item == ITEM_CUR then return S.showCurrent end
+  if item == ITEM_LAST then return S.showLast end
   return S.showBest
 end
 
@@ -83,13 +86,13 @@ local function flashColor()
   local kind = tracker.flashKind
   if kind == 1 then return S.colPurple end
   if kind == 2 then return S.colGreen end
-  if kind == 3 then return S.colRed end
+  if kind == 3 or kind == 5 then return S.colRed end
   return S.colNeutral
 end
 
 local function baseSize()
   local n, w, h = 0, 0, 0
-  for item = 1, 4 do
+  for item = 1, ITEMS do
     if visible(item) then
       n = n + 1
       if S.timingLayout == 1 then
@@ -131,6 +134,10 @@ local function drawValue(item, ax, y, boxW, h, size, sc, rightAligned)
     else
       D.text(lapText(curCache, tracker.currentMs, 1), size, bx, y, boxW, h, align, D.color(S.colText, S.opacity))
     end
+  elseif item == ITEM_LAST then
+    -- a deleted lap (cut, or invalidated by AC) is red
+    local color = tracker.lastLapState == 2 and S.colRed or S.colText
+    D.text(lapText(lastCache, tracker.lastLapMs, 3), size, bx, y, boxW, h, align, D.color(color, S.opacity))
   else
     local str = lapText(bestCache, tracker.bestMs, 3)
     if S.bestHighlight and tracker.bestMs > 0 then
@@ -170,7 +177,7 @@ function M.draw()
   if S.timingLayout == 1 then
     local y, first = pad, true
     local right = baseW * sc - pad - pillPad
-    for item = 1, 4 do
+    for item = 1, ITEMS do
       if visible(item) then
         if not first then y = y + STACK_GAP * sc end
         first = false
@@ -188,7 +195,7 @@ function M.draw()
   else
     local x, first = pad, true
     local labelH, valueH = LABEL_H * sc, VALUE_H * sc
-    for item = 1, 4 do
+    for item = 1, ITEMS do
       if visible(item) then
         if not first then x = x + ROW_GAP * sc end
         first = false

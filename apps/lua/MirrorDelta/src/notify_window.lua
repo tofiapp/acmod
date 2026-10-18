@@ -18,7 +18,7 @@ local STOP = rgbm(0.12, 0.13, 0.15, 1)
 local STRIP = rgbm(0.957, 0.961, 0.969, 0.95)
 local STRIP_LABEL = rgbm(0.29, 0.32, 0.38, 1)
 
-local TAGS = { 'NEJ', 'DNF', 'BOX', 'OUT', '▲', '▼', '!', '»', 'STOP', '1', 'CÍL', '✕', 'PEN', 'AC' }
+local TAGS = { 'NEJ', 'ODP', 'BOX', 'VÝJ', '▲', '▼', '!', '»', 'STOP', '1', 'CÍL', '✕', 'PEN', 'AC' }
 
 local function kindColor(k)
   if k == notify.FASTEST then return S.colPurple end

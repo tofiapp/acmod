@@ -50,11 +50,16 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
   interpolated between frames. A finished clean lap waits up to 1.5 s for `ac.onLapCompleted`
   (validity, exact time), then becomes the session and/or all-time reference. The all-time one is saved.
 - Delta = `lapTimeMs - grid(u)`, smoothed (0.15 s) with ±20 ms colour hysteresis. The delta line is split in the
-  middle (default): `T.nowDelta` = delta change over the last 3 s (10 Hz ring buffer in `updateTrend`); default
-  reference is the previous fully driven lap (`S.referenceKind = 3`, kind 5). Keep `updateInner` under LuaJIT's
+  middle (default): `T.nowDelta` = delta change over the last 3 s (20 Hz ring buffer in `updateTrend`); default
+  reference is the previous lap (`S.referenceKind = 3`, kind 5), strictly: no saved best, estimate, provisional or AC
+  delta in that mode. The out lap's partial grid becomes the previous lap with an anchor (`prevLapAnchor`, first
+  recorded u); `ownDelta` compares both laps from the common anchor, no delta before it, sectors before it neutral. Keep `updateInner` under LuaJIT's
   60-upvalue limit (move new logic into helper functions).
 - Mini sectors are boundaries at `j / N` in `u`; times are interpolated; purple needs a clean lap and an
   existing best; best sector lists are kept per sector count.
+- Deleted laps (cut on track, or AC's callback says invalid) flash red (`flashKind 5`), never become the flash best,
+  are listed in `deletedLaps` so `T.bestMs` ignores AC's best when it equals one; `T.lastLapMs/lastLapState` feed the
+  timing window's POSL column. AC system messages are translated to Czech in `originals.lua` (`PHRASES`).
 - Out laps, laps that start or pass through the pit lane, and invalid laps are never references. A full lap that
   cannot be a reference (started in the pit lane, cut) is a **provisional** reference until a valid one exists
   (never saved). `activeRef()` order: chosen reference, the other one, provisional.

@@ -142,7 +142,7 @@ for _ = 1, 120 do frame(1) end
 for _ = 1, 600 do frame(1.05) end
 car.isLapValid = false
 driveLaps(1, 1.05)
-check(tracker.flashKind == 4, 'cut lap flashes grey')
+check(tracker.flashKind == 5 and tracker.lastLapState == 2, 'cut lap flashes red as deleted')
 for _ = 1, 120 do frame(1) end
 check(tracker.sessionRefMs == bestBefore, 'cut lap does not become the reference')
 
@@ -628,6 +628,13 @@ do
   check(notify2.get(1).kind == notify2.SYSTEM and notify2.get(1).title == 'ABS', 'AC system message shown as a notification')
   env.callbacks.message('Penalty', 'Cut', 'illegal', 2)
   check(notify2.get(1).kind == notify2.PENALTY, 'illegal message shown as a penalty')
+  check(notify2.get(1).title == 'PENALIZACE' and notify2.get(1).sub == 'Řezání trati',
+    'AC message translated to Czech: ' .. notify2.get(1).title .. ' / ' .. notify2.get(1).sub)
+  env.callbacks.message('Traction Control', 'Level 3', 'info', 2)
+  check(notify2.get(1).title == 'TRAKČNÍ KONTROLA' and notify2.get(1).sub == 'Úroveň 3',
+    'TC message in Czech: ' .. notify2.get(1).title .. ' / ' .. notify2.get(1).sub)
+  env.callbacks.message('Auto Clutch', 'ON', 'info', 2)
+  check(notify2.get(1).sub == 'Zapnuto' and notify2.get(1).title == 'AUTOMATICKÁ SPOJKA', 'ON translated: ' .. notify2.get(1).sub)
   local flags = require('src/flag_window')
   env.sim.raceFlagType = ac.FlagType.Caution
   frame(1)
@@ -710,6 +717,67 @@ do
   check(green >= 1, 'split line draws a green half when gaining')
   config.set('referenceKind', 2)
   config.set('deltaSource', 1)
+  check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
+end
+
+-- 27. Previous lap mode: the out lap compares with nothing (no saved best, no AC delta), the next lap compares
+--     with the out lap from the pit exit on; a lap deleted by AC is red, never the best, shown as the last lap
+do
+  config.set('referenceKind', 3)
+  config.set('deltaSource', 1)
+  car.performanceMeter = 0.3          -- AC's delta exists, it must not be used
+  check(tracker.allTimeRefMs > 0, 'a saved best lap exists for this test')
+  env.callbacks.session(0, false)
+  car.bestLapTimeMs = 0               -- new session: AC has no best lap yet
+  car.isInPitlane = true
+  frame(0.4)
+  car.splinePosition = 0.5            -- pit exit 0.2 of a lap after the line
+  for _ = 1, 30 do frame(0.4) end
+  car.isInPitlane = false
+  local outDelta = false
+  for _ = 1, 600 do frame(1); if tracker.hasDelta then outDelta = true end end
+  check(tracker.partial and tracker.refKind == 0, 'out lap in previous-lap mode has no reference: ' .. tracker.refKind)
+  driveLaps(1, 1, function () if tracker.hasDelta then outDelta = true end end)
+  check(not outDelta, 'no delta on the out lap in previous-lap mode')
+  car.bestLapTimeMs = 0               -- AC never takes an out lap as the best (the mock would)
+  check(tracker.prevLapPartial and tracker.prevLapMs > 0, 'the out lap is kept as the previous lap')
+  local early, late, minD, secEarly, secLate = 0, 0, 1, 0, 0
+  driveLaps(1, 1.03, function ()
+    local u = (car.splinePosition - LINE) % 1
+    if tracker.hasDelta and tracker.refKind == 5 and not tracker.deltaFromAC then
+      if u > 0.01 and u < 0.19 then early = early + 1 elseif u >= 0.19 then late = late + 1; minD = math.min(minD, tracker.delta) end
+    end
+    if u > 0.95 and u < 0.97 then
+      secEarly, secLate = 0, 0
+      for j = 1, 4 do if tracker.secState[j] == 2 or tracker.secState[j] == 3 then secEarly = secEarly + 1 end end
+      for j = 7, 20 do if tracker.secState[j] == 1 or tracker.secState[j] == 2 then secLate = secLate + 1 end end
+    end
+  end)
+  check(early == 0 and late > 1000 and minD < -0.5,
+    string.format('second lap compares with the out lap from the pit exit: %d before, %d after, %.2f s', early, late, minD))
+  check(secEarly == 0 and secLate >= 12, string.format('sectors before the pit exit neutral (%d), after it faster (%d)', secEarly, secLate))
+  check(tracker.lastLapState == 1 and tracker.lastLapMs > 0, 'valid last lap recorded')
+  -- AC deletes the next (fastest) lap after the line, e.g. track limits; AC's best still shows it
+  local realLap = env.callbacks.lap
+  env.callbacks.lap = function (i, ms) realLap(i, ms, false) end
+  driveLaps(1, 1.06)
+  env.callbacks.lap = realLap
+  for _ = 1, 5 do frame(1) end
+  local deleted = tracker.lastLapMs
+  check(tracker.flashKind == 5 and tracker.lastLapState == 2, 'deleted lap flashes red and is marked deleted: ' .. tracker.flashKind)
+  check(near(car.bestLapTimeMs, deleted, 2) and tracker.bestMs ~= car.bestLapTimeMs and tracker.isDeletedLap(deleted),
+    'deleted lap is not shown as the best lap')
+  env.lastTexts = {}
+  env.windowW, env.windowH = 505, 60
+  script.windowTiming(DT)
+  local lastShown = false
+  local str = require('src/draw').formatLap(deleted, 3)
+  for _, t in ipairs(env.lastTexts) do if t == str then lastShown = true end end
+  check(lastShown, 'timing window shows the last lap ' .. str)
+  driveLaps(1, 1.045)                 -- slower than the deleted lap, faster than the best valid one
+  for _ = 1, 5 do frame(1) end
+  check(tracker.flashKind == 1, 'next valid lap is the best, not the deleted one: ' .. tracker.flashKind)
+  config.set('referenceKind', 2)
   check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
 end
 

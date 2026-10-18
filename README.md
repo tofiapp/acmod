@@ -7,7 +7,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 | Okno | Co ukazuje |
 | --- | --- |
 | **MirrorDelta** | Čára mini sektorů, čára delty a delta v sekundách (±) |
-| **MirrorDelta Timing** | Pozice, kolo, aktuální čas a nejrychlejší kolo |
+| **MirrorDelta Timing** | Pozice, kolo, aktuální čas, poslední kolo (smazané červeně) a nejrychlejší kolo |
 | **MirrorDelta Tyres** | Teplota jádra pneumatik a teploty pláště (vnitřní / střed / vnější) |
 | **MirrorDelta Damage** | Poškození ve tvaru auta, 12 vzhledů: karoserie, pneumatiky a stav motoru v % |
 | **MirrorDelta Gear** | Ukazatel otáček z 12 dílků, pod ním převod na barevné dlaždici a pod převodem rychlost |
@@ -18,7 +18,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.10.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.11.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -73,14 +73,15 @@ Nastavení je společné pro všechna okna a má osm záložek.
 - Na omezovači blikají modře čára delty i mini sektory, stejně jako okno s převodem (jde vypnout).
 - Intenzita barvy podle velikosti delty: když je zapnutá, plnou barvu má delta od ±0,5 s (nastavitelné).
 - Zdroj delty:
-  - **Vlastní měření, jinak delta z AC** (výchozí): dokud aplikace nemá vlastní referenci (out lap, první kolo, kolo po resetu), ukazuje deltu, kterou počítá samotné AC.
+  - **Vlastní měření, jinak delta z AC** (výchozí): dokud aplikace nemá vlastní referenci (out lap, první kolo, kolo po resetu), ukazuje deltu, kterou počítá samotné AC (ne v režimu Předchozí kolo).
   - **Jen vlastní měření.**
   - **Jen delta z AC.**
-- Reference: předchozí kolo (výchozí, dokud žádné není, použije se nejlepší), nejlepší kolo této session, nebo nejlepší kolo vůbec (uložené).
+- Reference: předchozí kolo (výchozí), nejlepší kolo této session, nebo nejlepší kolo vůbec (uložené).
+  - **Předchozí kolo** porovnává jen s kolem těsně před tím a s ničím jiným (ani s uloženým kolem, ani s deltou z AC). Out lap tedy deltu nemá. Druhé kolo se porovná s out lapem, a to od místa, kde jste vyjeli z boxů; před tím místem delta není a sektory jsou šedé.
 - Tlačítko **Smazat uložená data** smaže uložené nejlepší kolo a mini sektory pro aktuální auto a trať. Potvrdíte ho druhým kliknutím.
 
 **Časy**
-- Zobrazit: pozici, počet kol, aktuální čas a nejrychlejší čas (každé zvlášť).
+- Zobrazit: pozici, počet kol, aktuální čas, poslední kolo a nejrychlejší čas (každé zvlášť). Smazané poslední kolo je červené.
 - Uspořádání: vedle sebe (výchozí), nebo pod sebou.
 - Zvýraznění nejlepšího kola fialovým rámečkem.
 - Obarvení času po projetí cíle a jak dlouho trvá (výchozí 4 s).
@@ -134,7 +135,8 @@ Nastavení je společné pro všechna okna a má osm záložek.
 
 ### Delta
 
-- Referencí je vaše nejlepší **platné** kolo, podle nastavení buď z této session, nebo nejlepší vůbec. Když zvolená reference není, použije se ta druhá.
+- Výchozí referencí je **předchozí kolo** (i neplatné, i out lap od výjezdu z boxů). Nic jiného se v tomto režimu nepoužije.
+- V režimech nejlepšího kola je referencí vaše nejlepší **platné** kolo, podle nastavení buď z této session, nebo nejlepší vůbec. Když zvolená reference není, použije se ta druhá. Následující čtyři body platí jen pro tyto režimy.
 - Když AC uzná kolo jako své nejlepší a aplikace ho měla celé změřené, stane se referencí, i když ho vlastní kontrola nevzala.
 - Když vlastní reference není, ale AC nejlepší čas zná, běží delta proti tomuto času. Průběh kola se odhadne podle změřeného kola, nebo rovnoměrně.
 - **Od prvního kola:** dokud platné kolo není, slouží jako dočasná reference celé kolo, které platné být nemůže (kolo začínající v boxové uličce nebo kolo s řezáním). První platné kolo ji nahradí. Dočasná reference se nikdy neukládá.
@@ -178,10 +180,11 @@ Nastavení je společné pro všechna okna a má osm záložek.
 | --- | --- |
 | Fialová | Nové nejlepší kolo |
 | Zelená | Rychlejší než předchozí kolo |
-| Červená | Pomalejší než předchozí kolo |
-| Šedá | Out lap nebo neplatné kolo |
+| Červená | Pomalejší než předchozí kolo, nebo smazané kolo (řezání, nebo ho AC po dojetí označilo za neplatné) |
+| Šedá | Out lap nebo kolo z boxové uličky |
 
-Nejrychlejší čas (NEJ) je vaše nejlepší kolo v session podle AC a má fialový rámeček.
+Smazané kolo nikdy není nejrychlejší, ani když ho AC ukáže jako svůj nejlepší čas. Sloupec POSL ukazuje poslední kolo, smazané červeně.
+Nejrychlejší čas (NEJ) je vaše nejlepší kolo v session podle AC (bez smazaných kol) a má fialový rámeček.
 
 ### Teploty pneumatik
 
