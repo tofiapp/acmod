@@ -18,7 +18,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.8.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.9.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -68,14 +68,14 @@ Nastavení je společné pro všechna okna a má osm záložek.
   - **B** (výchozí): mini sektory nahoře, čára delty uprostřed, čas dole.
 - Počet mini sektorů (výchozí 24), počet skupin (výchozí 3, tedy 8 | 8 | 8) a mezera mezi skupinami.
 - Tloušťka čar, mezera mezi čarami, velikost čísla a průhlednost. Hodnoty v pixelech platí pro okno široké 600 px a se šířkou okna se škálují.
-- Barva čáry delty (výchozí): podle aktuálního mini sektoru. Zelená znamená, že v úseku, kterým jedete, právě získáváte. Červená znamená, že právě ztrácíte. Číslo pod čarou dál ukazuje celkovou deltu. Jde přepnout na barvu podle celkové delty.
+- Čára delty (výchozí) je rozdělená uprostřed jako původní ukazatel AC. Doprava roste zelená, když teď jedete rychleji než v referenčním kole, doleva červená, když pomaleji. Porovnává se posledních zhruba 3 sekund jízdy, ne celkový čas. Plná délka na jednu stranu odpovídá rozdílu 0,1 s (nastavitelné). Číslo pod čarou ukazuje celkovou deltu. Jde přepnout na celou čáru barvou podle celkové delty.
 - Na omezovači blikají modře čára delty i mini sektory, stejně jako okno s převodem (jde vypnout).
 - Intenzita barvy podle velikosti delty: když je zapnutá, plnou barvu má delta od ±0,5 s (nastavitelné).
 - Zdroj delty:
   - **Vlastní měření, jinak delta z AC** (výchozí): dokud aplikace nemá vlastní referenci (out lap, první kolo, kolo po resetu), ukazuje deltu, kterou počítá samotné AC.
   - **Jen vlastní měření.**
   - **Jen delta z AC.**
-- Reference: nejlepší kolo této session, nebo nejlepší kolo vůbec (uložené).
+- Reference: předchozí kolo (výchozí, dokud žádné není, použije se nejlepší), nejlepší kolo této session, nebo nejlepší kolo vůbec (uložené).
 - Tlačítko **Smazat uložená data** smaže uložené nejlepší kolo a mini sektory pro aktuální auto a trať. Potvrdíte ho druhým kliknutím.
 
 **Časy**

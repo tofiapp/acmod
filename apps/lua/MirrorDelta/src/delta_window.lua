@@ -116,7 +116,30 @@ local function lineColor()
   return tracker.liveSign < 0 and S.colGreen or S.colRed
 end
 
+-- Split line (default): the middle is "same as the reference right now"; green grows to the right while you
+-- gain over the last 3 s, red grows to the left while you lose.
+local SPLIT_TICK = rgbm(0.95, 0.96, 0.97, 1)
+local function drawSplit(x, y, w, h, blink)
+  if blink then
+    D.rect(x, y, x + w, y + h, D.color(LIMITER_BLUE, S.opacity))
+    return
+  end
+  D.rect(x, y, x + w, y + h, D.color(S.colIdle, S.opacity))
+  local cx = x + w / 2
+  if tracker.hasDelta then
+    local k = math.max(-1, math.min(1, tracker.nowDelta / math.max(0.01, S.splitFull)))
+    if k < 0 then
+      D.rect(cx, y, cx - k * w / 2, y + h, D.color(S.colGreen, S.opacity))
+    elseif k > 0 then
+      D.rect(cx - k * w / 2, y, cx, y + h, D.color(S.colRed, S.opacity))
+    end
+  end
+  local t = math.max(1, h * 0.18)
+  D.rect(cx - t / 2, y - h * 0.3, cx + t / 2, y + h * 1.3, D.color(SPLIT_TICK, S.opacity))
+end
+
 local function drawLine(x, y, w, h, blink)
+  if S.deltaLineMode ~= 2 then return drawSplit(x, y, w, h, blink) end
   local alpha = S.opacity
   if S.intensityByDelta and tracker.hasDelta then
     local k

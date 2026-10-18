@@ -22,7 +22,6 @@ local STACK_GAP = 3
 local LABEL_COLOR = rgbm(0.76, 0.79, 0.84, 1)
 local BEST_TEXT = rgbm(0.89, 0.8, 1, 1)
 local PILL_FILL = rgbm(0.06, 0.03, 0.1, 0.72)
-local PLATE = rgbm(0.03, 0.04, 0.055, 0.6)
 local WHITE = rgbm(1, 1, 1, 1)
 
 local numStrings, lapStrings = {}, {}
@@ -166,7 +165,7 @@ function M.draw()
   if n == 0 or w <= 0 or h <= 0 then return end
   local sc = math.min(w / baseW, h / baseH)
   ui.pushDWriteFont(D.FONT)
-  if S.timingPlate then D.rect(0, 0, baseW * sc, baseH * sc, D.color(PLATE, S.opacity), 8 * sc) end
+  if S.timingPanel then D.panel(0, 0, baseW * sc, baseH * sc, 8 * sc) end
   local pad, pillPad = PAD * sc, PILL * sc
   if S.timingLayout == 1 then
     local y, first = pad, true

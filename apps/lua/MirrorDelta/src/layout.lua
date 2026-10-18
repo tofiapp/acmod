@@ -5,17 +5,18 @@
 local config = require('src/config')
 local S = config.S
 
-local LAYOUT_VERSION = 2
+local LAYOUT_VERSION = 4
 
--- Each window's top left corner: offset from the screen centre ('c') or from the top right corner ('tr'), px,
+-- Each window's top left corner: offset from the screen centre ('c'), the top right corner ('tr') or the left edge
+-- at the vertical middle ('l'), px,
 -- and the layout version that introduced it (an update places only windows that are new to the user).
 local PLACES = {
-  ['MirrorDelta Notifications'] = { -260, -400, 'c', 1 },
+  ['MirrorDelta Notifications'] = { -550, 125, 'tr', 3 },   -- under the flag, right edges aligned
   ['MirrorDelta'] = { -300, -270, 'c', 1 },
   ['MirrorDelta Timing'] = { -195, -170, 'c', 1 },
   ['MirrorDelta Tyres'] = { -460, 60, 'c', 1 },
   ['MirrorDelta Gear'] = { -130, 90, 'c', 1 },
-  ['MirrorDelta Damage'] = { 280, 40, 'c', 1 },
+  ['MirrorDelta Damage'] = { 30, -100, 'l', 4 },            -- left edge, vertical middle
   ['MirrorDelta Flags'] = { -290, 40, 'tr', 2 },
 }
 
@@ -34,8 +35,9 @@ function M.arrange(after)
     if place and place[4] > after then
       local window = ac.accessAppWindow(v.name)
       if window then
-        local x = place[3] == 'tr' and screen.x + place[1] or cx + place[1]
-        local y = place[3] == 'tr' and place[2] or cy + place[2]
+        local anchor = place[3]
+        local x = anchor == 'tr' and screen.x + place[1] or anchor == 'l' and place[1] or cx + place[1]
+        local y = anchor == 'tr' and place[2] or cy + place[2]
         window:move(vec2(math.max(0, x), math.max(0, y)))
         window:setVisible(true)
         placed = placed + 1

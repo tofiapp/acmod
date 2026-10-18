@@ -16,9 +16,10 @@ local defaults = {
   opacity = 1,
   intensityByDelta = false,
   intensityFullAt = 0.5,    -- seconds of delta for full colour
-  referenceMode = 2,        -- 1: best lap of this session, 2: all-time best lap (saved)
+  referenceKind = 3,        -- 1: best lap of this session, 2: all-time best lap (saved), 3: previous lap (best until there is one)
   deltaLimiterFlash = true, -- the delta line and the mini sectors blink blue at the rev limiter, like the gear window
-  deltaLineMode = 1,        -- 1: line colour = live mini sector (green gaining now, red losing now), 2: total delta
+  deltaLineMode = 1,        -- 1: split line (green to the right gaining now, red to the left losing now), 2: colour by total delta
+  splitFull = 0.1,          -- s gained or lost over the last 3 s for a full half of the split line
   deltaSource = 1,          -- 1: own measurement, AC's delta when it has none; 2: own only; 3: AC only
 
   -- Timing window
@@ -30,7 +31,7 @@ local defaults = {
   bestHighlight = true,
   lapFlash = true,
   lapFlashTime = 4,         -- seconds
-  timingPlate = false,
+  timingPanel = true,       -- matte translucent background sized to the content
 
   -- Tyres window
   tyreStyle = 1,            -- 1: big core numbers + zone bar, 2: big core number + tyre + three zone numbers
@@ -39,7 +40,7 @@ local defaults = {
   tyreZones = true,
   tyreOptimumAuto = true,   -- use the optimum temperature of the car's tyres when CSP provides it
   tyreOptimum = 85,         -- fallback optimum, °C
-  tyresPlate = false,
+  tyresPanel = true,        -- matte translucent background sized to the content
 
   -- Gear window
   gearShowBar = true,
@@ -50,14 +51,15 @@ local defaults = {
   gearPlate = false,
 
   -- Damage window
-  damageAutoHide = false,   -- show the window only when something is damaged
+  damageShow = 3,           -- 1: always, 2: while something is damaged, 3: for damageShowTime s after a hit
+  damageShowTime = 8,       -- s
   damageFull = 50,          -- raw car.damage value drawn as full red
-  damagePlate = false,
-  damageStyle = 1,          -- 1..12, see damage_window.STYLE_NAMES
+  damagePanel = true,       -- matte translucent background
+  damageView = 13,          -- 1..13, see damage_window.STYLE_NAMES (13: car outline with gaps)
   damageHideOriginal = true, -- hide AC's own damage display while this window is open
 
   -- Notification window
-  notifyStyle = 1,          -- 1: rounded pill, 2: slanted strip, 3: thin line
+  notifyLook = 4,           -- 1: rounded pill, 2: slanted strip, 3: thin line, 4: top right corner next to the flag
   notifyTime = 4.5,         -- seconds a notification stays
   notifyCount = 2,          -- notifications shown at once
   notifyFastest = true,     -- fastest lap of the session (any car)
@@ -71,6 +73,7 @@ local defaults = {
   notifyConnections = true, -- driver disconnected (online)
   notifyRaceOnly = true,    -- positions and pits only in a race session
 
+  panelOpacity = 0.4,       -- how dark the matte backgrounds are (0 = clear, 1 = solid)
   layoutVersion = 0,        -- windows were opened and placed around the screen centre for this layout version
 
   -- Colours
@@ -102,7 +105,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.8.0' }
+local M = { S = S, defaults = defaults, VERSION = '1.9.0' }
 
 function M.set(key, value)
   S[key] = value

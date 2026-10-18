@@ -70,7 +70,7 @@ M.car = {
 for i = 0, 3 do
   M.car.wheels[i] = {
     tyreCoreTemperature = 80 + i, tyreInsideTemperature = 90, tyreMiddleTemperature = 85,
-    tyreOutsideTemperature = 78, tyreOptimumTemperature = 88, tyreWear = 0.1, isBlown = false,
+    tyreOutsideTemperature = 78, tyreOptimumTemperature = 88, tyreWear = 0.1, isBlown = false, suspensionDamage = 0,
   }
 end
 M.sim = { isReplayActive = false, isPaused = false, carsCount = 12, currentSessionIndex = 0, damageDisplayerShown = true, raceFlagType = 0 }

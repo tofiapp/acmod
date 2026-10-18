@@ -84,10 +84,11 @@ local function tabDelta()
   slider('lineGap', 'Mezera mezi čarami', 0, 30, '%.1f px', 0.5)
   slider('numberSize', 'Velikost čísla', 9, 60, '%.0f px', 1)
   slider('opacity', 'Průhlednost', 0.1, 1, '%.2f')
-  combo('deltaLineMode', 'Barva čáry delty', {
-    'Podle aktuálního úseku: zelená = teď rychlejší, červená = teď pomalejší',
-    'Podle celkové delty',
+  combo('deltaLineMode', 'Čára delty', {
+    'Rozdělená uprostřed: doprava zelená = teď rychleji, doleva červená = teď pomaleji',
+    'Celá čára barvou podle celkové delty',
   })
+  if S.deltaLineMode == 1 then slider('splitFull', 'Plná délka čáry při rozdílu', 0.03, 0.5, '%.2f s za 3 s') end
   checkbox('deltaLimiterFlash', 'Na omezovači blikat modře: čára delty i mini sektory')
   checkbox('intensityByDelta', 'Intenzita barvy podle velikosti delty')
   if S.intensityByDelta then
@@ -100,7 +101,7 @@ local function tabDelta()
     'Jen vlastní měření',
     'Jen delta z AC',
   })
-  combo('referenceMode', 'Porovnávat s', { 'Nejlepší kolo této session', 'Nejlepší kolo vůbec (uložené)' })
+  combo('referenceKind', 'Porovnávat s', { 'Nejlepší kolo této session', 'Nejlepší kolo vůbec (uložené)', 'Předchozí kolo' })
   ui.text('Session: ' .. D.formatLap(tracker.sessionRefMs, 3) .. '    Vůbec: ' .. D.formatLap(tracker.allTimeRefMs, 3))
   ui.textWrapped('Data pro toto auto a trať: ' .. tracker.dataFile())
   if os.preciseClock() < confirmClearUntil then
@@ -127,7 +128,7 @@ local function tabTiming()
   if S.lapFlash then
     slider('lapFlashTime', 'Jak dlouho', 1, 10, '%.0f s', 1)
   end
-  checkbox('timingPlate', 'Tmavý podklad')
+  checkbox('timingPanel', 'Matné průhledné pozadí')
 end
 
 local function tabTyres()
@@ -139,7 +140,7 @@ local function tabTyres()
   gap()
   checkbox('tyreNumbers', 'Teplota jádra (velké číslo)')
   checkbox('tyreZones', 'Zóny pláště (vnitřní / střed / vnější)')
-  checkbox('tyresPlate', 'Tmavý podklad')
+  checkbox('tyresPanel', 'Matné průhledné pozadí')
   gap()
   ui.header('Optimální teplota')
   checkbox('tyreOptimumAuto', 'Podle auta (pokud ji CSP poskytuje)')
@@ -181,11 +182,13 @@ local function tabGear()
 end
 
 local function tabDamage()
-  combo('damageStyle', 'Vzhled', damage.STYLE_NAMES)
+  combo('damageView', 'Vzhled', damage.STYLE_NAMES)
   gap()
   ui.header('Zobrazit')
-  checkbox('damageAutoHide', 'Ukázat jen při poškození')
-  checkbox('damagePlate', 'Tmavý podklad')
+  combo('damageShow', 'Kdy ukázat', { 'Vždy', 'Dokud je něco poškozené', 'Jen po nárazu (jako v AC)' })
+  if S.damageShow == 3 then slider('damageShowTime', 'Po nárazu zůstane', 3, 20, '%.0f s', 1) end
+  ui.textWrapped('Při najetí myší je okno vidět vždy, ať ho jde přesunout.')
+  checkbox('damagePanel', 'Matné průhledné pozadí')
   checkbox('damageHideOriginal', 'Skrýt původní ukazatel poškození z AC, když je toto okno otevřené')
   gap()
   ui.header('Citlivost')
@@ -198,10 +201,12 @@ local function tabDamage()
   end
   ui.textWrapped('Kola ukazují pneumatiky: opotřebení (od žluté po červenou) a defekt (červená).'
     .. (damage.wheelFieldsOk() == false and ' Tato verze CSP stav pneumatik neposkytuje.' or ''))
+  ui.textWrapped('Zavěšení (pružiny uvnitř obrysu): '
+    .. (damage.suspensionFieldOk() == false and 'tato verze CSP poškození zavěšení neposkytuje, zůstává šedé.' or 'podle poškození zavěšení z AC.'))
 end
 
 local function tabNotify()
-  combo('notifyStyle', 'Vzhled', { 'Zaoblená pilulka', 'Šikmý pruh', 'Tenká linka' })
+  combo('notifyLook', 'Vzhled', { 'Zaoblená pilulka', 'Šikmý pruh', 'Tenká linka', 'Pravý horní roh (u vlajky)' })
   slider('notifyTime', 'Jak dlouho', 2, 10, '%.1f s', 0.5)
   slider('notifyCount', 'Najednou nejvýš', 1, 3, '%.0f', 1)
   if ui.button('Ukázat ukázku') then notify.demo() end
@@ -227,7 +232,8 @@ local function tabNotify()
 end
 
 local function yesNo(v) return v and 'ano' or 'ne' end
-local REF_KINDS = { 'žádná', 'nejlepší kolo session', 'nejlepší kolo vůbec', 'dočasné kolo (out lap / neplatné)' }
+local REF_KINDS = { 'žádná', 'nejlepší kolo session', 'nejlepší kolo vůbec', 'dočasné kolo (out lap / neplatné)',
+  'nejlepší čas z AC (odhad)', 'předchozí kolo' }
 
 local function tabDiagnostics()
   local d = tracker.diag
@@ -271,6 +277,8 @@ local function tabColors()
   for i = 1, #COLOR_KEYS do
     colorPicker(COLOR_KEYS[i][1], COLOR_KEYS[i][2])
   end
+  gap()
+  slider('panelOpacity', 'Matné pozadí: sytost', 0, 0.9, '%.2f')
   gap()
   if ui.button('Obnovit výchozí barvy') then
     for i = 1, #COLOR_KEYS do config.reset(COLOR_KEYS[i][1]) end

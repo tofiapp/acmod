@@ -33,6 +33,7 @@ local function speed(p) -- spline units per second, varies around the lap
 end
 
 local tracker = loadApp()
+require('src/config').set('referenceKind', 2)   -- most checks below are written against the best lap
 
 local lateLapTime = false   -- AC updating previousLapTimeMs one frame late
 local lateCallback = false  -- ac.onLapCompleted arriving one frame late
@@ -200,7 +201,7 @@ local ok, err = pcall(function ()
     env.windowW, env.windowH = 150, 168
     car.damage[0], car.damage[2] = layout == 1 and 0 or 30, layout == 1 and 80 or 0
     car.engineLifeLeft = layout == 1 and 1000 or 420
-    config.set('damageAutoHide', layout == 2)
+    config.set('damageShow', layout == 2 and 2 or 1)
     script.windowDamage(DT)
     env.windowW, env.windowH = 520, 110
     script.windowNotify(DT)
@@ -259,7 +260,7 @@ local saved = tracker.allTimeRefMs
 env.callbacks.release()
 tracker = loadApp()
 config = require('src/config')
-config.set('referenceMode', 2)
+config.set('referenceKind', 2)
 env.callbacks.session(0, false)
 frame(1)
 check(tracker.allTimeRefMs == saved, 'all-time reference loaded from disk')
@@ -374,7 +375,7 @@ do
   ui.dwriteTextAligned = function () end
   env.windowW, env.windowH = 520, 110
   local ok2, err2 = pcall(function ()
-    for style = 1, 3 do config.set('notifyStyle', style); notifyWindow.draw() end
+    for style = 1, 4 do config.set('notifyLook', style); notifyWindow.draw() end
   end)
   check(ok2, 'notification window draws all styles: ' .. tostring(err2))
   check((env.calls.quad or 0) >= 2, 'slanted strip uses quads')
@@ -389,7 +390,7 @@ do
   jit.on()
   ui.dwriteTextAligned = savedText
   check(perFrame < 1, string.format('notification window allocation %.1f bytes per frame', perFrame))
-  config.set('notifyStyle', 1)
+  config.set('notifyLook', 4)
 end
 check(tracker.diag.error == nil, 'no script errors after notifications: ' .. tostring(tracker.diag.error))
 
@@ -555,18 +556,18 @@ do
   car.damage[0], car.damage[1], car.damage[2], car.damage[3] = 20, 0, 45, 5
   car.engineLifeLeft = 640
   car.wheels[1].isBlown = true
-  config.set('damageAutoHide', false)
+  config.set('damageShow', 1)
   local ok3, err3 = pcall(function ()
-    for style = 1, 12 do config.set('damageStyle', style); damage.draw() end
+    for style = 1, 13 do config.set('damageView', style); damage.draw() end
     car.damage[1] = 40                -- a fresh hit: the rear flashes
-    for style = 1, 12 do config.set('damageStyle', style); damage.draw() end
+    for style = 1, 13 do config.set('damageView', style); damage.draw() end
   end)
   check(ok3, 'all damage styles draw: ' .. tostring(err3))
   check((env.clipDepth or 0) == 0, 'damage styles pop every clip rect')
-  check(#damage.STYLE_NAMES == 12, 'twelve damage style names')
+  check(#damage.STYLE_NAMES == 13, 'thirteen damage style names')
   local worst, worstStyle = 0, 0
-  for style = 1, 12 do
-    config.set('damageStyle', style)
+  for style = 1, 13 do
+    config.set('damageView', style)
     for _ = 1, 20 do damage.draw() end
     jit.off()
     collectgarbage('collect')
@@ -583,26 +584,26 @@ do
   car.wheels[1].isBlown = false
   car.damage[0], car.damage[1], car.damage[2], car.damage[3] = 0, 0, 0, 0
   car.engineLifeLeft = 1000
-  config.set('damageStyle', 1)
+  config.set('damageView', 1)
 end
 
 -- 22. Clicking the damage window switches to the next style; windows get placed around the screen centre once
 do
   local damage = require('src/damage_window')
-  config.set('damageStyle', 12)
+  config.set('damageView', 13)
   env.hovered, env.clicked = true, true
   env.windowW, env.windowH = 160, 200
   damage.draw()
   env.hovered, env.clicked = false, false
-  check(config.S.damageStyle == 1, 'click on the damage window cycles the style: ' .. config.S.damageStyle)
+  check(config.S.damageView == 1, 'click on the damage window cycles the style: ' .. config.S.damageView)
   config.set('layoutVersion', 0)
   for _ = 1, 300 do frame(1) end      -- arranged a few seconds after start
   local moved = 0
   for _ in pairs(env.moved or {}) do moved = moved + 1 end
-  check(moved == 7 and config.S.layoutVersion == 2, 'all seven windows placed: ' .. moved)
+  check(moved == 7 and config.S.layoutVersion == 4, 'all seven windows placed: ' .. moved)
+  check(env.moved.w6 and env.moved.w6.x > 1300 and env.moved.w6.y > 100 and env.moved.w6.y < 200, 'notifications under the flag')
+  check(env.moved.w5 and env.moved.w5.x < 100 and env.moved.w5.y > 300 and env.moved.w5.y < 600, 'damage window at the left edge, vertical middle')
   check(env.moved.w7 and env.moved.w7.x > 1500 and env.moved.w7.y < 100, 'flag window in the top right corner')
-  local p = env.moved.w5
-  check(p and p.x > 960 and p.y > 400 and p.y < 700, 'damage window right of the centre')
   env.moved = nil
   for _ = 1, 300 do frame(1) end
   check(env.moved == nil, 'windows are placed only once')
@@ -648,6 +649,63 @@ do
   env.sim.raceFlagType = 0
   frame(1)
   check(notify2.flagKind == 0, 'flag cleared')
+end
+
+-- 25. Damage window shows up only after a hit by default, and hides again
+do
+  local damage = require('src/damage_window')
+  config.set('damageShow', 3)
+  env.windowW, env.windowH = 160, 200
+  local function drawn()
+    local before = env.calls.rect or 0
+    damage.draw()
+    return (env.calls.rect or 0) > before
+  end
+  car.damage[0] = 0
+  for _ = 1, 30 do frame(1); damage.draw() end
+  for _ = 1, 600 do frame(1) end
+  check(not drawn(), 'damage window hidden without a hit')
+  car.damage[0] = 30
+  check(drawn(), 'damage window appears after a hit')
+  for _ = 1, 9 * 60 do frame(1) end
+  check(not drawn(), 'damage window hides again after a few seconds')
+  car.damage[0] = 0
+  config.set('damageShow', 1)
+end
+
+-- 26. Previous lap as the reference, and the split line follows what happens right now
+do
+  config.set('referenceKind', 3)
+  config.set('deltaSource', 2)
+  driveLaps(1, 1)                     -- lap at pace 1 becomes "the previous lap"
+  check(tracker.prevLapMs > 0, 'previous lap recorded')
+  local gain, lose, frames = 0, 0, 0
+  driveLaps(1, 1.02, function ()     -- faster than the previous lap all the way
+    if tracker.hasDelta then
+      frames = frames + 1
+      if tracker.refKind == 5 and tracker.nowDelta < 0 then gain = gain + 1 end
+    end
+  end)
+  check(gain > frames * 0.8, string.format('split line gains against the previous lap: %d of %d', gain, frames))
+  driveLaps(1, 0.97, function ()     -- now slower than that faster lap
+    if tracker.hasDelta and tracker.nowDelta > 0 then lose = lose + 1 end
+  end)
+  check(lose > frames * 0.6, 'split line loses when slower than the previous lap: ' .. lose)
+  -- the split line draws: green half when gaining
+  local green = 0
+  local saved = ui.drawRectFilled
+  ui.drawRectFilled = function (p1, p2, color)
+    if math.abs(color.g - config.S.colGreen.g) < 0.01 and math.abs(color.r - config.S.colGreen.r) < 0.01 then green = green + 1 end
+  end
+  tracker.nowDelta, tracker.hasDelta = -0.05, true
+  car.rpm = 6000
+  env.windowW, env.windowH = 600, 80
+  require('src/delta_window').draw()
+  ui.drawRectFilled = saved
+  check(green >= 1, 'split line draws a green half when gaining')
+  config.set('referenceKind', 2)
+  config.set('deltaSource', 1)
+  check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
 end
 
 print(string.format('%d passed, %d failed', passed, failed))

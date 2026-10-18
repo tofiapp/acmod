@@ -90,7 +90,31 @@ local function drawLine(e, idx, a, slide, sc, w)
   D.rect((w - lw) / 2, y + 26 * sc, (w + lw) / 2, y + 30 * sc, D.color(kindColor(e.kind), a), 2 * sc)
 end
 
-local STYLES = { drawPill, drawStrip, drawLine }
+-- 4: top right corner, next to the flag: coloured tag tile at the right edge, title and text to its left,
+-- a matte translucent panel sized to the text. Text widths are measured once per event (base sizes).
+local TITLE_SIZE, SUB_SIZE = 13, 18
+local function measure(e)
+  if e.measuredFor ~= e.born then
+    e.measuredFor = e.born
+    e.textW = math.max(ui.measureDWriteText(e.title, TITLE_SIZE).x, ui.measureDWriteText(e.sub, SUB_SIZE).x)
+  end
+  return e.textW
+end
+local function drawCorner(e, idx, a, slide, sc, w)
+  local k = e.kind
+  local R = w - 4 * sc + slide * 60 * sc
+  local y = (6 + idx * 48) * sc
+  local textW = measure(e) * sc
+  local textR = R - 56 * sc
+  D.panel(textR - textW - 12 * sc, y - 4 * sc, R + 4 * sc, y + 38 * sc, 8 * sc, a)
+  D.rect(R - 44 * sc, y, R, y + 34 * sc, D.color(kindColor(k), a), 8 * sc)
+  D.text(TAGS[k], 16 * sc, R - 44 * sc, y, 44 * sc, 34 * sc, D.ALIGN_CENTER, D.color(tagInk(k), a))
+  local titleCol = (k == notify.SYSTEM or k == notify.BLACK) and S.colText or kindColor(k)
+  D.text(e.title, TITLE_SIZE * sc, textR - textW, y, textW, 16 * sc, D.ALIGN_END, D.color(titleCol, a))
+  D.text(e.sub, SUB_SIZE * sc, textR - textW - 40 * sc, y + 13 * sc, textW + 40 * sc, 22 * sc, D.ALIGN_END, D.color(S.colText, a))
+end
+
+local STYLES = { drawPill, drawStrip, drawLine, drawCorner }
 
 local M = {}
 
@@ -99,7 +123,7 @@ function M.draw()
   if w <= 0 then return end
   local sc = w / BASE_W
   local now = os.preciseClock()
-  local style = STYLES[S.notifyStyle] or drawPill
+  local style = STYLES[S.notifyLook] or drawCorner
   ui.pushDWriteFont(D.FONT)
   local shown = 0
   for i = 1, 8 do

@@ -25,6 +25,21 @@ function D.color(base, alpha)
   return tint
 end
 
+-- Matte translucent panel behind a widget: a tinted rectangle the game shows through, with a faint top edge.
+-- (CSP's ui.beginBlurring only blurs what the window draws itself, not the scene behind it.)
+local PANEL = rgbm(0.07, 0.08, 0.1, 0.4)
+local PANEL_EDGE = rgbm(1, 1, 1, 0.1)
+local pa, pb = vec2(), vec2()
+local S = require('src/config').S
+function D.panel(x1, y1, x2, y2, rounding, opacity)
+  local a = (opacity or 1) * S.opacity
+  PANEL.mult = S.panelOpacity * a
+  PANEL_EDGE.mult = 0.1 * a
+  rounding = rounding or 0
+  ui.drawRectFilled(pa:set(x1, y1), pb:set(x2, y2), PANEL, rounding)
+  ui.drawRectFilled(pa:set(x1 + rounding, y1), pb:set(x2 - rounding, y1 + 1), PANEL_EDGE, 0)
+end
+
 function D.rect(x1, y1, x2, y2, color, rounding)
   ui.drawRectFilled(p1:set(x1, y1), p2:set(x2, y2), color, rounding or 0)
 end

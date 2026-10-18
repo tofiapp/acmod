@@ -22,6 +22,14 @@ local shownKind, since = 0, 0
 local ox, sc = 0, 1
 local center = vec2()
 local function X(v) return ox + v * sc end
+local textWidth = {}            -- [size][string] -> width at base size, measured once per string
+local function widthOf(str, size)
+  local bySize = textWidth[size]
+  if not bySize then bySize = {}; textWidth[size] = bySize end
+  local wd = bySize[str]
+  if not wd then wd = ui.measureDWriteText(str, size).x; bySize[str] = wd end
+  return wd
+end
 
 local function flagColor(kind)
   if kind == notify.YELLOW then return YELLOW end
@@ -51,8 +59,12 @@ function M.draw()
   local t = now - since
   if not sample and t < 2 and math.floor(t * 4) % 2 == 1 then alpha = alpha * 0.45 end
 
-  -- flag on a pole at the right edge
+  -- flag on a pole at the right edge, matte panel behind the flag and the text
   local fx, fy, fw, fh = 176, 10, 70, 50
+  ui.pushDWriteFont(D.FONT)
+  local tw = math.max(widthOf(title, 20), widthOf(sub, 13))
+  ui.popDWriteFont()
+  D.panel(X(fx - 10) - tw * sc - 12 * sc, 2 * sc, X(fx + fw + 12), 78 * sc, 8 * sc, alpha / S.opacity)
   D.rect(X(fx + fw), fy * sc, X(fx + fw + 4), (fy + 64) * sc, D.color(POLE, alpha), 2 * sc)
   if kind == notify.FINISH then
     local cw, ch = fw / 6, fh / 4

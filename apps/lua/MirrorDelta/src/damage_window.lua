@@ -319,15 +319,17 @@ local THERMAL_TEXT = C(0.78, 0.84, 1, 0.9)
 local LIGHT_BAR = C(0.043, 0.05, 0.063)
 local MUD = C(0.7, 0.15, 0.12)
 
-local level = { 0, 0, 0, 0, 0, 0, 0, 0 }         -- 0..1 per zone key
-local prevLevel = { 0, 0, 0, 0, 0, 0, 0, 0 }
-local hitAt = { -100, -100, -100, -100, -100, -100, -100, -100 }
+-- zone keys: 1..4 body (front, rear, left, right), 5..8 tyres (FL, FR, RL, RR), 9..12 suspension (FL, FR, RL, RR)
+local KEYS = 12
+local level, prevLevel, hitAt = {}, {}, {}
+for k = 1, KEYS do level[k], prevLevel[k], hitAt[k] = 0, 0, -100 end
 local zc = {}                                     -- per zone key colour object, refilled before each use
-for i = 1, 8 do zc[i] = rgbm() end
+for i = 1, KEYS do zc[i] = rgbm() end
 local tmp = rgbm()
 local enginePct = 100
 local now = 0
 local started = false
+local lastHit = -1000
 
 local function opa(c) return D.color(c, S.opacity) end
 
@@ -792,6 +794,54 @@ STYLES[12] = function ()
   textB('MOTOR', 80, 117, 6.5, opa(THERMAL_LINE), 34, D.FONT)
 end
 
+-- 13 car outline in four parts with gaps (the chosen one): tyres outside the outline,
+-- a coil-over for each wheel's suspension inside it; nothing overlaps.
+local HUD_IDLE = C(0.91, 0.93, 0.95, 0.6)
+local HUD_TYRE = C(0.04, 0.047, 0.06, 0.85)
+local HUD_TYRES = { 19, 58, 141, 58, 18, 152, 142, 152 }
+local HUD_SPRING_X = { 44, 116, 44, 116 }
+local HUD_SIDE = { 1, -1, 1, -1 }
+local HUD_SPRINGS = {}
+for i = 1, 4 do
+  local x0, y, side = HUD_SPRING_X[i], HUD_TYRES[i * 2], HUD_SIDE[i]
+  local x1, n = x0 + side * 18, 6
+  local pts = { x0, y }
+  for k = 0, n - 1 do
+    pts[#pts + 1], pts[#pts + 2] = x0 + (x1 - x0) / n * (k + 0.5), y + (k % 2 == 0 and -4 or 4)
+  end
+  pts[#pts + 1], pts[#pts + 2] = x1, y
+  HUD_SPRINGS[i] = pts
+end
+local HUD_GAP = 6
+local HUD_CLIPS = { 0, 0, 160, 52 - HUD_GAP, 0, 158 + HUD_GAP, 160, 200, 0, 52 + HUD_GAP, 62 - HUD_GAP, 158 - HUD_GAP,
+  98 + HUD_GAP, 52 + HUD_GAP, 160, 158 - HUD_GAP }
+
+STYLES[13] = function ()
+  for i = 1, 4 do
+    local x, y = HUD_TYRES[i * 2 - 1], HUD_TYRES[i * 2]
+    local tk, sk = 4 + i, 8 + i
+    -- suspension: mounts and spring, coloured by suspension damage
+    local x0, x1 = HUD_SPRING_X[i], HUD_SPRING_X[i] + HUD_SIDE[i] * 18
+    local w = hot(sk) and 3 or 2
+    local c = hot(sk) and zcol(sk, HUD_IDLE) or opa(HUD_IDLE)
+    lineB(x0, y - 6, x0, y + 6, c, w)
+    lineB(x1, y - 6, x1, y + 6, c, w)
+    strokeB(HUD_SPRINGS[i], c, w, false)
+    -- tyre: dark when fine, coloured when worn or punctured
+    rectB(x - 7, y - 16, 14, 32, hot(tk) and zcol(tk, HUD_TYRE) or opa(HUD_TYRE), 5)
+    rectOutlineB(x - 7, y - 16, 14, 32, hot(tk) and zcol(tk, HUD_IDLE) or opa(HUD_IDLE), 5, 2)
+  end
+  for k = FRONT, RIGHT do
+    local j = (k - 1) * 4
+    clipB(HUD_CLIPS[j + 1], HUD_CLIPS[j + 2], HUD_CLIPS[j + 3], HUD_CLIPS[j + 4])
+    if hot(k) then strokeB(GT_OUT, zcol(k, HUD_IDLE), 7) else strokeB(GT_OUT, opa(HUD_IDLE), 4) end
+    ui.popClipRect()
+  end
+  local tile = engineTile()
+  textB(pctText(), 80, 100, 22, opa(enginePct >= 95 and TILE_WHITE or tile), 64, D.FONT_GEAR)
+  textB('MOTOR', 80, 121, 8, opa(LABEL), 50, D.FONT)
+end
+
 -- ---------------------------------------------------------------- inputs
 
 -- 0 = undamaged, 1 = at the configured full damage
@@ -811,6 +861,17 @@ local function wheelLevel(car, i)
   return math.max(0, math.min(1, (w.tyreWear - 0.25) / 0.6))
 end
 
+-- Suspension damage per wheel (0..1). Not seen in an official app, so read under pcall; without it the
+-- suspension stays idle.
+local suspFieldOk = nil
+local function suspensionLevel(car, i)
+  if suspFieldOk == nil then
+    suspFieldOk = pcall(function () return car.wheels[0].suspensionDamage + 0 end)
+  end
+  if not suspFieldOk then return 0 end
+  return math.max(0, math.min(1, car.wheels[i].suspensionDamage))
+end
+
 -- AC's own damage displayer is toggled by a sim key command (same as the official Unbound app).
 -- Retry at most once a second, so a toggle that has not applied yet is not undone by the next frame.
 local nextHideAttempt = 0
@@ -827,12 +888,14 @@ end
 local M = {}
 
 M.STYLE_NAMES = { 'GT shora', 'Neonový obrys', 'Oba boky', 'Formule', 'LMP prototyp', 'Výkres',
-  'Segmenty jako v AC', 'Rallye hatchback', 'Pohled zezadu', 'Piktogram', 'Drátěný model', 'Termokamera' }
+  'Segmenty jako v AC', 'Rallye hatchback', 'Pohled zezadu', 'Piktogram', 'Drátěný model', 'Termokamera',
+  'Obrys auta s mezerami' }
 
 function M.wheelFieldsOk() return wheelFieldsOk end
+function M.suspensionFieldOk() return suspFieldOk end
 
 local STYLE_LABELS = {}
-for i, name in ipairs(M.STYLE_NAMES) do STYLE_LABELS[i] = string.format('%d/12  %s', i, name) end
+for i, name in ipairs(M.STYLE_NAMES) do STYLE_LABELS[i] = string.format('%d/%d  %s', i, #M.STYLE_NAMES, name) end
 
 local nameUntil = 0
 local NAME_BACK = rgbm(0.03, 0.04, 0.055, 0.85)
@@ -849,37 +912,46 @@ function M.draw()
   -- a click on the window switches to the next of the twelve styles
   local hovered = ui.windowHovered()
   if hovered and ui.mouseClicked() then
-    config.set('damageStyle', S.damageStyle % #M.STYLE_NAMES + 1)
+    config.set('damageView', S.damageView % #M.STYLE_NAMES + 1)
     nameUntil = now + 2.5
   end
 
   for side = 0, 3 do level[side + 1] = bodyLevel(car, side) end
-  for i = 0, 3 do level[5 + i] = wheelLevel(car, i) end
-  for k = 1, 8 do
+  for i = 0, 3 do level[5 + i], level[9 + i] = wheelLevel(car, i), suspensionLevel(car, i) end
+  local engineNow = math.max(0, math.min(100, math.floor(car.engineLifeLeft / 10 + 0.5)))
+  if started and engineNow < enginePct then lastHit = now end
+  for k = 1, KEYS do
     if not started then prevLevel[k] = level[k] end   -- damage already there when the window opens is no hit
-    if level[k] > prevLevel[k] + 0.02 then hitAt[k] = now end
+    if level[k] > prevLevel[k] + 0.02 then hitAt[k], lastHit = now, now end
     if level[k] > prevLevel[k] + 0.02 or level[k] < prevLevel[k] then prevLevel[k] = level[k] end
   end
   started = true
   enginePct = math.max(0, math.min(100, math.floor(car.engineLifeLeft / 10 + 0.5)))
 
-  local anyDamage = enginePct < 99
-  for k = 1, 8 do if level[k] > 0.01 then anyDamage = true end end
-  if S.damageAutoHide and not anyDamage then return end
+  -- 1: always, 2: while something is damaged, 3: for a few seconds after a hit (like AC). Hovering always shows it.
+  if not hovered then
+    if S.damageShow == 2 then
+      local anyDamage = enginePct < 99
+      for k = 1, KEYS do if level[k] > 0.01 then anyDamage = true end end
+      if not anyDamage then return end
+    elseif S.damageShow == 3 and now - lastHit > S.damageShowTime then
+      return
+    end
+  end
 
   sc = math.min(w / BOX_W, h / BOX_H)
   ox, oy = (w - BOX_W * sc) / 2, (h - BOX_H * sc) / 2
   setFrame()
   ui.pushDWriteFont(D.FONT_GEAR)
-  if S.damagePlate then D.rect(ox, oy, ox + BOX_W * sc, oy + BOX_H * sc, opa(PLATE), 10 * sc) end
-  local style = STYLES[S.damageStyle] or STYLES[1]
+  if S.damagePanel then D.panel(ox, oy, ox + BOX_W * sc, oy + BOX_H * sc, 10 * sc) end
+  local style = STYLES[S.damageView] or STYLES[13]
   style()
   setFrame()
   if hovered or now < nameUntil then
     -- which style this is, and how to switch
     D.rect(0, 0, w, 30, NAME_BACK, 0)
     ui.pushDWriteFont(D.FONT)
-    D.text(STYLE_LABELS[S.damageStyle] or STYLE_LABELS[1], 13, 0, 0, w, 18, D.ALIGN_CENTER, NAME_TEXT)
+    D.text(STYLE_LABELS[S.damageView] or STYLE_LABELS[13], 13, 0, 0, w, 18, D.ALIGN_CENTER, NAME_TEXT)
     D.text('kliknutím další vzhled', 10, 0, 16, w, 13, D.ALIGN_CENTER, LABEL)
     ui.popDWriteFont()
   end

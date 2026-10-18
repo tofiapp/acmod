@@ -26,7 +26,7 @@ local POSITION_HOLD = 1      -- s a new position must hold, so side by side does
 local FLAG_REPEAT = 15       -- s before the same flag is announced again
 
 local events = {}
-for i = 1, MAX_EVENTS do events[i] = { kind = 0, title = '', sub = '', line = '', born = -1000 } end
+for i = 1, MAX_EVENTS do events[i] = { kind = 0, title = '', sub = '', line = '', born = -1000, measuredFor = nil, textW = 0 } end
 local head = 0
 
 function N.push(kind, title, sub)

@@ -39,7 +39,9 @@ local T = {
   curSector = 1,
   secState = {},               -- 0 not passed, 1 best ever, 2 faster than ref, 3 slower, 4 passed, no ref
   refMs = 0,                   -- lap time of the active reference
-  refKind = 0,                 -- active reference: 0 none, 1 session, 2 all-time, 3 provisional, 4 AC best (estimate)
+  refKind = 0,                 -- active reference: 0 none, 1 session, 2 all-time, 3 provisional, 4 AC best (estimate), 5 previous lap
+  prevLapMs = 0,               -- previous fully driven lap (reference kind 5)
+  nowDelta = 0,                -- s gained (-) or lost (+) over the last ~3 s of driving: the split delta line
   estimateMs = 0,              -- AC's best lap time behind the estimated reference (0 = none)
   provisionalMs = 0,           -- best full lap that cannot be a reference (out lap, cut), used until a valid one exists
   sessionRefMs = 0,
@@ -87,6 +89,10 @@ local estimateRef, estimateStart, estimateShape = newList(GRID + 1), 0, -1
 local estimateStartKnown = false
 -- Last fully recorded lap of any kind; adopted as the reference when AC confirms it as its best lap.
 local lastFull, lastFullMs, lastFullStart, lastFullClock = newList(GRID + 1), 0, 0, -100
+local prevLapRef, prevLapStart = newList(GRID + 1), 0
+local NOW_WINDOW, NOW_STEP = 3, 0.1   -- s: the split line compares the last 3 s, sampled 10 times a second
+local NOW_N = math.floor(NOW_WINDOW / NOW_STEP) + 1
+local nowT, nowD, nowHead, nowCount, nowNext = newList(NOW_N), newList(NOW_N), 0, 0, 0
 local secValidNow = false      -- this frame: lap still valid and out of the pits (sector times count)
 local partialLineKnown = false -- the out lap's line position is known, not guessed (its sectors may set bests)
 -- Line position measured at confirmed crossings, saved per car + track, so an out lap can be split
@@ -145,7 +151,8 @@ end
 -- The chosen reference first, then the other one, then the provisional lap, so there is a delta
 -- as soon as any full lap was driven.
 local function activeRef()
-  if S.referenceMode == 1 then
+  if S.referenceKind == 3 and T.prevLapMs > 0 then return prevLapRef, T.prevLapMs, prevLapStart, 5 end
+  if S.referenceKind == 1 then
     if T.sessionRefMs > 0 then return sessionRef, T.sessionRefMs, sessionRefStart, 1 end
     if T.allTimeRefMs > 0 then return allTimeRef, T.allTimeRefMs, allTimeRefStart, 2 end
   else
@@ -249,8 +256,8 @@ local function finishSector(j, ms)
     -- a sector counts on its own: driven without a cut and outside the pits, even if the lap is not clean
     -- (on an out lap only when the line position is known, else the sector would be the wrong stretch)
     local counts = secValidNow and ms > 0 and (T.flying or partialLineKnown)
-    local best = S.referenceMode == 1 and sessionBest[j] or allTimeBest[j]
-    local useAC = acNow and acSecStart and (not ref or kind >= 3)
+    local best = S.referenceKind == 1 and sessionBest[j] or allTimeBest[j]
+    local useAC = acNow and acSecStart and (not ref or kind == 3 or kind == 4)
     if counts and best > 0 and ms < best then
       state = 1
     elseif useAC then
@@ -348,6 +355,10 @@ local function lapFinished(lapMs, now)
     copyList(lastFull, cur, GRID + 1)
     lastFull[GRID + 1] = lapMs
     lastFullMs, lastFullStart, lastFullClock = lapMs, curStart, now
+    -- previous lap reference: any fully driven lap (valid or not), the one just finished
+    copyList(prevLapRef, cur, GRID + 1)
+    prevLapRef[GRID + 1] = lapMs
+    T.prevLapMs, prevLapStart = lapMs, curStart
   end
   local complete = T.flying and T.clean and nextK > GRID
   if complete then
@@ -482,7 +493,7 @@ local function updateDelta(dt, s, t, car)
   local ref, refMs, refStart, kind = activeRef()
   T.refMs, T.refKind = refMs, kind
   local own = S.deltaSource ~= 3 and (T.flying or T.partial) and ref
-  if not own or kind >= 3 then
+  if not own or kind == 3 or kind == 4 then
     -- AC's delta (to a valid lap) beats our provisional one; with deltaSource = 3 it is the only source
     local v = S.deltaSource ~= 2 and car and acDelta(car)
     if v then
@@ -534,6 +545,35 @@ local function updateTiming(sim, car, now)
   end
 end
 
+-- Delta trends for the delta line, kept out of updateInner (LuaJIT allows at most 60 upvalues per function).
+local function updateTrend(now)
+  -- split delta line: how the delta moved over the last ~3 s (ring buffer sampled at 10 Hz)
+  if T.hasDelta then
+    if now >= nowNext then
+      nowNext = now + NOW_STEP
+      nowHead = nowHead % NOW_N + 1
+      nowT[nowHead], nowD[nowHead] = now, T.delta
+      if nowCount < NOW_N then nowCount = nowCount + 1 end
+    end
+    local oldest = nowCount < NOW_N and 1 or nowHead % NOW_N + 1
+    T.nowDelta = nowCount > 1 and T.delta - nowD[oldest] or 0
+  else
+    nowCount, T.nowDelta = 0, 0
+  end
+
+  -- live trend for the delta line: how the delta moved since the current mini sector started
+  if T.hasDelta then
+    if not liveValid or T.curSector ~= liveSector then
+      liveSector, liveStart, liveValid = T.curSector, T.delta, true
+    end
+    T.liveDelta = T.delta - liveStart
+    if T.liveDelta < -LIVE_HYSTERESIS then T.liveSign = -1
+    elseif T.liveDelta > LIVE_HYSTERESIS then T.liveSign = 1 end
+  else
+    liveValid, T.liveDelta = false, 0
+  end
+end
+
 local function updateInner(dt)
   if not loaded then
     loadData()
@@ -563,6 +603,7 @@ local function updateInner(dt)
   if needSessionReset then
     needSessionReset = false
     T.sessionRefMs, T.provisionalMs, T.estimateMs, estimateShape, lastFullMs = 0, 0, 0, -1, 0
+    T.prevLapMs = 0
     for i = 1, MAX_SECTORS do sessionBest[i] = 0 end
     bestFlashMs, prevLapMs = 0, 0
     pendingActive = false
@@ -674,17 +715,7 @@ local function updateInner(dt)
   T.curSector = math.min(T.sectorCount, math.floor(u * T.sectorCount) + 1)
   updateDelta(dt, s, t, car)
 
-  -- live trend for the delta line: how the delta moved since the current mini sector started
-  if T.hasDelta then
-    if not liveValid or T.curSector ~= liveSector then
-      liveSector, liveStart, liveValid = T.curSector, T.delta, true
-    end
-    T.liveDelta = T.delta - liveStart
-    if T.liveDelta < -LIVE_HYSTERESIS then T.liveSign = -1
-    elseif T.liveDelta > LIVE_HYSTERESIS then T.liveSign = 1 end
-  else
-    liveValid, T.liveDelta = false, 0
-  end
+  updateTrend(now)
 end
 
 -- Runs the tracker; a script error is kept for the diagnostics tab instead of being lost.
@@ -700,6 +731,7 @@ end
 function T.clearSaved()
   store.delete()
   T.allTimeRefMs, T.sessionRefMs, T.provisionalMs, T.estimateMs, estimateShape = 0, 0, 0, 0, -1
+  T.prevLapMs = 0
   lineKnown = false             -- learned and saved again at the next crossing
   allTimeBestByCount = {}
   for i = 1, MAX_SECTORS do sessionBest[i] = 0 end

@@ -19,7 +19,6 @@ local COOL = rgbm(0.13, 0.76, 0.84, 1)
 local DARK = rgbm(0.04, 0.047, 0.06, 1)
 local GROOVE = rgbm(0, 0, 0, 0.4)
 local BAR_BACK = rgbm(0, 0, 0, 0.75)
-local PLATE = rgbm(0.03, 0.04, 0.055, 0.6)
 
 local tempColor = rgbm()
 local core, zin, zmid, zout, optimum = { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 0, 0, 0 }
@@ -226,7 +225,7 @@ function M.draw()
   if w <= 0 or h <= 0 then return end
   local sc = math.min(w / baseW, h / baseH)
   ui.pushDWriteFont(D.FONT)
-  if S.tyresPlate then D.rect(0, 0, baseW * sc, baseH * sc, D.color(PLATE, S.opacity), 8 * sc) end
+  if S.tyresPanel then D.panel(0, 0, baseW * sc, baseH * sc, 8 * sc) end
   for i = 1, 4 do
     local cx, cy = cellPos(i)
     drawCell(i, cx * sc, cy * sc, sc)
