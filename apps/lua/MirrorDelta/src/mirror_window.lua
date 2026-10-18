@@ -1,4 +1,4 @@
--- Mirror window: AC's rear view (ui.drawVirtualMirror, as CSP's own OBS view draws it) in a movable 4:1 frame,
+-- Mirror window: AC's rear view (ui.drawVirtualMirror, as CSP's own OBS view draws it) in a movable, square-ish frame,
 -- with car markers like a GT3 rear view camera: a triangle above every car behind (white, yellow when it closes
 -- in, red when it is close), and a red arrow at the side of the frame when a car is alongside, out of the picture.
 -- Car fields as in the official apps: position, look, up, side, velocity (Radar, gamepad assist), wheels[i].position
@@ -8,7 +8,6 @@ local config = require('src/config')
 local D = require('src/draw')
 local S = config.S
 
-local BASE_W, BASE_H = 480, 120
 local MAX_CARS = 64
 local ALONGSIDE_BACK = 6       -- m: a car this far behind or ahead of us and close to the side is "alongside"
 local ALONGSIDE_SIDE = 7       -- m
@@ -45,13 +44,13 @@ local function leftSign(car)
   return d >= 0 and 1 or -1
 end
 
-local function markers(me, ox, oy, mw, mh, sc, a)
+local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
   local sim = ac.getSim()
   local n = math.min(MAX_CARS, sim.carsCount)
   local mp, lk, sd, mv = me.position, me.look, me.side, me.velocity
   local ls = leftSign(me)
   local halfFov = math.rad(math.max(10, S.mirrorFov) / 2)
-  local cx = ox + mw / 2
+  local cx = dx + dw / 2          -- centre of the whole (wider) rear view
   local leftNear, rightNear = false, false
   local shown = 0
   for i = 1, n - 1 do
@@ -66,9 +65,10 @@ local function markers(me, ox, oy, mw, mh, sc, a)
         if lat > 0 then leftNear = true else rightNear = true end
       elseif back > 2 and back < S.mirrorRange then
         local angle = math.atan(lat / back)
-        if math.abs(angle) < halfFov then
+        local x0 = cx - angle / halfFov * dw / 2
+        if math.abs(angle) < halfFov and x0 > ox + 6 * sc and x0 < ox + mw - 6 * sc then
           -- mirror: a car behind on our left is on the left of the picture
-          local x = cx - angle / halfFov * mw / 2
+          local x = cx - angle / halfFov * dw / 2
           local v = c.velocity
           local closing = (v.x - mv.x) * lk.x + (v.y - mv.y) * lk.y + (v.z - mv.z) * lk.z   -- m/s it gains on us
           local color = FAR
@@ -99,15 +99,21 @@ function M.draw()
   if w <= 0 or h <= 0 then return end
   local me = ac.getCar(0)
   if not me then return end
-  -- 4:1 picture, as large as the window allows, centred
-  local mw = math.min(w, h * 4)
-  local mh = mw / 4
-  local ox, oy = (w - mw) / 2, (h - mh) / 2
-  local sc = mw / BASE_W
-  local a = S.opacity
+  -- The window can be any shape (square by default). AC's rear view is 4:1: it is drawn as high as the window and
+  -- wide enough that the window shows the middle part of it (S.mirrorView of its width), clipped to the window.
+  local sc = math.min(w, h) / 240
   local b = math.max(1, 2 * sc)
-  D.rect(ox - b, oy - b, ox + mw + b, oy + mh + b, col(FRAME, a), 6 * sc)
-  local ok = ui.drawVirtualMirror(p1:set(ox, oy), p2:set(ox + mw, oy + mh), col(WHITE, a))
+  local ox, oy, mw, mh = b, b, w - 2 * b, h - 2 * b
+  local dw = mw / math.max(0.25, math.min(1, S.mirrorView))
+  local dx = ox + (mw - dw) / 2
+  local a = S.opacity
+  D.rect(0, 0, w, h, col(FRAME, a), 6 * sc)
+  ui.pushClipRect(p1:set(ox, oy), p2:set(ox + mw, oy + mh), true)
+  local k = S.mirrorBrightness
+  tint:set(WHITE)
+  tint.r, tint.g, tint.b, tint.mult = k, k, k, a
+  local ok = ui.drawVirtualMirror(p1:set(dx, oy), p2:set(dx + dw, oy + mh), tint)
+  ui.popClipRect()
   if not ok then
     D.rect(ox, oy, ox + mw, oy + mh, col(NONE, a), 4 * sc)
     ui.pushDWriteFont(D.FONT)
@@ -115,7 +121,7 @@ function M.draw()
     ui.popDWriteFont()
     return
   end
-  if S.mirrorMarkers then markers(me, ox, oy, mw, mh, sc, a) end
+  if S.mirrorMarkers then markers(me, ox, oy, mw, mh, dx, dw, sc, a) end
 end
 
 return M

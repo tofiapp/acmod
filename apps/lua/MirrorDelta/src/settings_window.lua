@@ -211,14 +211,19 @@ local function tabDamage()
 end
 
 local function tabMirror()
-  ui.textWrapped('Okno MirrorDelta Mirror ukazuje zpětný pohled AC v posuvném rámečku. Původní zrcátko AC vypněte ve hře '
-    .. '(aplikace ho sama vypnout neumí).')
+  ui.textWrapped('Okno MirrorDelta Mirror ukazuje zpětný pohled AC v posuvném rámečku.')
   gap()
   checkbox('mirrorMarkers', 'Šipky nad auty za mnou (bílá, žlutá když se blíží, červená když je blízko)')
   checkbox('mirrorSideArrows', 'Červená šipka na straně, když je auto vedle mě')
   slider('mirrorFov', 'Šířka záběru', 20, 90, '%.0f°', 1)
   ui.textWrapped('Šířku záběru nastavte tak, aby šipky seděly přesně nad auty v zrcátku.')
   slider('mirrorRange', 'Hlídat do vzdálenosti', 20, 150, '%.0f m', 5)
+  slider('mirrorView', 'Kolik z šířky zrcátka okno ukáže', 0.25, 1, '%.2f', 0.05)
+  slider('mirrorBrightness', 'Jas obrazu', 0.5, 3, '%.1f×', 0.1)
+  gap()
+  checkbox('hideOriginalMirror', 'Skrýt okna, která vypadají jako zpětné zrcátko (jiné aplikace / AC)')
+  checkbox('hideOriginalFlags', 'Skrýt okna, která vypadají jako vlajky (jiné aplikace / AC)')
+  ui.textWrapped('Skryto: ' .. originals.hiddenWindows)
 end
 
 local function tabNotify()

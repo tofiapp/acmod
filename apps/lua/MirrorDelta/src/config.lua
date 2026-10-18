@@ -35,6 +35,8 @@ local defaults = {
   mirrorSideArrows = true,    -- mirror window: red arrow at the side when a car is alongside
   mirrorFov = 50,             -- degrees the rear view covers horizontally (markers line up with the cars)
   mirrorRange = 60,           -- m behind in which cars get a marker
+  mirrorView = 0.5,           -- part of the rear view's width the (square) window shows
+  mirrorBrightness = 1.5,     -- multiplier for the rear view picture (AC's virtual mirror texture is dark)
   timingLayout = 2,         -- 1: stacked, 2: side by side
   bestHighlight = true,
   lapFlash = true,
@@ -76,6 +78,8 @@ local defaults = {
   notifySystem = true,      -- AC's own system messages (ABS, TC, penalties...) as notifications
   hideOverlayLeaderboard = true, -- turn off AC's overlay leaderboard (F9)
   hideSystemMessages = true, -- hide AC's own system messages (CSP option gui.ini [HIDE] HIDE_SYSTEM_MESSAGES)
+  hideOriginalMirror = true, -- hide app windows of other apps / AC that look like a rear view mirror
+  hideOriginalFlags = true,  -- hide app windows of other apps / AC that look like a flag display
   notifyInvalid = true,     -- own lap invalidated (track cut)
   notifyConnections = true, -- driver disconnected (online)
   notifyRaceOnly = true,    -- positions and pits only in a race session
@@ -112,7 +116,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.14.0' }
+local M = { S = S, defaults = defaults, VERSION = '1.14.1' }
 
 function M.set(key, value)
   S[key] = value

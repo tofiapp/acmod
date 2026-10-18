@@ -126,7 +126,7 @@ ac = {
     local list = {}
     for i, title in ipairs({ 'MirrorDelta', 'MirrorDelta Timing', 'MirrorDelta Tyres', 'MirrorDelta Gear',
       'MirrorDelta Damage', 'MirrorDelta Notifications', 'MirrorDelta Flags', 'Some Other App', 'MirrorDelta Setup',
-      'MirrorDelta Mirror' }) do
+      'MirrorDelta Mirror', 'Virtual Mirror', 'Race Flags', 'Car Mirrors Configurator' }) do
       list[i] = { name = 'w' .. i, title = title, visible = false, layer = 0 }
     end
     return list
@@ -135,6 +135,7 @@ ac = {
     return {
       move = function (self, pos) M.moved = M.moved or {}; M.moved[name] = pos; return self end,
       setVisible = function (self, v) M.shown = M.shown or {}; M.shown[name] = v ~= false; return self end,
+      resize = function (self, size) M.resized = M.resized or {}; M.resized[name] = size; return self end,
     }
   end,
   onLapCompleted = function (_, cb) M.callbacks.lap = cb end,

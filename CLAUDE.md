@@ -15,7 +15,9 @@ each with its own taskbar icon:
   probed once under pcall) plus AC's non-penalty system messages (`src/setup_line.lua`).
 - **mirror** (`MirrorDelta Mirror`): AC's rear view via `ui.drawVirtualMirror` (ac_apps.lua, used by CSP's OBS view) in a
   4:1 frame; triangles above cars behind (angle from position/look/side, `S.mirrorFov` calibrates), red side arrows for
-  cars alongside. Left/right from `wheels[0/1].position` vs `car.side`. Hiding AC's own virtual mirror: no verified API.
+  cars alongside. Left/right from `wheels[0/1].position` vs `car.side`. Square-ish window: the 4:1 view is drawn wider
+  than the window (`S.mirrorView`) under `ui.pushClipRect`, brightened by `S.mirrorBrightness` (colour > 1). Hiding AC's own
+  virtual mirror / flags: no verified API; app windows titled like a mirror or flag are hidden via `ac.accessAppWindow`.
 - **gear** (`MirrorDelta Gear`): 12-segment RPM bar lighting from both edges to the centre (range from
   `car.rpmLimiter`), gear on a rounded tile coloured by revs (white/yellow/red, blinking blue at the limiter),
   calm speed (changes only by whole steps) on a dark bar under it. Font: bundled Unbounded Bold.

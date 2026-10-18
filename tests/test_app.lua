@@ -507,7 +507,12 @@ for i = 1, tracker.sectorCount do if tracker.secState[i] == 3 then yellow = yell
 check(tracker.partial and tracker.refKind ~= 1 and tracker.refKind ~= 2, 'out lap without a reference is measured from the pit exit')
 check(math.abs(start - LINE) < 0.01, string.format('line position loaded from the saved file: %.4f', start))
 check(yellow >= 3, 'out lap mini sectors coloured from AC delta: ' .. yellow)
-check(notify.count == countBefore, 'no invalid-lap notification on the out lap')
+local invalidShown = false
+for i = 1, math.min(8, notify.count - countBefore) do
+  local e = notify.get(i)
+  if e and e.kind == notify.INVALID then invalidShown = true end
+end
+check(not invalidShown, 'no invalid-lap notification on the out lap')
 env.lastTexts = {}
 env.windowW, env.windowH = 600, 80
 script.windowDelta(DT)
@@ -598,9 +603,11 @@ do
   for _ = 1, 300 do frame(1) end      -- arranged a few seconds after start
   local moved = 0
   for _ in pairs(env.moved or {}) do moved = moved + 1 end
-  check(moved == 9 and config.S.layoutVersion == 6, 'all nine windows placed: ' .. moved)
-  check(env.moved.w10 and math.abs(env.moved.w10.x + 240 - 960) < 2 and env.moved.w10.y > 40 and env.moved.w10.y < 100,
-    'mirror at the top centre under the settings line')
+  check(moved == 9 and config.S.layoutVersion == 7, 'all nine windows placed: ' .. moved)
+  check(env.moved.w10 and math.abs(env.moved.w10.x + 140 - 960) < 2 and env.moved.w10.y > 40 and env.moved.w10.y < 100
+    and env.resized and env.resized.w10 and env.resized.w10.x == 280, 'mirror at the top centre under the settings line, square-ish')
+  check(env.shown and env.shown.w11 == false and env.shown.w12 == false and env.shown.w13 == nil and env.shown.w10 ~= false,
+    'other mirror and flag windows hidden, ours and the mirror configurator kept')
   check(env.moved.w9 and math.abs(env.moved.w9.x + 150 - 960) < 2 and env.moved.w9.y < 20, 'car settings line at the top centre')
   check(env.moved.w6 and env.moved.w6.x > 1300 and env.moved.w6.y > 100 and env.moved.w6.y < 200, 'notifications under the flag')
   check(env.moved.w5 and env.moved.w5.x < 100 and env.moved.w5.y > 300 and env.moved.w5.y < 600, 'damage window at the left edge, vertical middle')
@@ -906,18 +913,19 @@ do
     return { index = 1, bestLapTimeMs = 0, isInPitlane = false, isInPit = false, isConnected = true, racePosition = 1,
       lapCount = 0, isLapValid = true, position = { x = x, y = 0, z = z }, velocity = { x = 0, y = 0, z = vz } }
   end
-  env.cars[1] = carAt(3, -8, 58)       -- close behind on the left, closing in
+  env.cars[1] = carAt(1, -8, 58)       -- close behind on the left, closing in
   env.cars[2] = carAt(-2, -50, 40)     -- far behind on the right, slower
-  env.windowW, env.windowH = 480, 120
+  env.windowW, env.windowH = 280, 240
   env.recordFills, env.fills = true, {}
   local ok, err = pcall(script.windowMirror, DT)
   env.recordFills = false
-  check(ok and env.lastMirror and env.lastMirror[3] - env.lastMirror[1] == 480, 'mirror picture drawn 4:1: ' .. tostring(err))
+  check(ok and env.lastMirror and env.lastMirror[3] - env.lastMirror[1] == 552 and env.lastMirror[4] - env.lastMirror[2] == 236,
+    'square window shows the middle half of the 4:1 rear view: ' .. tostring(err))
   check(mirror.shown == 2, 'two cars behind get a marker: ' .. mirror.shown)
   local left, right
   for _, f in ipairs(env.fills) do
     local x = f.pts[5]
-    if x and x < 240 then left = f elseif x then right = f end
+    if x and x < 140 then left = f elseif x then right = f end
   end
   check(left and left.r > 0.9 and left.g < 0.5, 'close car closing in on the left: red marker on the left')
   check(right and right.r > 0.9 and right.g > 0.9 and right.b > 0.9, 'slower car far behind on the right: white marker on the right')

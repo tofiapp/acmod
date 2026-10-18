@@ -77,6 +77,36 @@ local function hideLeaderboard()
   M.leaderboard = 'vypnuté'
 end
 
+-- Rear view mirrors and flag displays of other apps (or AC, if it lists them as app windows) are hidden with
+-- ac.accessAppWindow(name):setVisible(false) (lib_accessappwindow: works for original AC apps, Python and Lua apps).
+-- Done a few seconds after start and after a session change; what was found is announced once.
+M.hiddenWindows = '-'
+local windowsAt, windowsSession, windowsAnnounced = 3, -1, false
+local function looksLike(text, word)
+  return text:find(word, 1, true) ~= nil and not text:find('mirrordelta', 1, true) and not text:find('config', 1, true)
+end
+local function hideOtherWindows()
+  if not S.hideOriginalMirror and not S.hideOriginalFlags then M.hiddenWindows = 'vypnuto'; return end
+  local found = {}
+  for _, v in ipairs(ac.getAppWindows()) do
+    local title = type(v.title) == 'string' and v.title or ''
+    local text = (title .. ' ' .. tostring(v.name or '')):lower()
+    if (S.hideOriginalMirror and looksLike(text, 'mirror')) or (S.hideOriginalFlags and looksLike(text, 'flag')) then
+      local window = ac.accessAppWindow(v.name)
+      if window then
+        window:setVisible(false)
+        found[#found + 1] = title ~= '' and title or tostring(v.name)
+      end
+    end
+  end
+  M.hiddenWindows = #found > 0 and table.concat(found, ', ') or 'nic (AC je nevede jako okna aplikací)'
+  if not windowsAnnounced then
+    windowsAnnounced = true
+    notify.push(notify.SYSTEM, 'PŮVODNÍ ZRCÁTKO A VLAJKY', #found > 0 and ('skryto: ' .. M.hiddenWindows)
+      or 'AC je nevede jako okna, aplikace je skrýt neumí')
+  end
+end
+
 function M.update()
   local now = os.preciseClock()
   if now < nextCheck then return end
@@ -85,6 +115,14 @@ function M.update()
   if not ok then M.leaderboard = 'chyba: ' .. tostring(err) end
   ok, err = pcall(applyMessages, now)
   if not ok then M.messages = 'chyba: ' .. tostring(err) end
+  local sim = ac.getSim()
+  local session = sim and sim.currentSessionIndex or -1
+  if session ~= windowsSession then windowsSession, windowsAt = session, now + 3 end
+  if windowsAt and now >= windowsAt then
+    windowsAt = nil
+    ok, err = pcall(hideOtherWindows)
+    if not ok then M.hiddenWindows = 'chyba: ' .. tostring(err) end
+  end
 end
 
 -- AC writes its messages in English; they are translated phrase by phrase (whole words, any case, longest
