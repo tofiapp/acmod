@@ -919,18 +919,27 @@ do
   env.recordFills, env.fills = true, {}
   local ok, err = pcall(script.windowMirror, DT)
   env.recordFills = false
-  local m, im = env.lastMirror, env.lastImage
-  check(ok and m and m[3] == 1024 and m[4] == 256 and env.canvasExposure == 30 and im and im.img == env.canvas,
-    'rear view post-processed in a YEBIS canvas like CSP\'s OBS view, then drawn: ' .. tostring(err))
+  local m, sh = env.lastMirror, env.lastShader
   local function stretched(t)
     return math.abs((t[3] - t[1]) / (t[4] - t[2]) - (t[7] - t[5]) * 4 / (t[8] - t[6]))
   end
-  check(im and stretched(im) < 0.01 and im[6] == 0 and im[8] == 1 and im[5] > 0, 'narrow window: middle of the width, not stretched')
+  check(ok and m and m[3] == 1024 and m[4] == 256 and sh and stretched(sh) < 0.01 and sh[6] == 0 and sh[8] == 1 and sh[5] > 0,
+    'gamma mode: rear view into a canvas, drawn with the HDR shader, middle of the width, not stretched: ' .. tostring(err))
   env.windowW, env.windowH = 600, 100           -- wider than 4:1: the whole width, middle of the height
   script.windowMirror(DT)
-  im = env.lastImage
-  check(stretched(im) < 0.01 and im[5] == 0 and im[7] == 1 and im[6] > 0, 'wide window: whole width, middle of the height')
+  sh = env.lastShader
+  check(stretched(sh) < 0.01 and sh[5] == 0 and sh[7] == 1 and sh[6] > 0, 'wide window: whole width, middle of the height')
   env.windowW, env.windowH = 400, 150
+  env.hovered, env.clicked = true, true         -- a click switches to the YEBIS canvas like CSP's OBS view
+  script.windowMirror(DT)
+  env.hovered, env.clicked = false, false
+  local im = env.lastImage
+  check(config.S.mirrorMode == 2 and env.canvasExposure == 30 and im and im.img == env.canvas and stretched(im) < 0.01,
+    'click: YEBIS mode with exposure 30, drawn cropped')
+  config.set('mirrorMode', 3)
+  ok, err = pcall(script.windowMirror, DT)
+  check(ok and env.tonemapDepth == 0, 'UI tonemapping mode draws: ' .. tostring(err))
+  config.set('mirrorMode', 1)
   check(mirror.shown == 2, 'two cars behind get a marker: ' .. mirror.shown)
   local left, right
   for _, f in ipairs(env.fills) do

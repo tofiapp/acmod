@@ -36,7 +36,8 @@ local defaults = {
   mirrorFov = 50,             -- degrees the rear view covers horizontally (markers line up with the cars)
   mirrorRange = 60,           -- m behind in which cars get a marker
   mirrorZoom = 1,             -- 1: the window shows as much of the rear view as its shape allows, more = closer
-  mirrorBrightness = 1,       -- picture brightness: multiplies the exposure of the post-processed rear view
+  mirrorBrightness = 1,       -- picture brightness: multiplies the exposure of the rear view
+  mirrorMode = 1,             -- how the HDR rear view becomes a picture: 1 gamma, 2 YEBIS, 3 UI tonemapping, 4 raw
   timingLayout = 2,         -- 1: stacked, 2: side by side
   bestHighlight = true,
   lapFlash = true,
@@ -116,7 +117,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.14.4' }
+local M = { S = S, defaults = defaults, VERSION = '1.14.5' }
 
 function M.set(key, value)
   S[key] = value

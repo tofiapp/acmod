@@ -15,11 +15,11 @@ each with its own taskbar icon:
   probed once under pcall) plus AC's non-penalty system messages (`src/setup_line.lua`).
 - **mirror** (`MirrorDelta Mirror`): AC's rear view via `ui.drawVirtualMirror` (ac_apps.lua, used by CSP's OBS view) in a
   4:1 frame; triangles above cars behind (angle from position/look/side, `S.mirrorFov` calibrates), red side arrows for
-  cars alongside. Left/right from `wheels[0/1].position` vs `car.side`. The mirror texture is HDR (pre post-processing): drawn as
-  CSP's OBS "Virtual mirror" view does it (obs_integration.lua): `ui.ExtraCanvas(1024x256, 1,
-  render.AntialiasingMode.SimplifiedYEBIS, render.TextureFormat.R16G16B16A16.Float)`, `setExposure(30 * S.mirrorBrightness)`,
-  `clear()` + `update(ui.drawVirtualMirror)` each frame, then `ui.drawImage(canvas, ..., uv)` cropped to the window's aspect
-  (never stretched, `S.mirrorZoom`). A raw draw, `ui.renderShader` or ui tonemapping all came out dark/green. Hiding AC's own
+  cars alongside. Left/right from `wheels[0/1].position` vs `car.side`. The mirror texture is HDR (pre post-processing). `S.mirrorMode`
+  (click in the window cycles, hover shows version + mode): 1 gamma = `ui.drawVirtualMirror` into a float `ui.ExtraCanvas`, then
+  `ui.renderShader` with `pow(saturate(c * exposure), 0.4545)` (SDK example in ac_wfx_impl.lua); 2 YEBIS canvas with exposure 30
+  as CSP's OBS "Virtual mirror" view (obs_integration.lua; user reported no change with it); 3 `ui.beginTonemapping` like
+  `display.mirror()`; 4 raw. Always cropped to the window's aspect via UVs or a clip rect, never stretched (`S.mirrorZoom`). Hiding AC's own
   virtual mirror / flags: no verified API; app windows titled like a mirror or flag are hidden via `ac.accessAppWindow`.
 - **gear** (`MirrorDelta Gear`): 12-segment RPM bar lighting from both edges to the centre (range from
   `car.rpmLimiter`), gear on a rounded tile coloured by revs (white/yellow/red, blinking blue at the limiter),

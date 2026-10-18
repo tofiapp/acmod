@@ -94,28 +94,103 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
   M.shown = shown
 end
 
--- The mirror texture is HDR (before AC's post-processing), so drawn directly it is dark and greenish. It goes through
--- the same steps as the "Virtual mirror" view of CSP's own OBS integration (lua-module/src/obs_integration.lua):
--- a canvas with render.AntialiasingMode.SimplifiedYEBIS in R16G16B16A16.Float, exposure 30, cleared and filled with
--- ui.drawVirtualMirror() every frame; the canvas is then drawn into the window (cropped, never stretched).
+-- The mirror texture is HDR (before AC's post-processing): drawn as it is, it is dark and greenish. Four ways to turn it
+-- into a normal picture, switched by clicking the window (hovering shows the version and the active one):
+-- 1 gamma: ui.drawVirtualMirror into a float canvas, then a shader with exposure and the HDR -> LDR conversion from
+--   the CSP SDK example for virtual mirrors (pow(hdr, 0.4545), ac_wfx_impl.lua);
+-- 2 YEBIS: a canvas with render.AntialiasingMode.SimplifiedYEBIS and exposure 30, as CSP's OBS "Virtual mirror" view;
+-- 3 UI tonemapping: ui.beginTonemapping / setShadingOffset / endTonemapping, as CSP's display.mirror();
+-- 4 raw: ui.drawVirtualMirror as it is.
+local MODES = 4
+local MODE_NAMES = { 'gamma', 'YEBIS', 'tonemapping UI', 'bez úprav' }
+local LABELS = {}
 local CANVAS_W, CANVAS_H = 1024, 256
-local canvas, canvasFailed = nil, false
-local canvasOk = false
 local cp1, cp2 = vec2(0, 0), vec2(CANVAS_W, CANVAS_H)
 local uv1, uv2 = vec2(), vec2()
+local canvases, failed = {}, {}
+local canvasOk = false
 local function fillCanvas()
   canvasOk = ui.drawVirtualMirror(cp1, cp2, WHITE)
 end
 
-local function ensureCanvas()
-  if canvas or canvasFailed then return canvas end
+local function getCanvas(mode)
+  if canvases[mode] or failed[mode] then return canvases[mode] end
   local ok, result = pcall(function ()
-    return ui.ExtraCanvas(vec2(CANVAS_W, CANVAS_H), 1, render.AntialiasingMode.SimplifiedYEBIS,
-      render.TextureFormat.R16G16B16A16.Float)
+    local aa = mode == 2 and render.AntialiasingMode.SimplifiedYEBIS or render.AntialiasingMode.None
+    local c = ui.ExtraCanvas(vec2(CANVAS_W, CANVAS_H), 1, aa, render.TextureFormat.R16G16B16A16.Float)
+    if mode == 2 then c:setExposure(30) end
+    return c
   end)
-  if ok and result then canvas = result else canvasFailed = true end
-  M.canvasError = not ok and tostring(result) or nil
-  return canvas
+  if ok and result then canvases[mode] = result else failed[mode] = tostring(result) end
+  return canvases[mode]
+end
+
+local SHADER = {
+  async = true,
+  p1 = vec2(), p2 = vec2(), uv1 = vec2(), uv2 = vec2(),
+  textures = { txMirror = false },
+  values = { gExposure = 1, gAlpha = 1 },
+  shader = [[
+    float4 main(PS_IN pin) {
+      float4 c = txMirror.SampleLevel(samLinearClamp, pin.Tex, 0);
+      return float4(pow(saturate(c.rgb * gExposure), 0.4545), gAlpha);
+    }
+  ]],
+}
+
+local hasTonemapping = type(ui.beginTonemapping) == 'function' and type(ui.endTonemapping) == 'function'
+  and type(ui.setShadingOffset) == 'function' and type(ui.resetShadingOffset) == 'function'
+
+-- Draws the picture; returns false when AC has no rear view right now.
+local function drawPicture(mode, ox, oy, mw, mh, fw, fh, dx, dw, a)
+  uv1:set(0.5 - fw / 2, 0.5 - fh / 2)
+  uv2:set(0.5 + fw / 2, 0.5 + fh / 2)
+  local c = (mode == 1 or mode == 2) and getCanvas(mode) or nil
+  if c then
+    if mode == 2 then c:setExposure(30 * S.mirrorBrightness) end
+    c:clear()
+    c:update(fillCanvas)
+    if not canvasOk then return false end
+    if mode == 1 then
+      SHADER.p1:set(ox, oy)
+      SHADER.p2:set(ox + mw, oy + mh)
+      SHADER.uv1:set(uv1.x, uv1.y)
+      SHADER.uv2:set(uv2.x, uv2.y)
+      SHADER.textures.txMirror = c
+      SHADER.values.gExposure = S.mirrorBrightness
+      SHADER.values.gAlpha = a
+      ui.renderShader(SHADER)
+    else
+      ui.drawImage(c, p1:set(ox, oy), p2:set(ox + mw, oy + mh), col(WHITE, a), uv1, uv2)
+    end
+    return true
+  end
+  -- modes 3 and 4 (and 1, 2 without a canvas): the virtual mirror itself, 4:1, cropped by a clip rect
+  local dh = dw / 4
+  ui.pushClipRect(p1:set(ox, oy), p2:set(ox + mw, oy + mh), true)
+  local tone = mode == 3 and hasTonemapping
+  if tone then
+    ui.beginTonemapping()
+    ui.setShadingOffset(1, 0, 1, 1)
+  end
+  local ok = ui.drawVirtualMirror(p1:set(dx, oy + (mh - dh) / 2), p2:set(dx + dw, oy + (mh + dh) / 2), col(WHITE, a))
+  if tone then
+    ui.resetShadingOffset()
+    ui.endTonemapping(0, 0, true)
+  end
+  ui.popClipRect()
+  return ok
+end
+
+local function modeLabel(mode)
+  local key = mode * 10 + ((failed[mode] or (mode == 3 and not hasTonemapping)) and 1 or 0)
+  local str = LABELS[key]
+  if not str then
+    str = string.format('MirrorDelta %s · obraz %d/%d: %s%s · klik = další', config.VERSION, mode, MODES,
+      MODE_NAMES[mode], key % 10 == 1 and ' (v tomto CSP nejde)' or '')
+    LABELS[key] = str
+  end
+  return str
 end
 
 function M.draw()
@@ -129,6 +204,10 @@ function M.draw()
   local a = S.opacity
   D.rect(0, 0, w, h, col(FRAME, a), 6 * sc)
 
+  local hovered = ui.windowHovered()
+  if hovered and ui.mouseClicked() then config.set('mirrorMode', S.mirrorMode % MODES + 1) end
+  local mode = math.max(1, math.min(MODES, math.floor(S.mirrorMode)))
+
   -- AC's rear view is 4:1. The window shows a part of it in the window's own proportions (never stretched):
   -- a window narrower than 4:1 shows the middle of the width, a wider one the middle of the height. Zoom crops more.
   local zoom = math.max(1, S.mirrorZoom)
@@ -138,33 +217,21 @@ function M.draw()
   local dw = mw / fw                             -- width the whole rear view has at this scale
   local dx = ox + (mw - dw) / 2
 
-  local c = ensureCanvas()
-  local ok
-  if c then
-    c:setExposure(30 * S.mirrorBrightness)
-    c:clear()
-    c:update(fillCanvas)
-    ok = canvasOk
-    if ok then
-      uv1:set(0.5 - fw / 2, 0.5 - fh / 2)
-      uv2:set(0.5 + fw / 2, 0.5 + fh / 2)
-      ui.drawImage(c, p1:set(ox, oy), p2:set(ox + mw, oy + mh), col(WHITE, a), uv1, uv2)
-    end
-  else
-    -- no canvas (older CSP): the plain virtual mirror, cropped by a clip rect
-    local dh = mw / fw / 4
-    ui.pushClipRect(p1:set(ox, oy), p2:set(ox + mw, oy + mh), true)
-    ok = ui.drawVirtualMirror(p1:set(dx, oy + (mh - dh) / 2), p2:set(dx + dw, oy + (mh + dh) / 2), col(WHITE, a))
-    ui.popClipRect()
-  end
+  local ok = drawPicture(mode, ox, oy, mw, mh, fw, fh, dx, dw, a)
   if not ok then
     D.rect(ox, oy, ox + mw, oy + mh, col(NONE, a), 4 * sc)
     ui.pushDWriteFont(D.FONT)
     D.text('Zpětné zrcátko teď AC nevykresluje', 14 * sc, ox, oy, mw, mh, D.ALIGN_CENTER, col(TEXT, a))
     ui.popDWriteFont()
-    return
+  elseif S.mirrorMarkers then
+    markers(me, ox, oy, mw, mh, dx, dw, sc, a)
   end
-  if S.mirrorMarkers then markers(me, ox, oy, mw, mh, dx, dw, sc, a) end
+  if hovered then
+    ui.pushDWriteFont(D.FONT)
+    D.rect(ox, oy + mh - 18 * sc, ox + mw, oy + mh, col(NONE, a), 0)
+    D.text(modeLabel(mode), 11 * sc, ox + 6 * sc, oy + mh - 18 * sc, mw - 12 * sc, 18 * sc, D.ALIGN_START, col(TEXT, a))
+    ui.popDWriteFont()
+  end
 end
 
 return M
