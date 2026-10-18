@@ -7,6 +7,7 @@ local tyres = require('src/tyres_window')
 local damage = require('src/damage_window')
 local layout = require('src/layout')
 local originals = require('src/originals')
+local setupLine = require('src/setup_line')
 local D = require('src/draw')
 local S = config.S
 
@@ -226,13 +227,23 @@ local function tabNotify()
   checkbox('notifyConnections', 'Odpojení jezdce (online)')
   checkbox('notifyRaceOnly', 'Pozice a boxy jen v závodě')
   gap()
+  ui.header('Nastavení auta (jeden řádek nahoře)')
+  checkbox('setupLine', 'Změny TC, ABS, brzd, brzdění motorem, mapy paliva… v okně MirrorDelta Setup')
+  if S.setupLine then
+    slider('setupTime', 'Jak dlouho', 1, 6, '%.1f s', 0.5)
+    if ui.button('Ukázat ukázku##setup') then setupLine.demo() end
+    local n, total = setupLine.available()
+    ui.textWrapped(string.format('Hlídaná nastavení dostupná v této verzi CSP: %d z %d. Do řádku jdou i systémové '
+      .. 'zprávy AC (kromě penalizací, ty jsou v notifikacích).', n, total))
+  end
+  gap()
   ui.header('Původní ukazatele AC')
   checkbox('hideOverlayLeaderboard', 'Vypnout původní pořadí AC (F9)')
   ui.text('Stav: ' .. originals.leaderboard)
   checkbox('hideSystemMessages', 'Skrýt původní systémové zprávy AC')
   ui.text('Stav: ' .. originals.messages)
   ui.textWrapped('Kdyby se původní zprávy dál zobrazovaly: Content Manager > Nastavení > Custom Shaders Patch > GUI > '
-    .. 'zapnout „Hide system messages“. Zprávy pak ukáže okno MirrorDelta Notifications.')
+    .. 'zapnout „Hide system messages“. Zprávy pak ukáže okno MirrorDelta Setup (a penalizace MirrorDelta Notifications).')
 end
 
 local function yesNo(v) return v and 'ano' or 'ne' end

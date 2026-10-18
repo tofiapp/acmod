@@ -14,6 +14,7 @@ local settingsWindow = require('src/settings_window')
 local layout = require('src/layout')
 local originals = require('src/originals')
 local flagWindow = require('src/flag_window')
+local setupLine = require('src/setup_line')
 local D = require('src/draw')
 
 -- A window that fails shows the error inside itself and keeps the rest of the app running.
@@ -40,6 +41,8 @@ function script.update(dt)
   if not ok and not tracker.diag.error then tracker.diag.error = 'notifikace: ' .. tostring(err) end
   ok, err = pcall(originals.update)
   if not ok and not tracker.diag.error then tracker.diag.error = 'původní prvky AC: ' .. tostring(err) end
+  ok, err = pcall(setupLine.update)
+  if not ok and not tracker.diag.error then tracker.diag.error = 'nastavení auta: ' .. tostring(err) end
   ok, err = pcall(layout.update)
   if not ok and not tracker.diag.error then tracker.diag.error = 'rozmístění oken: ' .. tostring(err) end
 end
@@ -51,4 +54,5 @@ function script.windowGear(dt) safe('převody', gearWindow.draw) end
 function script.windowDamage(dt) safe('poškození', damageWindow.draw) end
 function script.windowNotify(dt) safe('notifikace', notifyWindow.draw) end
 function script.windowFlags(dt) safe('vlajky', flagWindow.draw) end
+function script.windowSetup(dt) safe('nastavení auta', setupLine.draw) end
 function script.windowSettings(dt) safe('nastavení', settingsWindow.draw) end

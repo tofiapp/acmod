@@ -29,6 +29,8 @@ local defaults = {
   showCurrent = true,
   showBest = true,
   showLast = true,
+  setupLine = true,           -- car settings line at the top (TC, ABS, brake bias...) and AC's system messages
+  setupTime = 2.5,            -- s the line stays
   timingLayout = 2,         -- 1: stacked, 2: side by side
   bestHighlight = true,
   lapFlash = true,
@@ -106,7 +108,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.11.1' }
+local M = { S = S, defaults = defaults, VERSION = '1.12.0' }
 
 function M.set(key, value)
   S[key] = value

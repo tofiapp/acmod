@@ -240,6 +240,8 @@ do
     script.windowDamage(DT)
     env.windowW, env.windowH = 520, 110
     script.windowNotify(DT)
+    env.windowW, env.windowH = 520, 44
+    script.windowSetup(DT)
   end
   for _ = 1, 300 do frameAndDraw() end
   jit.off()
@@ -593,7 +595,8 @@ do
   for _ = 1, 300 do frame(1) end      -- arranged a few seconds after start
   local moved = 0
   for _ in pairs(env.moved or {}) do moved = moved + 1 end
-  check(moved == 7 and config.S.layoutVersion == 4, 'all seven windows placed: ' .. moved)
+  check(moved == 8 and config.S.layoutVersion == 5, 'all eight windows placed: ' .. moved)
+  check(env.moved.w9 and math.abs(env.moved.w9.x + 260 - 960) < 2 and env.moved.w9.y < 20, 'car settings line at the top centre')
   check(env.moved.w6 and env.moved.w6.x > 1300 and env.moved.w6.y > 100 and env.moved.w6.y < 200, 'notifications under the flag')
   check(env.moved.w5 and env.moved.w5.x < 100 and env.moved.w5.y > 300 and env.moved.w5.y < 600, 'damage window at the left edge, vertical middle')
   check(env.moved.w7 and env.moved.w7.x > 1500 and env.moved.w7.y < 100, 'flag window in the top right corner')
@@ -624,17 +627,22 @@ do
   local edited = false
   for _, e in ipairs(env.configEdits or {}) do if e:find('HIDE_SYSTEM_MESSAGES=1', 1, true) then edited = true end end
   check(edited, 'AC system messages hidden through gui.ini [HIDE]')
+  local setup = require('src/setup_line')
+  local countBefore = notify2.count
   env.callbacks.message('ABS', 'Level 3', 'info', 2)
-  check(notify2.get(1).kind == notify2.SYSTEM and notify2.get(1).title == 'ABS', 'AC system message shown as a notification')
+  local sl, sv = setup.current()
+  check(sl == 'ABS' and sv == 'Úroveň 3' and notify2.count == countBefore,
+    'AC system message shown in the car settings line, not the notifications: ' .. sl .. ' / ' .. sv)
   env.callbacks.message('Penalty', 'Cut', 'illegal', 2)
   check(notify2.get(1).kind == notify2.PENALTY, 'illegal message shown as a penalty')
   check(notify2.get(1).title == 'PENALIZACE' and notify2.get(1).sub == 'Řezání trati',
     'AC message translated to Czech: ' .. notify2.get(1).title .. ' / ' .. notify2.get(1).sub)
   env.callbacks.message('Traction Control', 'Level 3', 'info', 2)
-  check(notify2.get(1).title == 'TRAKČNÍ KONTROLA' and notify2.get(1).sub == 'Úroveň 3',
-    'TC message in Czech: ' .. notify2.get(1).title .. ' / ' .. notify2.get(1).sub)
+  sl, sv = setup.current()
+  check(sl == 'TRAKČNÍ KONTROLA' and sv == 'Úroveň 3', 'TC message in Czech: ' .. sl .. ' / ' .. sv)
   env.callbacks.message('Auto Clutch', 'ON', 'info', 2)
-  check(notify2.get(1).sub == 'Zapnuto' and notify2.get(1).title == 'AUTOMATICKÁ SPOJKA', 'ON translated: ' .. notify2.get(1).sub)
+  sl, sv = setup.current()
+  check(sv == 'Zapnuto' and sl == 'AUTOMATICKÁ SPOJKA', 'ON translated: ' .. sv)
   local flags = require('src/flag_window')
   env.sim.raceFlagType = ac.FlagType.Caution
   frame(1)
@@ -792,6 +800,40 @@ do
   check(tracker.flashKind == 1, 'next valid lap is the best, not the deleted one: ' .. tracker.flashKind)
   config.set('referenceKind', 2)
   check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
+end
+
+-- 28. Car settings line: a TC change shows one line at the top; AC's own message about it does not replace it
+do
+  local setup = require('src/setup_line')
+  for _ = 1, 120 do frame(1) end
+  car.tractionControlMode = 3
+  frame(1)
+  local label, value = setup.current()
+  check(label == 'TRAKČNÍ KONTROLA' and value == '3 / 8', 'TC change shown: ' .. label .. ' / ' .. value)
+  env.callbacks.message('Traction Control', 'Level 3', 'info', 2)
+  label, value = setup.current()
+  check(value == '3 / 8', 'AC message right after does not replace the own reading: ' .. value)
+  car.brakeBias = 0.6
+  frame(1)
+  label, value = setup.current()
+  check(label == 'ROZLOŽENÍ BRZD' and value == '60,0 % vpředu', 'brake bias shown: ' .. value)
+  car.absMode = 0
+  frame(1)
+  label, value = setup.current()
+  check(label == 'ABS' and value == 'vypnuto', 'ABS off shown: ' .. value)
+  local n = setup.count
+  car.autoClutch = false
+  config.set('setupLine', false)
+  frame(1)
+  check(setup.count == n, 'nothing shown when the line is turned off')
+  config.set('setupLine', true)
+  env.windowW, env.windowH = 520, 44
+  local before = env.calls.rect or 0
+  car.absMode = 1
+  frame(1)
+  local ok6, err6 = pcall(script.windowSetup, DT)
+  check(ok6 and (env.calls.rect or 0) > before and tracker.diag.error == nil,
+    'car settings line draws: ' .. tostring(err6 or tracker.diag.error))
 end
 
 print(string.format('%d passed, %d failed', passed, failed))

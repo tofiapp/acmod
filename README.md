@@ -12,13 +12,14 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 | **MirrorDelta Damage** | Poškození ve tvaru auta, 12 vzhledů: karoserie, pneumatiky a stav motoru v % |
 | **MirrorDelta Gear** | Ukazatel otáček z 12 dílků, pod ním převod na barevné dlaždici a pod převodem rychlost |
 | **MirrorDelta Flags** | Aktuální vlajka v pravém horním rohu: vlajka a její název, dokud platí |
+| **MirrorDelta Setup** | Jeden řádek nahoře uprostřed při změně nastavení auta (TC, ABS, brzdy…) a systémové zprávy AC |
 | **MirrorDelta Notifications** | Krátké zprávy nahoře: vlajky, nejrychlejší kolo, předjetí, boxy, neplatné kolo, odpojení |
 
 ## Instalace
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.11.1.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.12.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -123,6 +124,7 @@ Nastavení je společné pro všechna okna a má osm záložek.
   - odpojení jezdce, jen online.
 - Pozice a boxy se standardně hlásí jen v závodě, v tréninku by jich bylo moc.
 - Tlačítko **Ukázat ukázku** zobrazí dvě zkušební zprávy, podle nich okno umístěte (výchozí šířka 520 px, patří doprostřed nahoru).
+- **Nastavení auta (jeden řádek nahoře):** okno MirrorDelta Setup ukáže na 2,5 s (nastavitelné) jeden řádek, když změníte trakční kontrolu, TC2, ABS, rozložení brzd, brzdění motorem, mapu paliva, turbo, MGU-K / MGU-H, omezovač v boxech nebo rychlosti, automatické řazení nebo spojku. Třeba „TRAKČNÍ KONTROLA 3 / 8“ s dílky úrovně. Nová změna řádek přepíše, takže při držení tlačítka brzd se hodnota jen plynule mění. Do stejného řádku jdou i ostatní systémové zprávy AC (česky); penalizace zůstávají v notifikacích. Hodnoty čte stejně jako oficiální aplikace Unbound; co daná verze CSP nemá, se vynechá.
 
 **Diagnostika**
 - Ukazuje, co aplikace při měření kola vidí: jestli se kolo měří, kolik průjezdů cílem a referencí zaznamenala a proč naposledy kolo zahodila nebo nezapočítala.

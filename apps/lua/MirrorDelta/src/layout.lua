@@ -5,10 +5,10 @@
 local config = require('src/config')
 local S = config.S
 
-local LAYOUT_VERSION = 4
+local LAYOUT_VERSION = 5
 
--- Each window's top left corner: offset from the screen centre ('c'), the top right corner ('tr') or the left edge
--- at the vertical middle ('l'), px,
+-- Each window's top left corner: offset from the screen centre ('c'), the top right corner ('tr'), the top edge
+-- at the horizontal middle ('tc') or the left edge at the vertical middle ('l'), px,
 -- and the layout version that introduced it (an update places only windows that are new to the user).
 local PLACES = {
   ['MirrorDelta Notifications'] = { -550, 125, 'tr', 3 },   -- under the flag, right edges aligned
@@ -18,6 +18,7 @@ local PLACES = {
   ['MirrorDelta Gear'] = { -130, 90, 'c', 1 },
   ['MirrorDelta Damage'] = { 30, -100, 'l', 4 },            -- left edge, vertical middle
   ['MirrorDelta Flags'] = { -290, 40, 'tr', 2 },
+  ['MirrorDelta Setup'] = { -260, 8, 'tc', 5 },             -- one line at the top centre
 }
 
 local M = { lastResult = '-' }
@@ -37,7 +38,7 @@ function M.arrange(after)
       if window then
         local anchor = place[3]
         local x = anchor == 'tr' and screen.x + place[1] or anchor == 'l' and place[1] or cx + place[1]
-        local y = anchor == 'tr' and place[2] or cy + place[2]
+        local y = (anchor == 'tr' or anchor == 'tc') and place[2] or cy + place[2]
         window:move(vec2(math.max(0, x), math.max(0, y)))
         window:setVisible(true)
         placed = placed + 1

@@ -65,6 +65,8 @@ os.preciseClock = function () return M.clock end
 M.car = {
   index = 0, splinePosition = 0, lapTimeMs = 0, lapCount = 0, previousLapTimeMs = 0, bestLapTimeMs = 0,
   racePosition = 3, engineLifeLeft = 1000, damage = { [0] = 0, 0, 0, 0 }, gear = 3, rpm = 7400, rpmLimiter = 7800, speedKmh = 184.4, isLapValid = true, isInPitlane = false, isInPit = false,
+  tractionControlMode = 2, tractionControlModes = 8, absMode = 1, absModes = 1, brakeBias = 0.585,
+  autoShift = false, autoClutch = true, manualPitsSpeedLimiterEnabled = false,
   wheels = {},
 }
 for i = 0, 3 do
@@ -108,7 +110,7 @@ ac = {
   getAppWindows = function ()
     local list = {}
     for i, title in ipairs({ 'MirrorDelta', 'MirrorDelta Timing', 'MirrorDelta Tyres', 'MirrorDelta Gear',
-      'MirrorDelta Damage', 'MirrorDelta Notifications', 'MirrorDelta Flags', 'Some Other App' }) do
+      'MirrorDelta Damage', 'MirrorDelta Notifications', 'MirrorDelta Flags', 'Some Other App', 'MirrorDelta Setup' }) do
       list[i] = { name = 'w' .. i, title = title, visible = false, layer = 0 }
     end
     return list

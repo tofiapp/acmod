@@ -10,6 +10,9 @@ each with its own taskbar icon:
 - **tyres** (`MirrorDelta Tyres`): tyre core temperature (big number) and tread zones (inner/middle/outer).
 - **notify** (`MirrorDelta Notifications`): short messages at the top (flags, fastest lap, positions, pits,
   invalid lap, disconnects), three styles (pill, slanted strip, thin line).
+- **setup** (`MirrorDelta Setup`): one line at the top centre when a car setting changes (TC, TC2, ABS, brake bias,
+  engine brake, fuel map, turbo, MGU-K/H, limiters, auto shift/clutch; fields as in the official Unbound app, each
+  probed once under pcall) plus AC's non-penalty system messages (`src/setup_line.lua`).
 - **gear** (`MirrorDelta Gear`): 12-segment RPM bar lighting from both edges to the centre (range from
   `car.rpmLimiter`), gear on a rounded tile coloured by revs (white/yellow/red, blinking blue at the limiter),
   calm speed (changes only by whole steps) on a dark bar under it. Font: bundled Unbounded Bold.

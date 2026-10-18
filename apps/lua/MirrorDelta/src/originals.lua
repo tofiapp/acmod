@@ -6,6 +6,7 @@
 
 local config = require('src/config')
 local notify = require('src/notify')
+local setupLine = require('src/setup_line')
 local S = config.S
 
 local M = {
@@ -141,14 +142,17 @@ function M.translate(str)
   return out
 end
 
--- AC's system messages (ABS, TC, penalties, joins...) go to the notification window instead, in Czech.
+-- AC's system messages, in Czech: penalties go to the notification window, the rest (TC, ABS, brake bias...)
+-- to the one-line car settings window at the top, like AC shows them (or to the notifications when that is off).
 if type(ac.onMessage) == 'function' then
   pcall(ac.onMessage, function (title, description, kind)
-    if not S.notifySystem then return end
     title = type(title) == 'string' and title or ''
     description = type(description) == 'string' and description or ''
     if title == '' and description == '' then return end
-    notify.push(kind == 'illegal' and notify.PENALTY or notify.SYSTEM, M.upper(M.translate(title)), M.translate(description))
+    title, description = M.upper(M.translate(title)), M.translate(description)
+    if kind ~= 'illegal' and setupLine.message(title, description) then return end
+    if not S.notifySystem then return end
+    notify.push(kind == 'illegal' and notify.PENALTY or notify.SYSTEM, title, description)
   end)
 end
 
