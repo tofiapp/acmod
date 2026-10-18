@@ -232,6 +232,7 @@ local function tabMirror()
     slider('mirrorLineWidth', 'Tloušťka čar', 1, 6, '%.0f px', 1)
     checkbox('mirrorFill', 'Průhledná výplň uvnitř značky')
     checkbox('mirrorGapLabel', 'Odstup v sekundách u nejbližšího auta')
+    checkbox('mirrorHideOverlap', 'Když se značky překrývají, ukázat jen tu bližšího auta')
   end
   checkbox('mirrorSideArrows', 'Červený pruh na straně, když je auto vedle mě')
   slider('mirrorFov', 'Šířka záběru', 20, 90, '%.0f°', 1)

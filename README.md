@@ -21,7 +21,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.17.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.17.1.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -127,7 +127,7 @@ Nastavení je společné pro všechna okna a má osm záložek.
 - Počítají se jen auta, která jsou za vámi i podle polohy na trati, takže auto na vedlejší rovince se neoznačí.
 - Auto za vámi mimo zobrazený výřez: šipka u toho okraje. Auto vedle vás: červený pruh na té straně, jeho jasná část ukazuje, jestli je auto vepředu, na úrovni nebo vzadu.
 - Šířka záběru (výchozí 50°) se nastavuje tak, aby značky seděly přesně na autech; hlídaná vzdálenost výchozí 60 m.
-- Nastavitelné: kolik nejbližších aut se označí (1–6, výchozí 2), značka (rohový rámeček, celý rámeček, šipka nad autem), barvy (zelená/oranžová/červená, bílá/žlutá/červená, modrá/žlutá/červená), tloušťka čar, výplň a odstup u nejbližšího auta.
+- Nastavitelné: kolik nejbližších aut se označí (1–6, výchozí 2), značka (rohový rámeček, celý rámeček, šipka nad autem), barvy (zelená/oranžová/červená, bílá/žlutá/červená, modrá/žlutá/červená), tloušťka čar, výplň a odstup u nejbližšího auta. Když by se značky aut překrývaly (auto schované za jiným), ukáže se jen značka bližšího auta a místo vzdálenějšího se označí další volné auto (jde vypnout).
 - Okna jiných aplikací, která vypadají jako zpětné zrcátko nebo vlajky, aplikace skryje (pokud je AC vede jako okna aplikací) a jednou to oznámí notifikací. Vestavěné virtuální zrcátko a vlajky AC, které okny nejsou, CSP aplikacím vypnout nedovolí. Když AC zpětný pohled zrovna nevykresluje (třeba mimo kokpit), okno to napíše.
 
 **Notifikace**

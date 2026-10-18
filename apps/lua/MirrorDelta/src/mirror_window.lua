@@ -40,8 +40,9 @@ local PALETTES = {
   { rgbm(0.2, 0.75, 1, 1), rgbm(1, 0.85, 0.1, 1), RED },
 }
 local COLORS = PALETTES[1]
-local chosen = {}
-for i = 1, 64 do chosen[i] = false end
+local chosen, chosenList, skipped = {}, {}, {}
+for i = 1, 64 do chosen[i], chosenList[i], skipped[i] = false, 0, false end
+
 
 -- A full frame (setting style 2).
 local function frame(x1, y1, x2, y2, t, color)
@@ -58,6 +59,12 @@ local tx, ty, tw, th, candBack = {}, {}, {}, {}, {}     -- this frame's raw box 
 for i = 1, MAX_CARS do
   sx[i], sy[i], sw[i], sh[i], vis[i], threat[i] = 0, 0, 0, 0, 0, 1
   tx[i], ty[i], tw[i], th[i], candBack[i] = 0, 0, 0, 0, 1e9
+end
+
+-- True when car i's raw box overlaps the box of car j (a few px of margin).
+local function overlaps(i, j, margin)
+  return math.abs(tx[i] - tx[j]) < tw[i] + tw[j] + margin
+    and ty[i] < ty[j] + th[j] + margin and ty[j] < ty[i] + th[i] + margin
 end
 local lastClock = nil
 local gapStrings = {}
@@ -183,14 +190,29 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
     end
   end
   -- only the nearest S.mirrorTargets cars get markers; the rest fade out
-  for i = 1, n - 1 do chosen[i] = false end
-  for _ = 1, math.max(1, math.min(6, math.floor(S.mirrorTargets))) do
+  -- nearest first; with S.mirrorHideOverlap a car whose marker would overlap a nearer one is skipped
+  for i = 1, n - 1 do chosen[i], skipped[i] = false, false end
+  local picked, want = 0, math.max(1, math.min(6, math.floor(S.mirrorTargets)))
+  local margin = 2 * sc
+  while picked < want do
     local best, bestBack = 0, 1e9
     for i = 1, n - 1 do
-      if not chosen[i] and candBack[i] < bestBack then best, bestBack = i, candBack[i] end
+      if not chosen[i] and not skipped[i] and candBack[i] < bestBack then best, bestBack = i, candBack[i] end
     end
     if best == 0 then break end
-    chosen[best] = true
+    local hidden = false
+    if S.mirrorHideOverlap then
+      for m = 1, picked do
+        if overlaps(best, chosenList[m], margin) then hidden = true; break end
+      end
+    end
+    if hidden then
+      skipped[best] = true
+    else
+      chosen[best] = true
+      picked = picked + 1
+      chosenList[picked] = best
+    end
   end
   local fade = dt > 0 and (1 - math.exp(-dt / 0.15)) or 1
   for i = 1, n - 1 do

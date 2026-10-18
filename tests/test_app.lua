@@ -973,6 +973,7 @@ do
   script.windowMirror(DT)
   check(mirror.shown == 1, 'one target: only the nearest car is marked')
   config.set('mirrorTargets', 3)
+  config.set('mirrorHideOverlap', false)
   local styleOk = true
   for style = 1, 3 do
     for palette = 1, 3 do
@@ -983,6 +984,20 @@ do
     end
   end
   check(styleOk and tracker.diag.error == nil, 'all marker styles and colour schemes draw three targets')
+  config.set('mirrorHideOverlap', true)
+  -- a car right behind another one (same line, a bit further): its marker would overlap, only the nearer one shows
+  env.cars[2] = carAt(1.1, -11, 55)
+  env.cars[3] = carAt(-4, -30, 50)     -- well to the right: its own marker
+  script.windowMirror(DT)
+  check(mirror.shown == 2, 'overlapping car hidden, the next free one marked instead: ' .. mirror.shown)
+  local nearX = false
+  for j = 1, mirror.shown do if mirror.drawnThreat[j] == 3 then nearX = true end end
+  check(nearX, 'the nearer car keeps its marker')
+  config.set('mirrorHideOverlap', false)
+  script.windowMirror(DT)
+  check(mirror.shown == 3, 'without the option all three are marked: ' .. mirror.shown)
+  config.set('mirrorHideOverlap', true)
+  env.cars[2] = carAt(-2, -20, 55)
   config.set('mirrorTargets', 2)
   config.set('mirrorMarkerStyle', 1)
   config.set('mirrorPalette', 1)

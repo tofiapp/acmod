@@ -14,7 +14,7 @@ each with its own taskbar icon:
   engine brake, fuel map, turbo, MGU-K/H, limiters, auto shift/clutch; fields as in the official Unbound app, each
   probed once under pcall) plus AC's non-penalty system messages (`src/setup_line.lua`).
 - **mirror** (`MirrorDelta Mirror`): AC's rear view via `ui.drawVirtualMirror` (ac_apps.lua, used by CSP's OBS view);
-  GT3-style radar markers on the `S.mirrorTargets` nearest cars behind (style, palette, line width, fill, gap label settings) from a perspective projection (look/side/up, `S.mirrorFov`,
+  GT3-style radar markers on the `S.mirrorTargets` nearest cars behind (style, palette, line width, fill, gap label settings; nearest first, a marker overlapping a nearer one is skipped with `S.mirrorHideOverlap`) from a perspective projection (look/side/up, `S.mirrorFov`,
   camera 0.6 m up, 4:1 square pixels), smoothed, threat colours, time gap label on the nearest, edge arrows for cars
   outside the crop, side bars for cars alongside; cars must also be behind by spline gap (`sim.trackLengthM`). Left/right from `wheels[0/1].position` vs `car.side`. The mirror texture is HDR (pre post-processing). `S.mirrorMode`
   (click in the window cycles, hover shows version + mode): 1 gamma = `ui.drawVirtualMirror` into a float `ui.ExtraCanvas`, then
