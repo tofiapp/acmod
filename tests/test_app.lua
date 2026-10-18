@@ -1350,5 +1350,61 @@ do
   frame(1)
 end
 
+-- 33. Pit lane: the car's own shift LEDs blink in turn in orange (digital_instruments.ini LEDs, else CSP's LED marks)
+do
+  local carLeds = require('src/car_leds')
+  local savedIni, savedSession = env.carIni, env.sim.currentSessionIndex
+  env.carMeshes = { LED_A = true, LED_B = true, LED_C = true, LED_D = true, ABS_LIGHT = true }
+  env.carIni = { ['digital_instruments.ini'] = {
+    ['LED_0/OBJECT_NAME'] = 'LED_C', ['LED_0/RPM_SWITCH'] = 7000, ['LED_0/EMISSIVE'] = { '40', '0', '0' },
+    ['LED_1/OBJECT_NAME'] = 'LED_A', ['LED_1/RPM_SWITCH'] = 6000,
+    ['LED_2/OBJECT_NAME'] = 'LED_B', ['LED_2/RPM_SWITCH'] = 6500,
+    ['LED_3/OBJECT_NAME'] = 'LED_D', ['LED_3/RPM_SWITCH'] = 7500,
+  } }
+  env.sim.currentSessionIndex = savedSession + 7
+  env.emissive = {}
+  car.isInPitlane = true
+  env.clock = 200.05
+  frame(1)
+  local e = env.emissive
+  local function lit(n) return e[n] and e[n][1] > 0 end
+  check(carLeds.count == 4 and carLeds.source == 'digital_instruments.ini' and not e.ABS_LIGHT,
+    'shift LEDs from digital_instruments.ini, other LEDs untouched: ' .. carLeds.count .. ' ' .. carLeds.source)
+  local first = { lit('LED_A'), lit('LED_B'), lit('LED_C'), lit('LED_D') }   -- in RPM order
+  local litName = first[1] and 'LED_A' or 'LED_B'
+  local c = e[litName]
+  check(first[1] ~= first[2] and first[1] == first[3] and first[2] == first[4] and c[1] > c[2] * 1.5 and c[2] > c[3] * 3,
+    string.format('every other LED lit, orange (%.1f, %.1f, %.1f)', c[1], c[2], c[3]))
+  check(e.LED_C[1] == 0 or e.LED_C[1] > 30, 'brightness from the LED\'s own EMISSIVE')
+  env.clock = 200.35
+  frame(1)
+  check(lit('LED_A') ~= first[1] and lit('LED_B') ~= first[2], 'then the other LEDs (in turn)')
+  car.isInPitlane = false
+  frame(1)
+  check(not lit('LED_A') and not lit('LED_B') and not lit('LED_C') and not lit('LED_D'), 'leaving the pit lane: all off, AC takes over')
+  env.emissive = {}
+  frame(1)
+  check(next(env.emissive) == nil, 'nothing written on track')
+  -- no digital_instruments.ini: the meshes CSP marks as LEDs
+  env.carIni = nil
+  env.sim.currentSessionIndex = savedSession + 8
+  car.isInPitlane = true
+  frame(1)
+  check(carLeds.count == 5 and carLeds.source == 'CSP (actsAsLED)', 'fallback to CSP LED marks: ' .. carLeds.count)
+  config.set('carLedsPit', false)
+  car.isInPitlane = false
+  frame(1)
+  car.isInPitlane = true
+  env.emissive = {}
+  frame(1)
+  check(next(env.emissive) == nil, 'turned off: the car\'s LEDs are left alone')
+  config.set('carLedsPit', true)
+  car.isInPitlane = false
+  frame(1)
+  env.carIni, env.carMeshes = savedIni, nil
+  env.sim.currentSessionIndex = savedSession
+  frame(1)
+end
+
 print(string.format('%d passed, %d failed', passed, failed))
 return failed

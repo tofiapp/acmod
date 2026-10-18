@@ -11,6 +11,7 @@ local setupLine = require('src/setup_line')
 local pitLights = require('src/pit_lights')
 local mirror = require('src/mirror_window')
 local carData = require('src/car_data')
+local carLeds = require('src/car_leds')
 local D = require('src/draw')
 local S = config.S
 
@@ -102,6 +103,14 @@ local function tabDelta()
     if S.pitStyle == 4 then
       combo('pitSectorPattern', 'Mini sektory v boxech', { 'Střídavě jednotlivé', 'Po polovinách s čárou' })
     end
+  end
+  checkbox('carLedsPit', 'V boxech blikat i diodami otáček v autě (na střídačku)')
+  if S.carLedsPit then
+    combo('carLedsColor', 'Barva diod v autě', pitLights.NAMES)
+    ui.textWrapped(carLeds.count > 0
+      and string.format('Diody v tomto autě: %d (%s).', carLeds.count, carLeds.source)
+      or ('Diody otáček v tomto autě nenalezeny' .. (carLeds.source ~= '' and ': ' .. carLeds.source or '')
+        .. '. Auta s displejem ze skriptu nebo z textury to neumí.'))
   end
   checkbox('intensityByDelta', 'Intenzita barvy podle velikosti delty')
   if S.intensityByDelta then

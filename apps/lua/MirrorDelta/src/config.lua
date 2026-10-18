@@ -34,6 +34,8 @@ local defaults = {
   pitBlink = true,            -- in the pit lane the delta line and mini sectors show the pit lights
   pitStyle = 1,               -- pit lights: 1 scanner, 2 waves from the centre, 3 breathing, 4 halves in turn
   pitColor = 1,               -- 1 blue, 2 orange, 3 white, 4 yellow
+  carLedsPit = true,          -- in the pit lane the car's own shift LEDs blink in turn
+  carLedsColor = 2,           -- their colour: 1 blue, 2 orange, 3 white, 4 yellow
   pitSectorPattern = 1,       -- halves style: 1 every other mini sector, 2 the half under the lit half of the line
   pitBox = true,              -- in the pit lane the timing window shows BOX instead of the lap time
   standingsCount = 7,         -- standings window: cars shown (the player in the middle)
@@ -143,7 +145,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.22.0' }
+local M = { S = S, defaults = defaults, VERSION = '1.23.0' }
 
 function M.set(key, value)
   S[key] = value

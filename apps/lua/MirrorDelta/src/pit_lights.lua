@@ -26,6 +26,8 @@ M.STYLES = { 'Skener (světlo běhá ze strany na stranu)', 'Vlny ze středu ke 
   'Poloviny na střídačku' }
 
 function M.color() return COLORS[S.pitColor] or COLORS[1] end
+-- Colour by its index in NAMES (other pit lights with their own colour setting).
+function M.colorAt(i) return COLORS[i] or COLORS[2] end
 -- Text colour on a pit coloured background.
 function M.ink() return S.pitColor == 1 and INK_LIGHT or INK_DARK end
 

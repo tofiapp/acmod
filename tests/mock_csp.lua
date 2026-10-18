@@ -17,6 +17,15 @@ vec2mt.__index = vec2mt
 function vec2mt:set(x, y) self.x, self.y = x, y; return self end
 vec2 = setmetatable({}, { __call = function (_, x, y) return setmetatable({ x = x or 0, y = y or 0 }, vec2mt) end })
 
+-- rgb
+local rgbmt3 = {}
+rgbmt3.__index = rgbmt3
+function rgbmt3:set(r, g, b)
+  if type(r) == 'table' then self.r, self.g, self.b = r.r, r.g, r.b else self.r, self.g, self.b = r, g, b end
+  return self
+end
+rgb = setmetatable({}, { __call = function (_, r, g, b) return setmetatable({ r = r or 0, g = g or 0, b = b or 0 }, rgbmt3) end })
+
 -- vec3
 local vec3mt = {}
 vec3mt.__index = vec3mt
@@ -110,7 +119,29 @@ M.overlayBoard = { displayMode = 2, verticalLayout = false }                   -
 M.session = { laps = 15, isTimedRace = false, type = 3 }
 
 ac = {
-  findNodes = function (filter) return { filter = filter } end,
+  findNodes = function (filter)
+    -- scene reference: array part = meshes (names) of our car under 'carRoot:0', from M.carMeshes { name = isLED }
+    local function ref(list)
+      local r = { filter = filter }
+      for k = 1, #list do r[k] = list[k] end
+      function r:findMeshes(f)
+        local out = {}
+        for name, led in pairs(M.carMeshes or {}) do
+          if name == f or (f == '{ actsAsLED:yes }' and led) then out[#out + 1] = name end
+        end
+        table.sort(out)
+        return ref(out)
+      end
+      function r:at(k) return ref({ self[k] }) end
+      function r:setMaterialProperty(prop, value)
+        M.emissive = M.emissive or {}
+        for k = 1, #self do M.emissive[self[k]] = { value.r, value.g, value.b } end
+        return self
+      end
+      return r
+    end
+    return ref({})
+  end,
   GeometryShot = function (scene, size, mips, depth, aa, format)
     local shot = { scene = scene, size = size, aa = aa, mipCount = mips, updates = 0 }
     function shot:setBestSceneShotQuality() return self end
