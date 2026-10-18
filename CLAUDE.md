@@ -13,6 +13,9 @@ each with its own taskbar icon:
 - **setup** (`MirrorDelta Setup`): one line at the top centre when a car setting changes (TC, TC2, ABS, brake bias,
   engine brake, fuel map, turbo, MGU-K/H, limiters, auto shift/clutch; fields as in the official Unbound app, each
   probed once under pcall) plus AC's non-penalty system messages (`src/setup_line.lua`).
+- **mirror** (`MirrorDelta Mirror`): AC's rear view via `ui.drawVirtualMirror` (ac_apps.lua, used by CSP's OBS view) in a
+  4:1 frame; triangles above cars behind (angle from position/look/side, `S.mirrorFov` calibrates), red side arrows for
+  cars alongside. Left/right from `wheels[0/1].position` vs `car.side`. Hiding AC's own virtual mirror: no verified API.
 - **gear** (`MirrorDelta Gear`): 12-segment RPM bar lighting from both edges to the centre (range from
   `car.rpmLimiter`), gear on a rounded tile coloured by revs (white/yellow/red, blinking blue at the limiter),
   calm speed (changes only by whole steps) on a dark bar under it. Font: bundled Unbounded Bold.

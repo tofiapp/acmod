@@ -31,6 +31,10 @@ local defaults = {
   showLast = true,
   setupLine = true,           -- car settings line at the top (TC, ABS, brake bias...) and AC's system messages
   setupTime = 2.5,            -- s the line stays
+  mirrorMarkers = true,       -- mirror window: triangles above the cars behind
+  mirrorSideArrows = true,    -- mirror window: red arrow at the side when a car is alongside
+  mirrorFov = 50,             -- degrees the rear view covers horizontally (markers line up with the cars)
+  mirrorRange = 60,           -- m behind in which cars get a marker
   timingLayout = 2,         -- 1: stacked, 2: side by side
   bestHighlight = true,
   lapFlash = true,
@@ -108,7 +112,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.13.4' }
+local M = { S = S, defaults = defaults, VERSION = '1.14.0' }
 
 function M.set(key, value)
   S[key] = value

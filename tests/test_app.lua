@@ -243,6 +243,8 @@ do
     script.windowNotify(DT)
     env.windowW, env.windowH = 300, 44
     script.windowSetup(DT)
+    env.windowW, env.windowH = 480, 120
+    script.windowMirror(DT)
   end
   for _ = 1, 300 do frameAndDraw() end
   jit.off()
@@ -255,7 +257,7 @@ do
   jit.on()
   ui.measureDWriteText, ui.dwriteTextAligned = savedMeasure, savedText
   -- the running lap time string changes ten times a second; everything else is cached
-  check(perFrame < 16, string.format('per-frame allocation %.1f bytes', perFrame))
+  check(perFrame < 16, string.format('per-frame allocation %.1f bytes (error: %s)', perFrame, tostring(tracker.diag.error)))
 end
 
 -- 7. Saved reference loads in a new session
@@ -596,7 +598,9 @@ do
   for _ = 1, 300 do frame(1) end      -- arranged a few seconds after start
   local moved = 0
   for _ in pairs(env.moved or {}) do moved = moved + 1 end
-  check(moved == 8 and config.S.layoutVersion == 5, 'all eight windows placed: ' .. moved)
+  check(moved == 9 and config.S.layoutVersion == 6, 'all nine windows placed: ' .. moved)
+  check(env.moved.w10 and math.abs(env.moved.w10.x + 240 - 960) < 2 and env.moved.w10.y > 40 and env.moved.w10.y < 100,
+    'mirror at the top centre under the settings line')
   check(env.moved.w9 and math.abs(env.moved.w9.x + 150 - 960) < 2 and env.moved.w9.y < 20, 'car settings line at the top centre')
   check(env.moved.w6 and env.moved.w6.x > 1300 and env.moved.w6.y > 100 and env.moved.w6.y < 200, 'notifications under the flag')
   check(env.moved.w5 and env.moved.w5.x < 100 and env.moved.w5.y > 300 and env.moved.w5.y < 600, 'damage window at the left edge, vertical middle')
@@ -889,6 +893,46 @@ do
   local ok6, err6 = pcall(script.windowSetup, DT)
   check(ok6 and (env.calls.rect or 0) > before and tracker.diag.error == nil,
     'car settings line draws: ' .. tostring(err6 or tracker.diag.error))
+end
+
+-- 29. Mirror window: AC's rear view in a 4:1 frame, markers above the cars behind, arrows for cars alongside
+do
+  local mirror = require('src/mirror_window')
+  local saved1, saved2 = env.cars[1], env.cars[2]
+  for i = 0, 3 do                     -- earlier sections replaced the wheels
+    car.wheels[i].position = { x = (i % 2 == 0) and 0.8 or -0.8, y = 0.3, z = i < 2 and 1.3 or -1.3 }
+  end
+  local function carAt(x, z, vz)
+    return { index = 1, bestLapTimeMs = 0, isInPitlane = false, isInPit = false, isConnected = true, racePosition = 1,
+      lapCount = 0, isLapValid = true, position = { x = x, y = 0, z = z }, velocity = { x = 0, y = 0, z = vz } }
+  end
+  env.cars[1] = carAt(3, -8, 58)       -- close behind on the left, closing in
+  env.cars[2] = carAt(-2, -50, 40)     -- far behind on the right, slower
+  env.windowW, env.windowH = 480, 120
+  env.recordFills, env.fills = true, {}
+  local ok, err = pcall(script.windowMirror, DT)
+  env.recordFills = false
+  check(ok and env.lastMirror and env.lastMirror[3] - env.lastMirror[1] == 480, 'mirror picture drawn 4:1: ' .. tostring(err))
+  check(mirror.shown == 2, 'two cars behind get a marker: ' .. mirror.shown)
+  local left, right
+  for _, f in ipairs(env.fills) do
+    local x = f.pts[5]
+    if x and x < 240 then left = f elseif x then right = f end
+  end
+  check(left and left.r > 0.9 and left.g < 0.5, 'close car closing in on the left: red marker on the left')
+  check(right and right.r > 0.9 and right.g > 0.9 and right.b > 0.9, 'slower car far behind on the right: white marker on the right')
+  env.cars[1] = carAt(2.5, -1, 50)     -- alongside on the left
+  env.recordFills, env.fills = true, {}
+  script.windowMirror(DT)
+  env.recordFills = false
+  local arrow = false
+  for _, f in ipairs(env.fills) do if f.pts[1] and f.pts[1] < 20 and f.r > 0.9 and f.g < 0.5 then arrow = true end end
+  check(arrow, 'car alongside on the left: red arrow at the left edge')
+  env.mirrorAvailable = false
+  ok = pcall(script.windowMirror, DT)
+  env.mirrorAvailable = nil
+  check(ok and tracker.diag.error == nil, 'no rear view available: the window says so, no error')
+  env.cars[1], env.cars[2] = saved1, saved2
 end
 
 print(string.format('%d passed, %d failed', passed, failed))

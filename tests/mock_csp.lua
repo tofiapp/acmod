@@ -73,8 +73,12 @@ for i = 0, 3 do
   M.car.wheels[i] = {
     tyreCoreTemperature = 80 + i, tyreInsideTemperature = 90, tyreMiddleTemperature = 85,
     tyreOutsideTemperature = 78, tyreOptimumTemperature = 88, tyreWear = 0.1, isBlown = false, suspensionDamage = 0,
+    position = { x = (i % 2 == 0) and 0.8 or -0.8, y = 0.3, z = i < 2 and 1.3 or -1.3 },   -- FL is on +x (left)
   }
 end
+-- own car at the origin facing +z; side points left (+x)
+M.car.position, M.car.look, M.car.up = { x = 0, y = 0, z = 0 }, { x = 0, y = 0, z = 1 }, { x = 0, y = 1, z = 0 }
+M.car.side, M.car.velocity = { x = 1, y = 0, z = 0 }, { x = 0, y = 0, z = 50 }
 M.sim = { isReplayActive = false, isPaused = false, carsCount = 12, currentSessionIndex = 0, damageDisplayerShown = true, raceFlagType = 0 }
 M.cars = {}
 M.overlayBoard = { displayMode = 2, verticalLayout = false }                   -- other cars by index (1..); missing ones are nil like unused slots
@@ -121,7 +125,8 @@ ac = {
   getAppWindows = function ()
     local list = {}
     for i, title in ipairs({ 'MirrorDelta', 'MirrorDelta Timing', 'MirrorDelta Tyres', 'MirrorDelta Gear',
-      'MirrorDelta Damage', 'MirrorDelta Notifications', 'MirrorDelta Flags', 'Some Other App', 'MirrorDelta Setup' }) do
+      'MirrorDelta Damage', 'MirrorDelta Notifications', 'MirrorDelta Flags', 'Some Other App', 'MirrorDelta Setup',
+      'MirrorDelta Mirror' }) do
       list[i] = { name = 'w' .. i, title = title, visible = false, layer = 0 }
     end
     return list
@@ -157,8 +162,26 @@ ui = {
   setCursor = function () end,
   windowHovered = function () return M.hovered == true end,
   mouseClicked = function () return M.clicked == true end,
-  pathLineTo = function (p) assert(p.x == p.x and p.y == p.y, 'NaN in path'); count('pathLineTo') end,
-  pathFillConvex = function (color) assert(color and color.mult, 'path without colour'); count('quad') end,
+  pathLineTo = function (p)
+    assert(p.x == p.x and p.y == p.y, 'NaN in path'); count('pathLineTo')
+    if M.recordFills then M.path = M.path or {}; M.path[#M.path + 1] = p.x; M.path[#M.path + 1] = p.y end
+  end,
+  pathFillConvex = function (color)
+    assert(color and color.mult, 'path without colour'); count('quad')
+    if M.recordFills then
+      M.fills = M.fills or {}
+      M.fills[#M.fills + 1] = { pts = M.path or {}, r = color.r, g = color.g, b = color.b }
+      M.path = nil
+    end
+  end,
+  drawVirtualMirror = function (p1, p2, color)
+    assert(p1 and p2 and color and color.mult, 'mirror without rect or colour')
+    count('mirror')
+    local m = M.lastMirror or {}
+    m[1], m[2], m[3], m[4] = p1.x, p1.y, p2.x, p2.y
+    M.lastMirror = m
+    return M.mirrorAvailable ~= false
+  end,
   pathStroke = function (color, closed, thickness)
     assert(color and color.mult, 'stroke without colour'); assert(thickness and thickness > 0, 'stroke thickness'); count('stroke')
   end,

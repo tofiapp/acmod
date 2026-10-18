@@ -12,6 +12,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 | **MirrorDelta Damage** | Poškození jako jednoduchý kříž: předek, zadek, boky, 4 pneumatiky, 4 zavěšení a motor v % |
 | **MirrorDelta Gear** | Ukazatel otáček z 12 dílků, pod ním převod na barevné dlaždici a pod převodem rychlost |
 | **MirrorDelta Flags** | Aktuální vlajka v pravém horním rohu: vlajka a její název, dokud platí |
+| **MirrorDelta Mirror** | Zpětné zrcátko v posuvném rámečku 4 : 1 se šipkami nad auty za vámi (jako kamera v GT3) |
 | **MirrorDelta Setup** | Jeden řádek nahoře uprostřed při změně nastavení auta (TC, ABS, brzdy…) |
 | **MirrorDelta Notifications** | Krátké zprávy nahoře: vlajky, nejrychlejší kolo, předjetí, boxy, neplatné kolo, odpojení |
 
@@ -19,7 +20,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.13.4.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.14.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -111,6 +112,12 @@ Nastavení je společné pro všechna okna a má osm záložek.
 - Okno je vlevo uprostřed obrazovky a ukáže se jen po nárazu na 8 sekund, jako původní ukazatel AC. V nastavení jde přepnout na „vždy“ nebo „dokud je něco poškozené“. Při najetí myší je vidět vždy, ať ho jde přesunout.
 - Poškození zavěšení CSP v žádné oficiální aplikaci neukazuje. Aplikace ho zkouší číst, a když ho vaše verze CSP nedá, čtverečky zavěšení zůstanou šedé (stav je vidět v nastavení).
 - Citlivost: od jaké hodnoty z AC je strana plně červená. Aktuální hodnoty z AC vidíte přímo v nastavení, podle nich jde citlivost doladit.
+
+**Zrcátko**
+- Okno MirrorDelta Mirror ukazuje zpětný pohled AC (stejný obraz jako virtuální zrcátko) v rámečku, který jde posunout a zvětšit kamkoli. Poměr stran 4 : 1.
+- Nad každým autem za vámi je trojúhelník: bílý, žlutý když se rychle blíží, červený když je blízko (méně než 10 m nebo za méně než 1,2 s u vás). Když je auto vedle vás, mimo záběr, svítí na té straně rámečku červená šipka.
+- Šířka záběru (výchozí 50°) se nastavuje tak, aby šipky seděly přesně nad auty; hlídaná vzdálenost výchozí 60 m.
+- Původní virtuální zrcátko AC aplikace sama vypnout neumí (CSP pro to aplikacím nedává ověřenou funkci), vypněte ho ve hře. Když AC zpětný pohled zrovna nevykresluje (třeba mimo kokpit), okno to napíše.
 
 **Notifikace**
 - Vzhled: zaoblená pilulka (výchozí), šikmý pruh jako v TV grafice, nebo jen tenká linka s textem.

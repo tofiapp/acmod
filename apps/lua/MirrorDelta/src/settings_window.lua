@@ -210,6 +210,17 @@ local function tabDamage()
     .. (damage.suspensionFieldOk() == false and 'tato verze CSP poškození zavěšení neposkytuje, zůstává šedé.' or 'podle poškození zavěšení z AC.'))
 end
 
+local function tabMirror()
+  ui.textWrapped('Okno MirrorDelta Mirror ukazuje zpětný pohled AC v posuvném rámečku. Původní zrcátko AC vypněte ve hře '
+    .. '(aplikace ho sama vypnout neumí).')
+  gap()
+  checkbox('mirrorMarkers', 'Šipky nad auty za mnou (bílá, žlutá když se blíží, červená když je blízko)')
+  checkbox('mirrorSideArrows', 'Červená šipka na straně, když je auto vedle mě')
+  slider('mirrorFov', 'Šířka záběru', 20, 90, '%.0f°', 1)
+  ui.textWrapped('Šířku záběru nastavte tak, aby šipky seděly přesně nad auty v zrcátku.')
+  slider('mirrorRange', 'Hlídat do vzdálenosti', 20, 150, '%.0f m', 5)
+end
+
 local function tabNotify()
   combo('notifyLook', 'Vzhled', { 'Zaoblená pilulka', 'Šikmý pruh', 'Tenká linka', 'Pravý horní roh (u vlajky)' })
   slider('notifyTime', 'Jak dlouho', 2, 10, '%.1f s', 0.5)
@@ -321,6 +332,7 @@ function M.draw()
     ui.tabItem('Pneumatiky', tabTyres)
     ui.tabItem('Převody', tabGear)
     ui.tabItem('Poškození', tabDamage)
+    ui.tabItem('Zrcátko', tabMirror)
     ui.tabItem('Notifikace', tabNotify)
     ui.tabItem('Barvy', tabColors)
     ui.tabItem('Diagnostika', tabDiagnostics)

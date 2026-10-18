@@ -15,6 +15,7 @@ local layout = require('src/layout')
 local originals = require('src/originals')
 local flagWindow = require('src/flag_window')
 local setupLine = require('src/setup_line')
+local mirrorWindow = require('src/mirror_window')
 local D = require('src/draw')
 
 -- A window that fails shows the error inside itself and keeps the rest of the app running.
@@ -54,5 +55,6 @@ function script.windowGear(dt) safe('převody', gearWindow.draw) end
 function script.windowDamage(dt) safe('poškození', damageWindow.draw) end
 function script.windowNotify(dt) safe('notifikace', notifyWindow.draw) end
 function script.windowFlags(dt) safe('vlajky', flagWindow.draw) end
+function script.windowMirror(dt) safe('zrcátko', mirrorWindow.draw) end
 function script.windowSetup(dt) safe('nastavení auta', setupLine.draw) end
 function script.windowSettings(dt) safe('nastavení', settingsWindow.draw) end
