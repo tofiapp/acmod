@@ -17,6 +17,7 @@ local defaults = {
   intensityByDelta = false,
   intensityFullAt = 0.5,    -- seconds of delta for full colour
   referenceKind = 3,        -- 1: best lap of this session, 2: all-time best lap (saved), 3: previous lap (best until there is one)
+  deltaPanel = true,        -- matte translucent background behind the delta window
   deltaLimiterFlash = true, -- the delta line and the mini sectors blink blue at the rev limiter, like the gear window
   deltaLineMode = 1,        -- 1: split line (green to the right gaining now, red to the left losing now), 2: colour by total delta
   splitFull = 0.1,          -- s gained or lost over the last 3 s for a full half of the split line
@@ -55,7 +56,6 @@ local defaults = {
   damageShowTime = 8,       -- s
   damageFull = 50,          -- raw car.damage value drawn as full red
   damagePanel = true,       -- matte translucent background
-  damageView = 13,          -- 1..13, see damage_window.STYLE_NAMES (13: car outline with gaps)
   damageHideOriginal = true, -- hide AC's own damage display while this window is open
 
   -- Notification window
@@ -105,7 +105,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.9.0' }
+local M = { S = S, defaults = defaults, VERSION = '1.10.0' }
 
 function M.set(key, value)
   S[key] = value

@@ -89,6 +89,7 @@ local function tabDelta()
     'Celá čára barvou podle celkové delty',
   })
   if S.deltaLineMode == 1 then slider('splitFull', 'Plná délka čáry při rozdílu', 0.03, 0.5, '%.2f s za 3 s') end
+  checkbox('deltaPanel', 'Matné průhledné pozadí')
   checkbox('deltaLimiterFlash', 'Na omezovači blikat modře: čára delty i mini sektory')
   checkbox('intensityByDelta', 'Intenzita barvy podle velikosti delty')
   if S.intensityByDelta then
@@ -182,8 +183,6 @@ local function tabGear()
 end
 
 local function tabDamage()
-  combo('damageView', 'Vzhled', damage.STYLE_NAMES)
-  gap()
   ui.header('Zobrazit')
   combo('damageShow', 'Kdy ukázat', { 'Vždy', 'Dokud je něco poškozené', 'Jen po nárazu (jako v AC)' })
   if S.damageShow == 3 then slider('damageShowTime', 'Po nárazu zůstane', 3, 20, '%.0f s', 1) end
@@ -200,7 +199,7 @@ local function tabDamage()
     ui.textWrapped('Po nárazu podle těchto čísel nastavte, od kolika má být strana plně červená.')
   end
   ui.textWrapped('Kola ukazují pneumatiky: opotřebení (od žluté po červenou) a defekt (červená).'
-    .. (damage.wheelFieldsOk() == false and ' Tato verze CSP stav pneumatik neposkytuje.' or ''))
+    .. (damage.tyreFieldsOk() == false and ' Tato verze CSP stav pneumatik neposkytuje.' or ''))
   ui.textWrapped('Zavěšení (pružiny uvnitř obrysu): '
     .. (damage.suspensionFieldOk() == false and 'tato verze CSP poškození zavěšení neposkytuje, zůstává šedé.' or 'podle poškození zavěšení z AC.'))
 end

@@ -532,7 +532,7 @@ for _ = 1, 30 do frame(1) end
 check((tracker.refKind == 1 or tracker.refKind == 2) and math.abs(tracker.sessionRefMs - car.bestLapTimeMs) < 2,
   string.format('lap confirmed by AC best time becomes the reference: kind %d, %.0f vs %.0f', tracker.refKind, tracker.sessionRefMs, car.bestLapTimeMs))
 
--- 20. AC knows a best lap but has no delta of its own: delta against AC's best time (estimate)
+-- 20. AC knows a best lap but has no delta of its own and nothing was driven yet: no guessed delta
 tracker.clearSaved()
 car.performanceMeter = nil          -- this CSP has no performanceMeter
 env.callbacks.release()
@@ -542,12 +542,12 @@ env.callbacks.session(0, false)
 frame(1)
 driveLaps(1, 1)
 for _ = 1, 300 do frame(1) end
-check(tracker.refKind == 4 and tracker.hasDelta and not tracker.deltaFromAC,
-  'delta against the AC best time without own reference: kind ' .. tracker.refKind)
+check(tracker.refKind ~= 4 and not tracker.hasDelta,
+  'no made-up even-pace delta on the first lap without any driven lap: kind ' .. tracker.refKind)
 check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
 car.performanceMeter = 0
 
--- 21. All twelve damage styles draw without errors, balanced clip rects and no per-frame allocation
+-- 21. The damage window draws without errors, with balanced clip rects and no per-frame allocation
 do
   local damage = require('src/damage_window')
   local savedText = ui.dwriteTextAligned
@@ -557,45 +557,38 @@ do
   car.engineLifeLeft = 640
   car.wheels[1].isBlown = true
   config.set('damageShow', 1)
-  local ok3, err3 = pcall(function ()
-    for style = 1, 13 do config.set('damageView', style); damage.draw() end
-    car.damage[1] = 40                -- a fresh hit: the rear flashes
-    for style = 1, 13 do config.set('damageView', style); damage.draw() end
-  end)
-  check(ok3, 'all damage styles draw: ' .. tostring(err3))
-  check((env.clipDepth or 0) == 0, 'damage styles pop every clip rect')
-  check(#damage.STYLE_NAMES == 13, 'thirteen damage style names')
-  local worst, worstStyle = 0, 0
-  for style = 1, 13 do
-    config.set('damageView', style)
-    for _ = 1, 20 do damage.draw() end
-    jit.off()
-    collectgarbage('collect')
-    collectgarbage('stop')
-    local before = collectgarbage('count')
-    for _ = 1, 50 do damage.draw() end
-    local perFrame = (collectgarbage('count') - before) * 1024 / 50
-    collectgarbage('restart')
-    jit.on()
-    if perFrame > worst then worst, worstStyle = perFrame, style end
+  for i = 0, 3 do                     -- section 8 emptied the wheels
+    local wh = car.wheels[i]
+    wh.tyreWear, wh.isBlown, wh.suspensionDamage = 0.1, i == 1, 0
   end
+  car.wheels[2].suspensionDamage = 0.5
+  local ok3, err3 = pcall(function ()
+    damage.draw()
+    car.damage[1] = 40                -- a fresh hit: the rear flashes
+    damage.draw()
+  end)
+  check(ok3, 'damage window draws: ' .. tostring(err3))
+  check((env.clipDepth or 0) == 0, 'damage window pops every clip rect')
+  check(damage.suspensionFieldOk() == true, 'suspension damage read')
+  for _ = 1, 20 do damage.draw() end
+  jit.off()
+  collectgarbage('collect')
+  collectgarbage('stop')
+  local before = collectgarbage('count')
+  for _ = 1, 50 do damage.draw() end
+  local perFrame = (collectgarbage('count') - before) * 1024 / 50
+  collectgarbage('restart')
+  jit.on()
   ui.dwriteTextAligned = savedText
-  check(worst < 1, string.format('damage styles allocate nothing per frame (worst %.1f bytes, style %d)', worst, worstStyle))
+  check(perFrame < 1, string.format('damage window allocates nothing per frame (%.1f bytes)', perFrame))
+  car.wheels[2].suspensionDamage = 0
   car.wheels[1].isBlown = false
   car.damage[0], car.damage[1], car.damage[2], car.damage[3] = 0, 0, 0, 0
   car.engineLifeLeft = 1000
-  config.set('damageView', 1)
 end
 
--- 22. Clicking the damage window switches to the next style; windows get placed around the screen centre once
+-- 22. Windows get placed once
 do
-  local damage = require('src/damage_window')
-  config.set('damageView', 13)
-  env.hovered, env.clicked = true, true
-  env.windowW, env.windowH = 160, 200
-  damage.draw()
-  env.hovered, env.clicked = false, false
-  check(config.S.damageView == 1, 'click on the damage window cycles the style: ' .. config.S.damageView)
   config.set('layoutVersion', 0)
   for _ = 1, 300 do frame(1) end      -- arranged a few seconds after start
   local moved = 0
@@ -687,6 +680,18 @@ do
     end
   end)
   check(gain > frames * 0.8, string.format('split line gains against the previous lap: %d of %d', gain, frames))
+  local last, jump = nil, 0
+  for _ = 1, 1200 do
+    frame(1.02)
+    if tracker.hasDelta then
+      if last then
+        local dj = math.abs(tracker.nowDelta - last)
+        jump = math.max(jump, dj)
+      end
+      last = tracker.nowDelta
+    end
+  end
+  check(jump < 0.004, string.format('split line moves smoothly (largest step %.4f s per frame)', jump))
   driveLaps(1, 0.97, function ()     -- now slower than that faster lap
     if tracker.hasDelta and tracker.nowDelta > 0 then lose = lose + 1 end
   end)

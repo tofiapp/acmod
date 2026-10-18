@@ -90,8 +90,9 @@ local estimateStartKnown = false
 -- Last fully recorded lap of any kind; adopted as the reference when AC confirms it as its best lap.
 local lastFull, lastFullMs, lastFullStart, lastFullClock = newList(GRID + 1), 0, 0, -100
 local prevLapRef, prevLapStart = newList(GRID + 1), 0
-local NOW_WINDOW, NOW_STEP = 3, 0.1   -- s: the split line compares the last 3 s, sampled 10 times a second
-local NOW_N = math.floor(NOW_WINDOW / NOW_STEP) + 1
+local NOW_WINDOW, NOW_STEP = 3, 0.05  -- s: the split line compares the last 3 s, sampled 20 times a second
+local NOW_N = math.floor(NOW_WINDOW / NOW_STEP) + 3
+local NOW_SMOOTH = 0.25                -- s: smoothing of the split line, so it does not jump
 local nowT, nowD, nowHead, nowCount, nowNext = newList(NOW_N), newList(NOW_N), 0, 0, 0
 local secValidNow = false      -- this frame: lap still valid and out of the pits (sector times count)
 local partialLineKnown = false -- the out lap's line position is known, not guessed (its sectors may set bests)
@@ -317,6 +318,7 @@ local function advance(u1, t1)
 end
 
 local function startLap(flying, lineSpline, clean)
+  nowCount = 0                 -- a new lap restarts the delta: the 3 s window must not span the line
   T.flying = flying
   T.partial = false
   skipFirstSector = false
@@ -450,17 +452,17 @@ local function updateEstimate(car)
     T.estimateMs = 0
     return
   end
+  -- only with the shape of a really driven lap: an even-pace guess made the first-lap delta jump around
   local shape = T.provisionalMs
+  if shape <= 0 then
+    T.estimateMs = 0
+    return
+  end
   if best == T.estimateMs and shape == estimateShape then return end
   T.estimateMs, estimateShape = best, shape
-  if shape > 0 then
-    local k = best / shape
-    for i = 1, GRID + 1 do estimateRef[i] = provisionalRef[i] * k end
-    estimateStart, estimateStartKnown = provisionalStart, true
-  else
-    for i = 1, GRID + 1 do estimateRef[i] = best * (i - 1) / GRID end
-    estimateStart, estimateStartKnown = lineKnown and knownLine or 0, lineKnown
-  end
+  local k = best / shape
+  for i = 1, GRID + 1 do estimateRef[i] = provisionalRef[i] * k end
+  estimateStart, estimateStartKnown = provisionalStart, true
 end
 
 -- AC computes its own delta to its best lap in seconds ("performance meter", read the same way by the
@@ -546,8 +548,9 @@ local function updateTiming(sim, car, now)
 end
 
 -- Delta trends for the delta line, kept out of updateInner (LuaJIT allows at most 60 upvalues per function).
-local function updateTrend(now)
-  -- split delta line: how the delta moved over the last ~3 s (ring buffer sampled at 10 Hz)
+local function updateTrend(now, dt)
+  -- split delta line: how the delta moved over the last 3 s. The value 3 s ago is interpolated between the two
+  -- ring buffer samples around it (20 Hz), and the result is smoothed, so the line glides instead of stepping.
   if T.hasDelta then
     if now >= nowNext then
       nowNext = now + NOW_STEP
@@ -555,10 +558,28 @@ local function updateTrend(now)
       nowT[nowHead], nowD[nowHead] = now, T.delta
       if nowCount < NOW_N then nowCount = nowCount + 1 end
     end
-    local oldest = nowCount < NOW_N and 1 or nowHead % NOW_N + 1
-    T.nowDelta = nowCount > 1 and T.delta - nowD[oldest] or 0
+    local target, old = now - NOW_WINDOW, nil
+    if nowCount > 1 then
+      local idx = (nowHead - nowCount) % NOW_N + 1   -- oldest sample (the buffer restarts at every lap)
+      local prev = nil
+      for _ = 1, nowCount do
+        if nowT[idx] >= target then
+          if prev and nowT[idx] > nowT[prev] then
+            old = nowD[prev] + (nowD[idx] - nowD[prev]) * (target - nowT[prev]) / (nowT[idx] - nowT[prev])
+          else
+            old = nowD[idx]
+          end
+          break
+        end
+        prev = idx
+        idx = idx % NOW_N + 1
+      end
+    end
+    local raw = old and T.delta - old or 0
+    T.nowDelta = T.nowDelta + (raw - T.nowDelta) * (1 - math.exp(-dt / NOW_SMOOTH))
   else
-    nowCount, T.nowDelta = 0, 0
+    nowCount = 0
+    T.nowDelta = T.nowDelta * math.exp(-dt / NOW_SMOOTH)
   end
 
   -- live trend for the delta line: how the delta moved since the current mini sector started
@@ -715,7 +736,7 @@ local function updateInner(dt)
   T.curSector = math.min(T.sectorCount, math.floor(u * T.sectorCount) + 1)
   updateDelta(dt, s, t, car)
 
-  updateTrend(now)
+  updateTrend(now, dt)
 end
 
 -- Runs the tracker; a script error is kept for the diagnostics tab instead of being lost.

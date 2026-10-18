@@ -167,6 +167,10 @@ local function drawInner()
   if n == 0 or w <= 0 or h <= 0 then return end
   local sc = math.min(w / BASE_W, h / contentH)
   local blink = limiterBlink()
+  if S.deltaPanel then
+    local top = (h - contentH * sc) / 2
+    D.panel(0, math.max(0, top - 6 * sc), w, math.min(h, top + contentH * sc + 6 * sc), 6 * sc)
+  end
   local y = (h - contentH * sc) / 2
   for i = 1, n do
     local row = rows[i]

@@ -18,7 +18,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.9.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.10.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -52,7 +52,7 @@ Po instalaci nové verze se všechna okna MirrorDelta jednou sama zobrazí a roz
 - **Pořadí AC (F9)** aplikace vypne sama, stejně jako to dělá oficiální aplikace CSP Unbound.
 - **Systémové zprávy AC** (ABS, TC, penalizace, připojení…) se pokusí skrýt sama. Zprávy pak ukáže okno MirrorDelta Notifications, takže o nic nepřijdete. Pokud CSP aplikaci skrytí nedovolí (stav uvidíte v nastavení na záložce Notifikace), zapněte ho jednou ručně: **Content Manager > Nastavení > Custom Shaders Patch > GUI > Hide system messages**.
 - **Vlajky** ukazuje okno MirrorDelta Flags v pravém horním rohu a pod ním okno MirrorDelta Notifications se všemi zprávami ve stejném stylu (barevná ikona vpravo, text vlevo od ní). Po instalaci se tam obě samy přesunou.
-- Okna s časy, pneumatikami, notifikacemi, vlajkou a poškozením mají matné průsvitné pozadí podle velikosti obsahu. Sytost jde změnit v nastavení na záložce Barvy.
+- Okna s deltou, časy, pneumatikami, notifikacemi, vlajkou a poškozením mají matné průsvitné pozadí podle velikosti obsahu. Sytost jde změnit v nastavení na záložce Barvy.
 
 Když některé okno narazí na chybu, ukáže ji červeně přímo v sobě a ostatní okna běží dál. Chyba je i v záložce Diagnostika.
 
@@ -69,7 +69,7 @@ Nastavení je společné pro všechna okna a má osm záložek.
   - **B** (výchozí): mini sektory nahoře, čára delty uprostřed, čas dole.
 - Počet mini sektorů (výchozí 24), počet skupin (výchozí 3, tedy 8 | 8 | 8) a mezera mezi skupinami.
 - Tloušťka čar, mezera mezi čarami, velikost čísla a průhlednost. Hodnoty v pixelech platí pro okno široké 600 px a se šířkou okna se škálují.
-- Čára delty (výchozí) je rozdělená uprostřed jako původní ukazatel AC. Doprava roste zelená, když teď jedete rychleji než v referenčním kole, doleva červená, když pomaleji. Porovnává se posledních zhruba 3 sekund jízdy, ne celkový čas. Plná délka na jednu stranu odpovídá rozdílu 0,1 s (nastavitelné). Číslo pod čarou ukazuje celkovou deltu. Jde přepnout na celou čáru barvou podle celkové delty.
+- Čára delty (výchozí) je rozdělená uprostřed a pohybuje se plynule jako původní ukazatel AC. Doprava roste zelená, když teď jedete rychleji než v referenčním kole, doleva červená, když pomaleji. Porovnává se posledních zhruba 3 sekund jízdy, ne celkový čas. Plná délka na jednu stranu odpovídá rozdílu 0,1 s (nastavitelné). Číslo pod čarou ukazuje celkovou deltu. Jde přepnout na celou čáru barvou podle celkové delty.
 - Na omezovači blikají modře čára delty i mini sektory, stejně jako okno s převodem (jde vypnout).
 - Intenzita barvy podle velikosti delty: když je zapnutá, plnou barvu má delta od ±0,5 s (nastavitelné).
 - Zdroj delty:
@@ -104,15 +104,10 @@ Nastavení je společné pro všechna okna a má osm záložek.
 - Písmo okna je Unbounded. Je přibalené ve složce `fonts` i s licencí SIL OFL.
 
 **Poškození**
-- Výchozí vzhled je obrys auta rozdělený mezerami na předek, boky a zadek. Kola jsou mimo obrys a ukazují pneumatiku (opotřebení, defekt). Uvnitř obrysu je u každého kola pružina zavěšení s vlastním stavem. Uprostřed je motor v %.
-- Okno je vlevo uprostřed obrazovky a ukáže se jen po nárazu na 8 sekund, jako původní ukazatel AC. V nastavení jde přepnout na „vždy“ nebo „dokud je něco poškozené“. Při najetí myší je vidět vždy.
-- Poškození zavěšení CSP v žádné oficiální aplikaci neukazuje. Aplikace ho zkouší číst, a když ho vaše verze CSP nedá, pružiny zůstanou šedé.
-- Kliknutím do okna přepnete na další vzhled, při najetí myší okno ukáže jeho název a číslo. Vzhled jde vybrat i v nastavení.
-- Další vzhledy: GT shora, neonový obrys, oba boky, formule, LMP prototyp, výkres, segmenty jako v AC, rallye hatchback, pohled zezadu, piktogram, drátěný model a termokamera.
-- Strany karoserie (přední, zadní, levá, pravá) mají barvu daného vzhledu, dokud nejsou poškozené. S poškozením se barví od žluté po červenou. Část, do které jste právě narazili, krátce blikne bíle.
-- Kola ukazují pneumatiky: opotřebení od žluté po červenou, defekt červeně.
-- Motor ukazuje zbývající životnost v %: bílá, pod 95 % žlutá, pod 50 % červená.
-- Dokud je okno otevřené, aplikace skryje původní ukazatel poškození z AC (jde vypnout).
+- Obrys auta rozdělený mezerami na předek, boky a zadek. Kola jsou mimo obrys a ukazují pneumatiku (opotřebení, defekt). Uvnitř obrysu je u každého kola pružina zavěšení s vlastním stavem. Uprostřed je motor v %: bílá, pod 95 % žlutá, pod 50 % červená.
+- Část v pořádku je světle šedá, s poškozením se barví od žluté po červenou. Část, do které jste právě narazili, krátce blikne bíle.
+- Okno je vlevo uprostřed obrazovky a ukáže se jen po nárazu na 8 sekund, jako původní ukazatel AC. V nastavení jde přepnout na „vždy“ nebo „dokud je něco poškozené“. Při najetí myší je vidět vždy, ať ho jde přesunout.
+- Poškození zavěšení CSP v žádné oficiální aplikaci neukazuje. Aplikace ho zkouší číst, a když ho vaše verze CSP nedá, pružiny zůstanou šedé (stav je vidět v nastavení).
 - Citlivost: od jaké hodnoty z AC je strana plně červená. Aktuální hodnoty z AC vidíte přímo v nastavení, podle nich jde citlivost doladit.
 
 **Notifikace**
