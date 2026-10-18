@@ -51,7 +51,8 @@ Po instalaci nové verze se všechna okna MirrorDelta jednou sama zobrazí a roz
 
 - **Pořadí AC (F9)** aplikace vypne sama, stejně jako to dělá oficiální aplikace CSP Unbound.
 - **Systémové zprávy AC** (ABS, TC, penalizace, připojení…) se pokusí skrýt sama. Zprávy pak ukáže okno MirrorDelta Notifications, takže o nic nepřijdete. Pokud CSP aplikaci skrytí nedovolí (stav uvidíte v nastavení na záložce Notifikace), zapněte ho jednou ručně: **Content Manager > Nastavení > Custom Shaders Patch > GUI > Hide system messages**.
-- **Vlajky** ukazuje okno MirrorDelta Flags v pravém horním rohu. Po instalaci se tam samo otevře.
+- **Vlajky** ukazuje okno MirrorDelta Flags v pravém horním rohu a pod ním okno MirrorDelta Notifications se všemi zprávami ve stejném stylu (barevná ikona vpravo, text vlevo od ní). Po instalaci se tam obě samy přesunou.
+- Okna s časy, pneumatikami, notifikacemi, vlajkou a poškozením mají matné průsvitné pozadí podle velikosti obsahu. Sytost jde změnit v nastavení na záložce Barvy.
 
 Když některé okno narazí na chybu, ukáže ji červeně přímo v sobě a ostatní okna běží dál. Chyba je i v záložce Diagnostika.
 
@@ -103,12 +104,14 @@ Nastavení je společné pro všechna okna a má osm záložek.
 - Písmo okna je Unbounded. Je přibalené ve složce `fonts` i s licencí SIL OFL.
 
 **Poškození**
-- Kliknutím do okna přepnete na další vzhled. Při najetí myší okno ukáže název a číslo vzhledu (1/12 až 12/12). Vzhled jde vybrat i v nastavení.
-- 12 vzhledů: GT shora, neonový obrys, oba boky, formule, LMP prototyp, výkres, segmenty jako v AC, rallye hatchback, pohled zezadu, piktogram, drátěný model a termokamera.
+- Výchozí vzhled je obrys auta rozdělený mezerami na předek, boky a zadek. Kola jsou mimo obrys a ukazují pneumatiku (opotřebení, defekt). Uvnitř obrysu je u každého kola pružina zavěšení s vlastním stavem. Uprostřed je motor v %.
+- Okno je vlevo uprostřed obrazovky a ukáže se jen po nárazu na 8 sekund, jako původní ukazatel AC. V nastavení jde přepnout na „vždy“ nebo „dokud je něco poškozené“. Při najetí myší je vidět vždy.
+- Poškození zavěšení CSP v žádné oficiální aplikaci neukazuje. Aplikace ho zkouší číst, a když ho vaše verze CSP nedá, pružiny zůstanou šedé.
+- Kliknutím do okna přepnete na další vzhled, při najetí myší okno ukáže jeho název a číslo. Vzhled jde vybrat i v nastavení.
+- Další vzhledy: GT shora, neonový obrys, oba boky, formule, LMP prototyp, výkres, segmenty jako v AC, rallye hatchback, pohled zezadu, piktogram, drátěný model a termokamera.
 - Strany karoserie (přední, zadní, levá, pravá) mají barvu daného vzhledu, dokud nejsou poškozené. S poškozením se barví od žluté po červenou. Část, do které jste právě narazili, krátce blikne bíle.
 - Kola ukazují pneumatiky: opotřebení od žluté po červenou, defekt červeně.
 - Motor ukazuje zbývající životnost v %: bílá, pod 95 % žlutá, pod 50 % červená.
-- Volba „Ukázat jen při poškození“ okno skryje, dokud je auto v pořádku.
 - Dokud je okno otevřené, aplikace skryje původní ukazatel poškození z AC (jde vypnout).
 - Citlivost: od jaké hodnoty z AC je strana plně červená. Aktuální hodnoty z AC vidíte přímo v nastavení, podle nich jde citlivost doladit.
 

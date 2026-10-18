@@ -48,7 +48,10 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
 - The current lap is recorded on a grid of `GRID + 1` points (`u = k / GRID`, index `k + 1`),
   interpolated between frames. A finished clean lap waits up to 1.5 s for `ac.onLapCompleted`
   (validity, exact time), then becomes the session and/or all-time reference. The all-time one is saved.
-- Delta = `lapTimeMs - grid(u)`, smoothed (0.15 s) with ±20 ms colour hysteresis.
+- Delta = `lapTimeMs - grid(u)`, smoothed (0.15 s) with ±20 ms colour hysteresis. The delta line is split in the
+  middle (default): `T.nowDelta` = delta change over the last 3 s (10 Hz ring buffer in `updateTrend`); default
+  reference is the previous fully driven lap (`S.referenceKind = 3`, kind 5). Keep `updateInner` under LuaJIT's
+  60-upvalue limit (move new logic into helper functions).
 - Mini sectors are boundaries at `j / N` in `u`; times are interpolated; purple needs a clean lap and an
   existing best; best sector lists are kept per sector count.
 - Out laps, laps that start or pass through the pit lane, and invalid laps are never references. A full lap that
