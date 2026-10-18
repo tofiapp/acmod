@@ -178,8 +178,9 @@ ac = {
         local p = (M.meshPos or {})[self[index or 1]]
         if not p then return nil, nil end
         out:set(p[1], p[2], p[3])
-        return out, 0.01
+        return out, (M.meshRadius or {})[self[index or 1]] or 0.01
       end
+      function r:isVisible() return not (M.hiddenMeshes or {})[self[1]] end
       -- parent node: its local transform moves by M.ledParentOffset (default none), and it hangs under the scene root
       function r:getParent()
         local node = { 'parent' }
@@ -225,6 +226,7 @@ ac = {
   end,
   FolderID = { ScriptConfig = 1, ExtCfgUser = 18 },
   INIConfig = {
+    carConfig = function () return { sections = M.cspCarConfig or {} } end,
     carData = function (i, name)
       local data = M.carIni and M.carIni[name]
       if not data then return nil end

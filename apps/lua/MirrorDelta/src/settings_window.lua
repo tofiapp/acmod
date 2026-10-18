@@ -112,10 +112,21 @@ local function tabDelta()
     if carLeds.meshError then
       slider('carLedsOffset', 'Posun světel na diodách nahoru/dolů', -20, 20, '%+.1f cm', 0.5)
     end
-    ui.textWrapped(carLeds.count > 0
-      and string.format('Diody v tomto autě: %d (%s).', carLeds.count, carLeds.source)
-      or ('Diody otáček v tomto autě nenalezeny' .. (carLeds.source ~= '' and ': ' .. carLeds.source or '')
-        .. '. Auta s displejem ze skriptu nebo z textury to neumí.'))
+    if carLeds.fits then
+      ui.textWrapped(string.format('Toto auto: sedí, %d diod (%s)%s.', carLeds.count, carLeds.source,
+        (carLeds.dropped or '') ~= '' and '; vynecháno ' .. carLeds.dropped or ''))
+    else
+      ui.textWrapped('Toto auto: nesedí, ' .. (carLeds.reason ~= '' and carLeds.reason or 'zatím nezjištěno') .. '.')
+    end
+    local choice = carLeds.carChoice()
+    ui.text('Pro toto auto')
+    ui.setNextItemWidth(ui.availableSpaceX())
+    local names = { 'Podle automatické kontroly', 'Vždy zapnout', 'Vždy vypnout' }
+    ui.combo('##carLedsCar', names[choice + 1], ui.ComboFlags.None, function ()
+      for i = 1, 3 do
+        if ui.selectable(names[i], choice == i - 1) then carLeds.setCarChoice(i - 1) end
+      end
+    end)
   end
   checkbox('intensityByDelta', 'Intenzita barvy podle velikosti delty')
   if S.intensityByDelta then

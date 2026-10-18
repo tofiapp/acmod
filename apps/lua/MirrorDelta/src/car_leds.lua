@@ -91,13 +91,110 @@ local function order()
   table.sort(leds, function (a, b) return a.pos.x < b.pos.x end)
 end
 
+-- ---------------------------------------------------------------- does it fit this car?
+-- Automatic check once per session, every failed point is a reason shown in the settings:
+-- - the car's CSP config draws the dash with a script ([SCRIPTABLE_DISPLAY_...] sections in ac.INIConfig.carConfig):
+--   the LEDs the driver sees are then not AC's LED meshes;
+-- - LED meshes that are hidden (:isVisible false: CSP or the car turned them off), larger than an LED (bounding sphere
+--   radius over MAX_RADIUS) or not near the driver (further than MAX_EYES from the eyes) are dropped;
+-- - fewer than two LEDs left: off for this car.
+-- The driver can override it per car (S.carLedsCars, "carId=1;carId=2": 1 always on, 2 always off).
+local MAX_RADIUS, MAX_EYES = 0.06, 1.8
+
+local function scriptedDash()
+  local cfg = ac.INIConfig.carConfig(0)
+  if not cfg or type(cfg.sections) ~= 'table' then return false end
+  for name in pairs(cfg.sections) do
+    if type(name) == 'string' and name:find('^SCRIPTABLE_DISPLAY') then return true end
+  end
+  return false
+end
+
+local function isShown(ref) return ref:isVisible() end
+
+local eyesWorld = vec3()
+local allLeds, checked = {}, {}       -- every LED found / those that passed the check
+local function checkLeds(car)
+  local eyes = car.driverEyesPosition
+  car.transform:transformPointTo(eyesWorld, eyes)
+  local kept, hidden, big, far = {}, 0, 0, 0
+  for k = 1, #leds do
+    local led = leds[k]
+    local okV, shown = pcall(isShown, led.ref)
+    led.chain = chainOf(led.ref)
+    ledWorld(led)
+    local dx, dy, dz = worldPos.x - eyesWorld.x, worldPos.y - eyesWorld.y, worldPos.z - eyesWorld.z
+    if okV and shown == false then hidden = hidden + 1
+    elseif led.radius > MAX_RADIUS then big = big + 1
+    elseif dx * dx + dy * dy + dz * dz > MAX_EYES * MAX_EYES then far = far + 1
+    else kept[#kept + 1] = led end
+  end
+  checked = kept
+  local parts = {}
+  if hidden > 0 then parts[#parts + 1] = string.format('%d skrytých', hidden) end
+  if big > 0 then parts[#parts + 1] = string.format('%d moc velkých', big) end
+  if far > 0 then parts[#parts + 1] = string.format('%d mimo kokpit', far) end
+  M.dropped = table.concat(parts, ', ')
+end
+
+-- Per car choice: 0 automatic, 1 always on, 2 always off.
+local choiceCache, choiceId, choiceList = 0, nil, nil
+function M.carChoice()
+  local id, list = ac.getCarID(0) or '', S.carLedsCars or ''
+  if id == choiceId and list == choiceList then return choiceCache end   -- no strings built per frame
+  choiceId, choiceList, choiceCache = id, list, 0
+  for entry in list:gmatch('[^;]+') do
+    local name, v = entry:match('^(.-)=(%d)$')
+    if name == id then choiceCache = tonumber(v) or 0 end
+  end
+  return choiceCache
+end
+
+function M.setCarChoice(choice)
+  local id = ac.getCarID(0) or ''
+  local list = {}
+  for entry in (S.carLedsCars or ''):gmatch('[^;]+') do
+    if entry:match('^(.-)=') ~= id then list[#list + 1] = entry end
+  end
+  if choice ~= 0 then list[#list + 1] = id .. '=' .. choice end
+  config.set('carLedsCars', table.concat(list, ';'))
+end
+
 local function load(car)
-  leds, M.source = {}, ''
+  leds, M.source, M.fits, M.reason, M.dropped = {}, '', false, '', ''
   local root = ac.findNodes('carRoot:0')
   if not root then return end
   pcall(fromInstruments, root)
   if #leds == 0 then pcall(fromCspMarks, root) end
-  M.count = #leds
+  M.found = #leds
+  allLeds, checked = leds, {}
+  if #leds == 0 then
+    M.reason = 'auto nemá diody otáček jako díly modelu'
+  else
+    local okS, scripted = pcall(scriptedDash)
+    if okS and scripted then
+      M.reason = 'palubní deska je kreslená skriptem CSP'
+    else
+      local okC, err = pcall(checkLeds, car)
+      if not okC then
+        M.reason = 'kontrola selhala: ' .. tostring(err)
+      elseif #checked < 2 then
+        M.reason = 'diody nesedí (' .. (M.dropped ~= '' and M.dropped or 'žádné vhodné') .. ')'
+      else
+        M.fits = true
+      end
+    end
+  end
+  leds = checked
+  M.count = #checked
+end
+
+-- Whether the lights run on this car: the automatic check, unless the driver chose for this car.
+function M.enabledForCar()
+  local choice = M.carChoice()
+  if choice == 1 then return M.found and M.found > 0 end
+  if choice == 2 then return false end
+  return M.fits
 end
 
 -- Brightness 0..1 of LED k of n at time t.
@@ -207,9 +304,10 @@ local function step()
     session = sim.currentSessionIndex
     load(car)
   end
-  local active = S.carLedsPit and car.isInPitlane and #leds > 0
-  if active and not M.active then                 -- pit entry: where the LEDs are now, left to right
-    local ok = pcall(locate, car)
+  local active = S.carLedsPit and car.isInPitlane and M.enabledForCar()
+  if active and not M.active then                 -- pit entry: which LEDs, where they are now, left to right
+    leds = M.carChoice() == 1 and allLeds or checked
+    local ok = #leds > 0 and pcall(locate, car)
     if ok then pcall(order) else active = false end
   end
   M.active = active

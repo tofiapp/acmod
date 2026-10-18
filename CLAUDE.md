@@ -101,6 +101,10 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
   gWhiteRefPoint: lit in the pit colour x `S.carLedsBrightness`, the rest dark, so AC's RPM lights are covered until the
   pit exit and the shape fits; fallback `render.circle` discs like CSP's Traffic virtual lights.
   Writing the LEDs' ksEmissive flickered (AC writes it by RPM every frame), so the material is never touched.
+  Per car check at session start (`M.fits`, `M.reason`, `M.dropped`): off when the CSP car config
+  (`ac.INIConfig.carConfig(0).sections`) has `SCRIPTABLE_DISPLAY_*`; LED meshes dropped when `:isVisible()` is false,
+  bounding radius > 6 cm or > 1.8 m from the eyes (car.transform x driverEyesPosition); < 2 left = off. Per car override
+  `S.carLedsCars` "carId=1;carId=2" (1 always on with all found LEDs, 2 always off) from the settings.
 - Mini sectors are boundaries at `j / N` in `u`; times are interpolated; purple needs a clean lap and an
   existing best; best sector lists are kept per sector count.
 - Deleted laps (cut on track, or AC's callback says invalid) flash red (`flashKind 5`), never become the flash best,

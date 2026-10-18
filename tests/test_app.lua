@@ -1470,6 +1470,49 @@ do
   config.set('carLedsPit', true)
   car.isInPitlane = false
   frame(1)
+  -- does it fit this car: automatic check, per-car override
+  car.isInPitlane = false
+  frame(1)
+  local function reload(k) env.sim.currentSessionIndex = savedSession + k; frame(1) end
+  env.carIni = { ['digital_instruments.ini'] = {
+    ['LED_0/OBJECT_NAME'] = 'LED_A', ['LED_1/OBJECT_NAME'] = 'LED_B', ['LED_2/OBJECT_NAME'] = 'LED_C',
+    ['LED_3/OBJECT_NAME'] = 'LED_D' } }
+  reload(20)
+  check(carLeds.fits and carLeds.count == 4, 'check: LEDs near the driver, visible and small fit: ' .. tostring(carLeds.reason))
+  env.hiddenMeshes = { LED_A = true }
+  env.meshRadius = { LED_B = 0.2 }
+  env.meshPos.LED_C = { 0.1, 1, 4 }                  -- far from the driver
+  reload(21)
+  check(not carLeds.fits and carLeds.reason:find('nesedí') and carLeds.dropped:find('1 skrytých')
+    and carLeds.dropped:find('1 moc velkých') and carLeds.dropped:find('1 mimo kokpit'),
+    'check: hidden, oversized and far meshes dropped, too few left: ' .. carLeds.reason)
+  car.isInPitlane = true
+  frame(1)
+  env.meshDraws, env.circles = {}, {}
+  draw3D()
+  check(#env.meshDraws + #env.circles == 0 and not carLeds.active, 'not fitting: nothing drawn on this car')
+  carLeds.setCarChoice(1)
+  car.isInPitlane = false
+  frame(1)
+  car.isInPitlane = true
+  frame(1)
+  check(carLeds.active and carLeds.carChoice() == 1 and config.S.carLedsCars == 'test_car=1',
+    'always on for this car (remembered per car): ' .. config.S.carLedsCars)
+  carLeds.setCarChoice(2)
+  car.isInPitlane = false
+  frame(1)
+  car.isInPitlane = true
+  frame(1)
+  check(not carLeds.active, 'always off for this car')
+  carLeds.setCarChoice(0)
+  check(config.S.carLedsCars == '', 'automatic again: entry removed')
+  car.isInPitlane = false
+  env.hiddenMeshes, env.meshRadius = nil, nil
+  env.meshPos.LED_C = { -0.1, 1, 0.5 }
+  env.cspCarConfig = { SCRIPTABLE_DISPLAY_0 = {} }
+  reload(22)
+  check(not carLeds.fits and carLeds.reason:find('skriptem'), 'scripted dash in the CSP config: off by default')
+  env.cspCarConfig = nil
   env.carIni, env.carMeshes, env.meshPos = savedIni, nil, nil
   env.sim.currentSessionIndex = savedSession
   frame(1)
