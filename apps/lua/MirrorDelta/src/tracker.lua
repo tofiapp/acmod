@@ -52,7 +52,7 @@ local T = {
   currentMs = 0,
   bestMs = 0,
   deltaFromAC = false,         -- the shown delta comes from AC's own performance meter
-  status = 'Delta: čekám na první data',  -- why there is no delta (nil when there is one)
+  status = 'Delta: čekám na první data',  -- why there is no delta (nil when there is one), for Diagnostika
   -- diagnostics for the settings tab (strings are constants, so no allocation)
   diag = {
     error = nil,          -- first script error, if any
@@ -78,6 +78,9 @@ local cur, cand = newList(GRID + 1), newList(GRID + 1)   -- lap being recorded, 
 local sessionRef, allTimeRef = newList(GRID + 1), newList(GRID + 1)
 local sessionRefStart, allTimeRefStart = 0, 0            -- line spline position of each reference
 local provisionalRef, provisionalStart = newList(GRID + 1), 0
+-- Line position measured at confirmed crossings, saved per car + track, so an out lap can be split
+-- into mini sectors before the first crossing even without a reference.
+local lineKnown, knownLine = false, 0
 local sessionBest, allTimeBest = newList(MAX_SECTORS), newList(MAX_SECTORS)  -- best mini sector times, ms (0 = none)
 local allTimeBestByCount = {}                           -- [sector count] = list, saved to disk
 local loaded, dirty = false, false
@@ -141,10 +144,18 @@ local function activeRef()
   return nil, 0, 0, 0
 end
 
--- True when a known line position (from a reference) is clearly elsewhere: the timer restarted off the line.
-local function awayFromLine(s)
+-- Best known line position: the reference's, else the measured one (nil when unknown).
+local function linePosition()
   local ref, _, refStart = activeRef()
-  return ref ~= nil and math.abs(circDiff(s, refStart)) > 0.03
+  if ref then return refStart end
+  if lineKnown then return knownLine end
+  return nil
+end
+
+-- True when a known line position is clearly elsewhere: the timer restarted off the line.
+local function awayFromLine(s)
+  local line = linePosition()
+  return line ~= nil and math.abs(circDiff(s, line)) > 0.03
 end
 
 -- A full lap that is not a valid reference still serves until there is one.
@@ -171,7 +182,8 @@ local function saveData()
     grid = {}
     for i = 1, GRID + 1 do grid[i] = math.floor(allTimeRef[i] + 0.5) end
   end
-  store.save({ version = 1, lapMs = T.allTimeRefMs, start = allTimeRefStart, grid = grid, sectors = sectors })
+  store.save({ version = 1, lapMs = T.allTimeRefMs, start = allTimeRefStart, grid = grid, sectors = sectors,
+    line = lineKnown and knownLine or nil })
 end
 
 local function loadData()
@@ -184,6 +196,8 @@ local function loadData()
     T.allTimeRefMs = lapMs
     allTimeRefStart = tonumber(data.start) or 0
   end
+  local line = tonumber(data.line)
+  if line and line >= 0 and line < 1 then lineKnown, knownLine = true, line end
   if type(data.sectors) == 'table' then
     for key, list in pairs(data.sectors) do
       local count = tonumber(key)
@@ -230,9 +244,9 @@ local function finishSector(j, ms)
       else
         state = 3
       end
-    elseif T.flying and acNow and acSecStart then
-      -- no own reference yet: colour by how AC's delta changed over the sector
-      state = acNow <= acSecStart and 2 or 3
+    elseif acNow and acSecStart and math.abs(acNow - acSecStart) >= 0.001 then
+      -- no own reference: colour by how AC's delta changed over the sector
+      state = acNow < acSecStart and 2 or 3
     else
       state = 4
     end
@@ -293,8 +307,8 @@ local function startLap(flying, lineSpline, clean)
   acSecStart = acNow
 end
 
--- Out lap: once the car is on track, measure from here to the line against the reference,
--- using the reference's line position (no crossing seen yet in this stint).
+-- Out lap: once the car is on track, measure from here to the line (mini sectors always; delta against
+-- the reference when there is one). Line position: reference, measured, or spline zero as a last guess.
 local function startPartial(s, t, refStart)
   startLap(false, refStart)
   T.partial = true
@@ -433,6 +447,8 @@ local function updateDelta(dt, s, t, car)
     T.hasDelta = false
     if S.deltaSource == 3 then
       T.status = 'Delta z AC: AC zatím nemá nejlepší kolo'
+    elseif T.partial then
+      T.status = 'Out lap: mini sektory se měří, delta až s referencí'
     elseif not T.flying then
       T.status = 'Delta: čekám na průjezd cílovou čárou'
     else
@@ -549,6 +565,10 @@ local function updateInner(dt)
     lapConfirmed = now - lastCountChange < COUNT_WINDOW
     cleanIfConfirmed = base
     if not lapConfirmed then T.clean = false end
+    if lapConfirmed and (not lineKnown or math.abs(circDiff(lineSpline, knownLine)) > 0.002) then
+      lineKnown, knownLine = true, lineSpline
+      saveData()
+    end
     advance(lapU(s), t)
   elseif ds > JUMP_LIMIT or ds < -JUMP_LIMIT then
     resetLap('skok pozice na trati (teleport)')
@@ -563,8 +583,7 @@ local function updateInner(dt)
       advance(u, t)
     end
   elseif not T.flying and not car.isInPitlane and not car.isInPit and car.speedKmh > 5 then
-    local ref, _, refStart = activeRef()
-    if ref then startPartial(s, t, refStart) end
+    startPartial(s, t, linePosition() or 0)
   elseif T.flying then
     local u = lapU(s)
     if prevU > 0.9 and u < 0.5 then
@@ -599,6 +618,7 @@ end
 function T.clearSaved()
   store.delete()
   T.allTimeRefMs, T.sessionRefMs, T.provisionalMs = 0, 0, 0
+  lineKnown = false             -- learned and saved again at the next crossing
   allTimeBestByCount = {}
   for i = 1, MAX_SECTORS do sessionBest[i] = 0 end
   setSectorCount(S.sectors)

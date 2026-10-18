@@ -19,7 +19,6 @@ local defaults = {
   referenceMode = 2,        -- 1: best lap of this session, 2: all-time best lap (saved)
   deltaLimiterFlash = true, -- the delta line and the mini sectors blink blue at the rev limiter, like the gear window
   deltaSource = 1,          -- 1: own measurement, AC's delta when it has none; 2: own only; 3: AC only
-  deltaShowStatus = true,   -- write in the delta window why there is no delta
 
   -- Timing window
   showPosition = true,

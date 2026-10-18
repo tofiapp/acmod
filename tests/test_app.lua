@@ -355,9 +355,14 @@ env.sim.raceFlagType = 0
 car.isLapValid = false
 frame(1)
 check(newest().kind == notify.INVALID, 'invalid lap notification')
+env.cars[2].isConnected = false     -- offline: AI cars are not "connected", no message
+for _ = 1, 10 do frame(1) end
+check(newest().kind ~= notify.DISCONNECT, 'no disconnect notification offline')
+env.sim.isOnlineRace = true
 env.cars[1].isConnected = false
 for _ = 1, 10 do frame(1) end
-check(newest().kind == notify.DISCONNECT, 'disconnect notification')
+check(newest().kind == notify.DISCONNECT, 'disconnect notification online')
+env.sim.isOnlineRace = false
 do
   local notifyWindow = require('src/notify_window')
   local shared = vec2(10, 10)
@@ -461,6 +466,50 @@ local pitLapMs = car.previousLapTimeMs
 check(tracker.flying and tracker.flashLapMs > 0 and math.abs(tracker.flashLapMs - pitLapMs) < 30,
   string.format('lap time read across a late lapCount in the pit lane: %.0f vs %.0f', tracker.flashLapMs, pitLapMs))
 car.isInPitlane = false
+check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
+
+-- 18. Out lap without any reference: mini sectors from the pit exit (AC delta or neutral),
+--     the measured line survives a restart, no status text in the delta window, no invalid-lap message
+tracker.clearSaved()
+env.callbacks.session(0, false)
+frame(1)
+driveLaps(1, 1)                     -- a confirmed crossing: the line position is learned and saved
+env.callbacks.release()
+tracker = loadApp()
+config = require('src/config')
+notify = require('src/notify')
+env.callbacks.session(0, false)
+car.isInPitlane = true
+frame(0.4)
+car.splinePosition = 0.5
+for _ = 1, 30 do frame(0.4) end
+car.isInPitlane = false
+local countBefore = notify.count
+car.isLapValid = false              -- AC marks the out lap invalid at the pit exit
+for _ = 1, 1500 do
+  car.performanceMeter = car.performanceMeter + 0.0005
+  frame(1)
+end
+car.isLapValid = true
+local start = tracker.lapFraction()
+local yellow = 0
+for i = 1, tracker.sectorCount do if tracker.secState[i] == 3 then yellow = yellow + 1 end end
+check(tracker.partial and tracker.refKind == 0, 'out lap without a reference is measured from the pit exit')
+check(math.abs(start - LINE) < 0.01, string.format('line position loaded from the saved file: %.4f', start))
+check(yellow >= 3, 'out lap mini sectors coloured from AC delta: ' .. yellow)
+check(notify.count == countBefore, 'no invalid-lap notification on the out lap')
+env.lastTexts = {}
+env.windowW, env.windowH = 600, 80
+script.windowDelta(DT)
+local statusShown = false
+for _, str in ipairs(env.lastTexts) do if str:find('čekám', 1, true) or str:find('průjezd', 1, true) then statusShown = true end end
+check(not statusShown, 'no status text in the delta window')
+config.set('deltaSource', 2)        -- no AC delta either: sectors still advance, neutral grey
+for _ = 1, 600 do frame(1) end
+local neutral = 0
+for i = 1, tracker.sectorCount do if tracker.secState[i] == 4 then neutral = neutral + 1 end end
+check(tracker.partial and neutral >= 3, 'out lap sectors shown as passed without any comparison: ' .. neutral)
+config.set('deltaSource', 1)
 check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
 
 print(string.format('%d passed, %d failed', passed, failed))

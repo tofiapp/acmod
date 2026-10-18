@@ -93,7 +93,6 @@ local function tabDelta()
     'Jen vlastní měření',
     'Jen delta z AC',
   })
-  checkbox('deltaShowStatus', 'Napsat do okna, proč delta zatím není')
   combo('referenceMode', 'Porovnávat s', { 'Nejlepší kolo této session', 'Nejlepší kolo vůbec (uložené)' })
   ui.text('Session: ' .. D.formatLap(tracker.sessionRefMs, 3) .. '    Vůbec: ' .. D.formatLap(tracker.allTimeRefMs, 3))
   ui.textWrapped('Data pro toto auto a trať: ' .. tracker.dataFile())
@@ -237,6 +236,12 @@ local function tabDiagnostics()
     ui.text(string.format('splinePosition %.4f    čára %.4f    část kola %.4f    bodů %d', car.splinePosition, start, u, k - 1))
     ui.text('isLapValid ' .. yesNo(car.isLapValid) .. '    isInPitlane ' .. yesNo(car.isInPitlane) .. '    isInPit ' .. yesNo(car.isInPit))
   end
+  gap()
+  ui.header('Notifikace')
+  ui.text(string.format('Zobrazeno zpráv: %d', notify.count))
+  ui.textWrapped('Poslední: ' .. notify.lastLine)
+  local sim = ac.getSim()
+  ui.text(string.format('Vlajka z AC: %d    online: %s', sim.raceFlagType or -1, yesNo(sim.isOnlineRace)))
   gap()
   ui.textWrapped('Když delta nefunguje: odjeďte dvě až tři celá kola bez řezání a pošlete screenshot této záložky.')
 end

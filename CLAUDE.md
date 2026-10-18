@@ -54,8 +54,10 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
 - Out laps, laps that start or pass through the pit lane, and invalid laps are never references. A full lap that
   cannot be a reference (started in the pit lane, cut) is a **provisional** reference until a valid one exists
   (never saved). `activeRef()` order: chosen reference, the other one, provisional.
-- **Out lap (partial):** with a reference, once the car is on track the lap is measured from there against the
-  reference's line position: delta = (t - t0) - (ref(u) - ref(u0)); the sector containing u0 stays grey.
+- **Out lap (partial):** once the car is on track the lap is measured from there; line position = reference's,
+  else the measured one (saved as `line` in the data file), else spline 0. With a reference:
+  delta = (t - t0) - (ref(u) - ref(u0)) and sectors against it; without: sectors from AC's delta or neutral.
+  The sector containing u0 stays grey. The delta window shows no status text (only Diagnostika does).
 - A lap counts only if lapCount changed within 0.5 s of the timer restart (a later lapCount confirms it); a timer
   restart in the pit lane or away from the known line is not a crossing. Without an own reference, mini sectors
   are coloured by the change of AC's `performanceMeter` over the sector.

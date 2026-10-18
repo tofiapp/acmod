@@ -1,12 +1,14 @@
 -- Notifications: watches the session and queues short messages for the notification window.
+-- Disconnects are only reported online (AI cars offline are not "connected" in the same sense).
 -- Flags and the own car are checked every frame, other cars 10 times a second.
 -- Strings are only built when an event fires, never per frame.
 
 local config = require('src/config')
 local D = require('src/draw')
+local tracker = require('src/tracker')
 local S = config.S
 
-local N = {}
+local N = { count = 0, lastLine = '-' }   -- count and last text for the Diagnostika tab
 
 -- Kinds; colour and tag live in notify_window.lua.
 N.FASTEST, N.DISCONNECT, N.PIT_IN, N.PIT_OUT, N.GAIN, N.LOSS = 1, 2, 3, 4, 5, 6
@@ -29,6 +31,8 @@ function N.push(kind, title, sub)
   e.kind, e.title, e.sub = kind, title, sub or ''
   e.line = e.sub ~= '' and (title .. '  ·  ' .. e.sub) or title
   e.born = os.preciseClock()
+  N.count = N.count + 1
+  N.lastLine = e.line
 end
 
 -- The i-th newest event (1 = newest), or nil.
@@ -142,7 +146,7 @@ local function pollCars(sim, quiet)
         local connected = c.isConnected ~= false
         if connected ~= wasConnected[i] then
           wasConnected[i] = connected
-          if not quiet and not connected and S.notifyConnections then
+          if not quiet and not connected and S.notifyConnections and sim.isOnlineRace then
             N.push(N.DISCONNECT, 'ODPOJIL SE', driverName(i))
           end
         end
@@ -198,7 +202,8 @@ function N.update()
   local valid = me.isLapValid
   if valid ~= wasValid then
     wasValid = valid
-    if not valid and not quiet and S.notifyInvalid and not me.isInPitlane then
+    -- only on a timed lap: AC also marks out laps and pit exits invalid, that is not news
+    if not valid and not quiet and S.notifyInvalid and tracker.flying and not me.isInPitlane then
       N.push(N.INVALID, 'NEPLATNÉ KOLO', 'Řezání trati, kolo se nezapočítá')
     end
   end

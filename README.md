@@ -17,7 +17,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.5.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.5.1.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -63,7 +63,6 @@ Nastavení je společné pro všechna okna a má osm záložek.
   - **Vlastní měření, jinak delta z AC** (výchozí): dokud aplikace nemá vlastní referenci (out lap, první kolo, kolo po resetu), ukazuje deltu, kterou počítá samotné AC.
   - **Jen vlastní měření.**
   - **Jen delta z AC.**
-- Když delta zatím není, napíše okno nahoře malým písmem proč (čeká na průjezd cílem, nebo měří první kolo). Jde vypnout.
 - Reference: nejlepší kolo této session, nebo nejlepší kolo vůbec (uložené).
 - Tlačítko **Smazat uložená data** smaže uložené nejlepší kolo a mini sektory pro aktuální auto a trať. Potvrdíte ho druhým kliknutím.
 
@@ -106,8 +105,8 @@ Nastavení je společné pro všechna okna a má osm záložek.
   - vaše pozice: posun nahoru a ztráta, s tím, koho jste předjeli nebo kdo vás předjel (nová pozice musí vydržet 1 s, takže boj bok po boku nebliká),
   - ostatní auta v boxech a z boxů,
   - vlajky: žlutá, modrá, černá, penalizace, poslední kolo a cíl,
-  - vaše neplatné kolo (řezání trati),
-  - odpojení jezdce (online).
+  - vaše neplatné kolo (řezání trati), jen během měřeného kola, ne v out lapu,
+  - odpojení jezdce, jen online.
 - Pozice a boxy se standardně hlásí jen v závodě, v tréninku by jich bylo moc.
 - Tlačítko **Ukázat ukázku** zobrazí dvě zkušební zprávy, podle nich okno umístěte (výchozí šířka 520 px, patří doprostřed nahoru).
 
@@ -124,8 +123,11 @@ Nastavení je společné pro všechna okna a má osm záložek.
 
 - Referencí je vaše nejlepší **platné** kolo, podle nastavení buď z této session, nebo nejlepší vůbec. Když zvolená reference není, použije se ta druhá.
 - **Od prvního kola:** dokud platné kolo není, slouží jako dočasná reference celé kolo, které platné být nemůže (kolo začínající v boxové uličce nebo kolo s řezáním). První platné kolo ji nahradí. Dočasná reference se nikdy neukládá.
-- **Out lap:** když už existuje reference (uložená nebo z této session), měří se delta i mini sektory už od výjezdu z boxové uličky. Delta pak ukazuje, kolik jste od výjezdu ztratili nebo získali proti referenci na stejném úseku trati. Sektor, ve kterém jste vyjeli, zůstane šedý.
-- Na úplně prvním výjezdu s novým autem nebo na nové trati není s čím porovnávat. Delta i sektory začnou od dalšího průjezdu cílem.
+- **Out lap:** mini sektory se měří vždy už od výjezdu z boxové uličky. Sektor, ve kterém jste vyjeli, zůstane šedý.
+  - S referencí (uloženou nebo z této session) se sektory barví proti ní a běží i delta. Ukazuje, kolik jste od výjezdu ztratili nebo získali proti referenci na stejném úseku trati.
+  - Bez reference se sektory barví podle delty z AC, pokud ji AC má. Jinak se jen označí jako projeté.
+  - Polohu cílové čáry si aplikace pamatuje pro každé auto a trať, takže sektory sedí i před prvním průjezdem cílem.
+- Kdy delta zatím není a proč, ukazuje záložka Diagnostika. V okně delty žádný nápis není.
 - Během kola aplikace zaznamenává čas v 1000 bodech (každých 0,1 % délky kola). Mezi framy body dopočítává.
 - Delta = aktuální čas v kole − čas reference na stejném místě trati.
 - Delta je lehce vyhlazená (asi 0,15 s). Barva se přepne až při překročení ±0,02 s, takže kolem nuly nebliká.
