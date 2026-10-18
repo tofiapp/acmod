@@ -73,6 +73,9 @@ local T = {
     lastDeleted = '-',    -- why the last lap was shown as deleted (or why AC's "invalid" was not taken)
     lastCallback = '-',   -- last ac.onLapCompleted: time, valid, cuts
     callbacks = 0,
+    deletedCount = 0,     -- laps shown as deleted, and laps given back because AC counts them (for notifications)
+    undeletedCount = 0,
+    deletedReason = '',   -- short reason for the notification
     jumps = 0,
     sessionStarts = 0,
     acDelta = nil,        -- whether AC's own delta (performanceMeter) is available
@@ -470,6 +473,10 @@ local function settleCut(now)
     if fresh and cbMs > 0 then rememberDeleted(cbMs, true) end
     T.diag.lastDeleted = string.format('smazáno: isLapValid=ne na %.0f %% kola, %s', lapCutU * 100,
       fresh and 'AC potvrdilo neplatné' or 'AC kolo nepotvrdilo (callback nepřišel)')
+    T.diag.deletedReason = fresh
+      and string.format('AC: neplatné, řezů %s, na %.0f %% kola', cbCuts and tostring(cbCuts) or '?', lapCutU * 100)
+      or string.format('aplikace: AC hlásilo neplatné na %.0f %% kola, potvrzení nepřišlo', lapCutU * 100)
+    T.diag.deletedCount = T.diag.deletedCount + 1
   end
 end
 
@@ -500,6 +507,8 @@ local function finalizePending(now)
   if not valid then
     T.diag.lastReject = 'AC kolo po dojetí označilo jako neplatné'
     T.diag.lastDeleted = string.format('smazáno: AC po dojetí valid=ne, řezů %s', cbCuts and tostring(cbCuts) or '?')
+    T.diag.deletedReason = string.format('AC po dojetí: neplatné, řezů %s', cbCuts and tostring(cbCuts) or '?')
+    T.diag.deletedCount = T.diag.deletedCount + 1
     offerProvisional(cand, ms, pendingStart)   -- only confirmed laps get this far
     -- the lap was deleted: not the best, shown red
     if bestFlashMs == pendingMs then bestFlashMs = bestFlashBefore end
@@ -678,6 +687,7 @@ local function undeleteIfACBest(ms)
     end
   end
   T.diag.lastDeleted = 'nesmazáno: AC kolo vzalo jako svůj nejlepší čas'
+  T.diag.undeletedCount = T.diag.undeletedCount + 1
 end
 
 -- Validity of the running timed lap. AC may still report the previous lap (an out lap is always invalid) for a while

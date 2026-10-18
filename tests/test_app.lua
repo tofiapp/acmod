@@ -802,6 +802,9 @@ do
   for _ = 1, 5 do frame(1) end
   local deleted = tracker.lastLapMs
   check(tracker.flashKind == 5 and tracker.lastLapState == 2, 'deleted lap flashes red and is marked deleted: ' .. tracker.flashKind)
+  local nn = require('src/notify')
+  check(nn.get(1) and nn.get(1).title == 'KOLO SMAZÁNO' and nn.get(1).sub:find('AC', 1, true),
+    'deleted lap announced with the reason: ' .. (nn.get(1) and (nn.get(1).title .. ' / ' .. nn.get(1).sub) or '-'))
   check(near(tracker.bestMs, acBestBefore, 2) and tracker.isDeletedLap(deleted),
     string.format('deleted lap is not the best lap: %.0f (deleted %.0f)', tracker.bestMs, deleted))
   env.lastTexts = {}

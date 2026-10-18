@@ -67,7 +67,8 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
   `(carIndex, lapTime, valid, cuts, ...)`; invalid with 0 cuts on a lap seen clean is not deleted. A cut is only a
   change of `isLapValid` from true to false within the lap (`checkValidity`; AC keeps the out lap's false after the line).
   Any deleted lap is undeleted when AC takes it as its best (`undeleteIfACBest`, also checked before deleting): AC does
-  not keep invalid laps as its best, so its best time is the final word. Diagnostika shows AC's raw best (`T.acBestMs`). Diagnostika shows
+  not keep invalid laps as its best, so its best time is the final word. Diagnostika shows AC's raw best (`T.acBestMs`).
+  Each deletion is also announced as a notification with `diag.deletedReason` (the user cannot open Diagnostika). Diagnostika shows
   `diag.lastDeleted` / `diag.lastCallback`. AC system messages are translated to Czech in `originals.lua` (`PHRASES`).
 - Out laps, laps that start or pass through the pit lane, and invalid laps are never references. A full lap that
   cannot be a reference (started in the pit lane, cut) is a **provisional** reference until a valid one exists

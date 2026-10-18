@@ -77,6 +77,7 @@ local ready, sessionIndex, quietUntil, pollClock = false, -1, 0, 0
 local overallBest, lastFlag, lastLapCount = 0, 0, 0
 local myPos, pendingPos, pendingSince, wasValid = 0, 0, 0, true
 local isRace = false
+local seenDeleted, seenUndeleted = 0, 0
 
 local function driverName(i)
   local ok, name = pcall(ac.getDriverName, i)
@@ -213,6 +214,19 @@ function N.update()
     if not valid and not quiet and S.notifyInvalid and tracker.flying and not me.isInPitlane then
       N.push(N.INVALID, 'NEPLATNÉ KOLO', 'Řezání trati, kolo se nezapočítá')
     end
+  end
+
+  -- a finished lap shown as deleted, with who deleted it and why (and when AC counts it after all)
+  local d = tracker.diag
+  if d.deletedCount ~= seenDeleted then
+    seenDeleted = d.deletedCount
+    if S.notifyInvalid then
+      N.push(N.INVALID, 'KOLO SMAZÁNO', d.deletedReason .. ' · nejlepší v AC ' .. D.formatLap(tracker.acBestMs or 0, 3))
+    end
+  end
+  if d.undeletedCount ~= seenUndeleted then
+    seenUndeleted = d.undeletedCount
+    if S.notifyInvalid then N.push(N.GAIN, 'KOLO PLATÍ', 'AC ho počítá jako nejlepší čas') end
   end
 
   pollPosition(me, now, quiet)
