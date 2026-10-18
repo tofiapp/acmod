@@ -1041,12 +1041,14 @@ do
   config.set('mirrorOffsetY', 0)
   local x5, _, y5 = only(carAt(0, -20, 50))
   check(math.abs(x4 - x5 - 20) < 0.5 and math.abs(y4 - y5 + 10) < 0.5, 'manual offset moves the markers')
-  -- own camera (mode 5): the app renders the rear view itself from the markers' camera, mirrored, own car clipped
-  config.set('mirrorMode', 5)
+  -- own camera (mode 6 automatic exposure): the app renders the rear view itself from the markers' camera, mirrored,
+  -- own car clipped
+  config.set('mirrorMode', 6)
   config.set('mirrorOffsetX', 25)                     -- calibration offsets do not apply to the own camera
   local x7 = only(carAt(1, -20, 50))
   local shot = env.shots and env.shots[#env.shots]
-  check(shot and env.sceneReady and shot.aa == 0 and shot.mipCount > 8 and shot.shaders == 14 and shot.scene.filter == 'sceneRoot:yes',
+  check(shot and env.sceneReady and shot.aa == 0 and shot.mipCount > 8 and shot.shaders == 0 and shot.shadows == 'area'
+    and shot.scene.filter == 'sceneRoot:yes',
     'own camera: scene shot like CSP\'s OBS camera views with MIPs, updated when the scene is ready')
   env.sceneReady()
   check(shot.mips == 1 and env.lastShader, 'own camera: MIPs for the automatic exposure, drawn through the shader')
@@ -1073,13 +1075,27 @@ do
       shot.look.y, yLevel, yTilted))
   config.set('mirrorCamHeight', 0)
   config.set('mirrorCamPitch', 0)
-  config.set('mirrorMode', 6)
+  config.set('mirrorMode', 5)
   only(carAt(1, -20, 50))
   env.sceneReady()
-  local shot6 = env.shots[#env.shots]
+  local shot6 = env.shots[#env.shots]               -- (the mode 5 shot; named after the old order)
   local im6 = env.lastImage
-  check(shot6 ~= shot and shot6.aa == 7 and shot6.updates == 1 and im6 and im6.img == shot6 and im6[5] > im6[7],
-    'own camera YEBIS: own shot with YEBIS as OBS, drawn mirrored')
+  check(shot6 ~= shot and shot6.aa == 104 and shot6.shaders == 0 and shot6.shadows == 'area' and shot6.updates == 1
+    and im6 and im6.img == shot6 and im6[5] > im6[7],
+    'own camera like the game: main shaders, shadows, full YEBIS, drawn mirrored')
+  config.set('mirrorCamQuality', 1)
+  only(carAt(1, -20, 50))
+  local fast = env.shots[#env.shots]
+  check(shot6.disposed and fast ~= shot6 and fast.aa == 105 and fast.shaders == 14 and env.lastImage.img == fast,
+    'quality change makes the shot again: fast = simplified shaders and YEBIS')
+  config.set('mirrorCamQuality', 3)
+  only(carAt(1, -20, 50))
+  local best = env.shots[#env.shots]
+  check(best.shadows == 'dedicated' and best.grass == 'dedicated' and best.aa == 104, 'best quality: own shadows and grass')
+  config.set('mirrorCamQuality', 2)
+  only(carAt(1, -20, 50))
+  env.sceneReady()
+  shot6 = env.shots[#env.shots]
   shot.updates = 0
   env.sceneReady()
   check(shot.updates == 0, 'the unused shot is not rendered')

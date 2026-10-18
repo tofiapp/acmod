@@ -256,15 +256,17 @@ local function tabMirror()
   slider('mirrorZoom', 'Přiblížení', 1, 2.5, '%.2f×', 0.05)
   slider('mirrorBrightness', 'Jas obrazu', 0.3, 3, '%.2f×', 0.05)
   combo('mirrorMode', 'Způsob vykreslení', { 'Gamma (výchozí)', 'YEBIS jako OBS', 'Tonemapping UI', 'Bez úprav',
-    'Vlastní kamera (značky přesně na autech)', 'Vlastní kamera, YEBIS' })
+    'Vlastní kamera (značky přesně na autech)', 'Vlastní kamera, automatický jas' })
   if S.mirrorMode >= 5 then
+    combo('mirrorCamQuality', 'Kvalita vlastní kamery', { 'Rychlá (bez stínů a úprav obrazu)',
+      'Jako hra (stíny, úprava obrazu jako hra)', 'Nejlepší (vlastní stíny a tráva, náročné)' })
     slider('mirrorCamHeight', 'Výška kamery', -0.8, 0.8, '%+.2f m', 0.05)
     slider('mirrorCamPitch', 'Sklon kamery dolů', -5, 15, '%.1f°', 0.5)
   end
   ui.textWrapped('Způsob vykreslení jde přepínat i kliknutím do okna se zrcátkem. Vlastní kamera (5, 6) vykreslí pohled'
     .. ' dozadu sama ze stejného místa a se stejnou šířkou záběru, ze kterých se počítají značky, takže sedí přesně.'
-    .. ' Šířka záběru, výška a sklon kamery pak mění i obraz; jas se u 5 nastavuje sám podle scény (posuvník Jas ho jen'
-    .. ' doladí). Stojí to podobně výkonu jako druhé zrcátko.')
+    .. ' Šířka záběru, výška a sklon kamery pak mění i obraz; obraz 5 má úpravu obrazu jako hra, u 6 se jas nastavuje sám'
+    .. ' podle scény (posuvník Jas ho doladí). Stojí to podobně výkonu jako druhé zrcátko.')
   ui.textWrapped('Obraz se nikdy nedeformuje: okno ukáže výřez zrcátka ve svém vlastním poměru stran.')
   gap()
   checkbox('hideOriginalMirror', 'Skrýt okna, která vypadají jako zpětné zrcátko (jiné aplikace / AC)')

@@ -443,10 +443,10 @@ end
 -- 3 UI tonemapping: ui.beginTonemapping / setShadingOffset / endTonemapping, as CSP's display.mirror();
 -- 4 raw: ui.drawVirtualMirror as it is.
 -- 5 own camera: the app renders the scene itself (ac.GeometryShot of sceneRoot, as CSP's OBS integration renders its
---   camera views: SimplifiedWithLights shaders, float texture) from the same camera the markers use, so the markers sit
---   exactly on the cars; drawn with automatic exposure and mode 1's gamma; 6 the same shot with SimplifiedYEBIS as OBS.
+--   camera views, quality setting) from the same camera the markers use, so the markers sit exactly on the cars;
+--   YEBIS with the game's post-processing; 6 the same camera without YEBIS, automatic exposure and mode 1's gamma.
 local MODES = 6
-local MODE_NAMES = { 'gamma', 'YEBIS', 'tonemapping UI', 'bez úprav', 'vlastní kamera', 'vlastní kamera YEBIS' }
+local MODE_NAMES = { 'gamma', 'YEBIS', 'tonemapping UI', 'bez úprav', 'vlastní kamera', 'vlastní kamera, auto jas' }
 local LABELS = {}
 local CANVAS_W, CANVAS_H = 1024, 256
 local cp1, cp2 = vec2(0, 0), vec2(CANVAS_W, CANVAS_H)
@@ -486,7 +486,7 @@ local SHADER = {
 local shots, shotFailed = {}, {}
 local shotMode, shotWanted = 0, -100           -- mode of the last frame that wanted a shot, and when
 local shotPos, shotLook, shotUp = vec3(), vec3(), vec3()
-local shotNear = 0
+local shotNear, clippedShot = 0, nil
 local callbackSet = false
 M.shotUpdates, M.shotFov = 0, 0                -- for tests and Diagnostika
 
@@ -496,17 +496,38 @@ local function shotFov()
   return math.deg(2 * math.atan(tanH / 4))
 end
 
+-- Quality (S.mirrorCamQuality) as the three quality levels of CSP's OBS camera views:
+-- 1 fast: SimplifiedWithLights shaders, SimplifiedYEBIS (cheap HDR -> LDR, no main post-processing: looked dark and flat);
+-- 2 like the game: main shaders, 'area' shadows, full YEBIS with the main post-processing settings;
+-- 3 best: main shaders, own ('dedicated') shadows and grass, full YEBIS.
+-- Mode 5 uses YEBIS (the game's own look); mode 6 the HDR shot without YEBIS, with MIPs for the automatic exposure.
 local SHOT_MIPS = 11                           -- 1024 x 256 down to 1 x 1: the last MIP is the average colour
+local shotQuality = {}                         -- quality each shot was made with
 local function newShot(mode)
-  local shot = ac.GeometryShot(ac.findNodes('sceneRoot:yes'), vec2(CANVAS_W, CANVAS_H), mode == 5 and SHOT_MIPS or 1,
-    false, mode == 6 and render.AntialiasingMode.SimplifiedYEBIS or render.AntialiasingMode.None,
-    render.TextureFormat.R16G16B16A16.Float)
+  local q = math.max(1, math.min(3, math.floor(S.mirrorCamQuality)))
+  local aa = render.AntialiasingMode.None
+  if mode == 5 then aa = q == 1 and render.AntialiasingMode.SimplifiedYEBIS or render.AntialiasingMode.YEBIS end
+  local shot = ac.GeometryShot(ac.findNodes('sceneRoot:yes'), vec2(CANVAS_W, CANVAS_H), mode == 6 and SHOT_MIPS or 1,
+    false, aa, render.TextureFormat.R16G16B16A16.Float)
   shot:setBestSceneShotQuality()
-  shot:setShadersType(render.ShadersType.SimplifiedWithLights)
+  if q == 1 then
+    shot:setShadersType(render.ShadersType.SimplifiedWithLights)
+  else
+    shot:setShadersType(render.ShadersType.Main)
+    -- shadows and grass are extras: an older CSP without them still gets the main shaders
+    pcall(shot.setAlternativeShadowsSet, shot, q == 3 and 'dedicated' or 'area')
+    if q == 3 then pcall(shot.setGrass, shot, 'dedicated') end
+  end
+  shotQuality[mode] = S.mirrorCamQuality
   return shot
 end
 
 local function getShot(mode)
+  local old = shots[mode]
+  if old and shotQuality[mode] ~= S.mirrorCamQuality then   -- quality changed: make it again
+    shots[mode] = nil
+    pcall(old.dispose, old)
+  end
   if shots[mode] or shotFailed[mode] then return shots[mode] end
   local ok, result = pcall(newShot, mode)
   if ok and result then shots[mode] = result else shotFailed[mode] = tostring(result) end
@@ -560,8 +581,8 @@ local function updateShot()
   if not me or not sim then return end
   cameraPosition(me, sim, true)
   local near = ownCarClip(me, sim)
-  if math.abs(near - shotNear) > 0.05 then
-    shotNear = near
+  if math.abs(near - shotNear) > 0.05 or shot ~= clippedShot then
+    shotNear, clippedShot = near, shot
     shot:setClippingPlanes(near, 3000)
   end
   shotPos:set(camWorld.x, camWorld.y, camWorld.z)
@@ -569,7 +590,7 @@ local function updateShot()
   shotUp:set(camU.x, camU.y, camU.z)
   M.shotFov = shotFov()
   shot:update(shotPos, shotLook, shotUp, M.shotFov)
-  if shotMode == 5 and mipsOk then mipsOk = pcall(makeMips, shot) end   -- MIPs for the average brightness
+  if shotMode == 6 and mipsOk then mipsOk = pcall(makeMips, shot) end   -- MIPs for the average brightness
   M.shotUpdates = M.shotUpdates + 1
 end
 
@@ -595,7 +616,7 @@ local function drawShot(mode, ox, oy, mw, mh, fw, fh, a)
   shotMode, shotWanted = mode, os.preciseClock()
   uv1:set(0.5 + fw / 2, 0.5 - fh / 2)            -- u runs backwards: a mirror
   uv2:set(0.5 - fw / 2, 0.5 + fh / 2)
-  if mode == 5 then
+  if mode == 6 then
     AUTO.p1:set(ox, oy)
     AUTO.p2:set(ox + mw, oy + mh)
     AUTO.uv1:set(uv1.x, uv1.y)

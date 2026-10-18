@@ -23,11 +23,12 @@ each with its own taskbar icon:
   `ui.renderShader` with `pow(saturate(c * exposure), 0.4545)` (SDK example in ac_wfx_impl.lua); 2 YEBIS canvas with exposure 30
   as CSP's OBS "Virtual mirror" view (obs_integration.lua; user reported no change with it); 3 `ui.beginTonemapping` like
   `display.mirror()`; 4 raw; 5 own camera = `ac.GeometryShot(ac.findNodes('sceneRoot:yes'))` updated in `render.onSceneReady` as
-  CSP's OBS camera views (obs_integration.lua: setBestSceneShotQuality + SimplifiedWithLights, float), from the
+  CSP's OBS camera views (obs_integration.lua quality levels, `S.mirrorCamQuality`: 1 SimplifiedWithLights + SimplifiedYEBIS,
+  looked dark and unlit in game; 2 default Main shaders + 'area' shadows + full YEBIS; 3 'dedicated' shadows + grass), from the
   markers' camera with vertical FOV from `S.mirrorFov` (4:1), `S.mirrorCamHeight` / `S.mirrorCamPitch` (camera basis camF/camU
   shared with the projection), near plane past our own car, drawn mirrored (u reversed), so markers are exact (`M.exact`,
-  offsets off); 11 MIPs + `mipsUpdate`, the shader takes exposure from the last MIP (average) then mode 1's gamma (a fixed
-  exposure was dark: the scene's HDR scale differs from the mirror texture's); 6 the same shot with SimplifiedYEBIS. Markers are not smoothed. Always cropped to the window's aspect via UVs or a clip rect, never stretched (`S.mirrorZoom`). Hiding AC's own
+  offsets off); 6 the same camera without YEBIS: 11 MIPs + `mipsUpdate`, the shader takes exposure from the last MIP
+  (average) then mode 1's gamma. Markers are not smoothed. Always cropped to the window's aspect via UVs or a clip rect, never stretched (`S.mirrorZoom`). Hiding AC's own
   virtual mirror / flags: no verified API; app windows titled like a mirror or flag are hidden via `ac.accessAppWindow`.
 - **standings** (`MirrorDelta Standings`, `src/standings_window.lua`): bottom centre row replacing AC's F9 overlay leaderboard:
   player and neighbours by `racePosition`, names (3 letters / surname / none), gap to me or to the car ahead. Race gap

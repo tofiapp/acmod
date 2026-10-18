@@ -7,7 +7,7 @@ local function count(name)
   M.calls[name] = (M.calls[name] or 0) + 1
 end
 
-render = { AntialiasingMode = { None = 0, SimplifiedYEBIS = 7 }, ShadersType = { Main = 0, SimplifiedWithLights = 14 },
+render = { AntialiasingMode = { None = 0, YEBIS = 104, SimplifiedYEBIS = 105 }, ShadersType = { Main = 0, SimplifiedWithLights = 14 },
   onSceneReady = function (cb) M.sceneReady = cb end,
   TextureFormat = { R16G16B16A16 = { Float = 10 }, R8G8B8A8 = { UNorm = 28 } } }
 
@@ -116,6 +116,9 @@ ac = {
     function shot:setShadersType(t) self.shaders = t; return self end
     function shot:setClippingPlanes(near, far) self.near, self.far = near, far; return self end
     function shot:mipsUpdate() self.mips = (self.mips or 0) + 1; return self end
+    function shot:setAlternativeShadowsSet(t) self.shadows = t; return self end
+    function shot:setGrass(t) self.grass = t; return self end
+    function shot:dispose() self.disposed = true end
     function shot:update(pos, look, up, fov)
       self.updates = self.updates + 1
       self.pos, self.look, self.up, self.fov = pos, look, up, fov
