@@ -108,7 +108,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.13.0' }
+local M = { S = S, defaults = defaults, VERSION = '1.13.1' }
 
 function M.set(key, value)
   S[key] = value

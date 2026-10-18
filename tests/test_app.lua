@@ -42,6 +42,7 @@ local splitEvent = false    -- lapCount changes one frame before the timer resta
 local pendingTimer = nil
 local lateCount = false     -- lapCount changes one frame after the timer restarts
 local pendingCount = false
+local invalidCarry = false  -- AC keeps reporting the finished lap as invalid for a while after the line
 
 local function frame(pace)
   env.clock = env.clock + DT
@@ -65,7 +66,7 @@ local function frame(pace)
       car.bestLapTimeMs = lapMs
     end
     if lateCallback then pendingCb = { lapMs, car.isLapValid } else env.callbacks.lap(0, lapMs, car.isLapValid) end
-    car.isLapValid = true
+    if not invalidCarry then car.isLapValid = true end
     car.wasPit = car.isInPitlane
   end
   car.splinePosition = p1 % 1
@@ -807,6 +808,27 @@ do
   driveLaps(1, 1.045)                 -- slower than the deleted lap, faster than the best valid one
   for _ = 1, 5 do frame(1) end
   check(tracker.flashKind == 1, 'next valid lap is the best, not the deleted one: ' .. tracker.flashKind)
+  -- AC still reports the previous lap as invalid for a while after the line (no lap callback): not a cut
+  local realLap2 = env.callbacks.lap
+  env.callbacks.lap = function () end
+  car.isLapValid = false
+  invalidCarry = true
+  driveLaps(1, 1.0)                   -- this lap ends invalid and AC keeps saying so after the line
+  invalidCarry = false
+  local fr = 0
+  driveLaps(1, 1.0, function () fr = fr + 1; if fr == 150 then car.isLapValid = true end end)
+  for _ = 1, 120 do frame(1) end
+  check(tracker.lastLapState == 1 and tracker.flashKind ~= 5, 'invalid carried over from the previous lap is not a cut: ' .. tracker.flashKind)
+  -- a lap the app deleted on its own (no callback) that AC takes as its best lap is valid after all
+  fr = 0
+  driveLaps(1, 1.0, function () fr = fr + 1; if fr == 600 then car.isLapValid = false elseif fr == 601 then car.isLapValid = true end end)
+  for _ = 1, 120 do frame(1) end
+  check(tracker.lastLapState == 2, 'cut seen on track and no callback: deleted')
+  car.bestLapTimeMs = tracker.lastLapMs
+  frame(1)
+  check(tracker.lastLapState == 1 and near(tracker.bestMs, car.bestLapTimeMs, 2),
+    'AC took the lap as its best: not deleted, shown as the best lap')
+  env.callbacks.lap = realLap2
   config.set('referenceKind', 2)
   check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
 end

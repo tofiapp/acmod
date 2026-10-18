@@ -99,8 +99,11 @@ local prevLapRef, prevLapStart, prevLapAnchor = newList(GRID + 1), 0, 0   -- anc
 local curK0 = 0                -- first grid index recorded in the current lap (0 on a full lap)
 local lapCut = false           -- the current timed lap was cut (AC marked it invalid on track)
 local lapCutU = 0              -- lap fraction where it happened (for Diagnostika)
+local lapSeenValid = false     -- AC reported this lap valid at least once (a cut is a change from valid to invalid)
 local DELETED_N = 8
 local deletedLaps, deletedHead = newList(DELETED_N), 0   -- times of deleted laps, so AC's best is not taken from them
+local deletedByAC = {}         -- per entry: AC's lap callback said invalid (else only the app's own observation)
+for i = 1, DELETED_N do deletedByAC[i] = false end
 local ownBestMs = 0            -- best valid lap seen by the tracker this session
 local cutWait, cutWaitMs, cutWaitClock = false, 0, 0   -- cut lap waiting for AC's verdict (callback)
 local NOW_WINDOW, NOW_STEP = 3, 0.05  -- s: the split line compares the last 3 s, sampled 20 times a second
@@ -344,7 +347,7 @@ local function startLap(flying, lineSpline, clean)
   T.partial = false
   skipFirstSector = false
   T.clean = flying and clean ~= false
-  lapCut = false
+  lapCut, lapSeenValid = false, false
   curK0 = 0
   T.hasDelta = false
   sectorsLive = true
@@ -376,9 +379,9 @@ local function resetLap(reason)
   if reason then T.diag.lastReset = reason end
 end
 
-local function rememberDeleted(ms)
+local function rememberDeleted(ms, byAC)
   deletedHead = deletedHead % DELETED_N + 1
-  deletedLaps[deletedHead] = ms
+  deletedLaps[deletedHead], deletedByAC[deletedHead] = ms, byAC == true
 end
 
 -- True when ms is (within 2 ms) the time of a lap that was deleted this session.
@@ -456,13 +459,15 @@ local function settleCut(now)
   local fresh = cbClock >= cutWaitClock - CALLBACK_WAIT
   if not fresh and now - cutWaitClock < CALLBACK_WAIT then return end
   cutWait = false
-  if fresh and cbValid then
+  local tookAsBest = seenACBest > 0 and math.abs(seenACBest - cutWaitMs) <= 2
+  if (fresh and cbValid) or (not fresh and tookAsBest) then
     T.lastLapState = 1
     if T.flashKind == 5 then T.flashKind = (prevLapMs > 0 and cutWaitMs < prevLapMs) and 2 or 3 end
-    T.diag.lastDeleted = string.format('nesmazáno: isLapValid=ne na %.0f %% kola, ale AC kolo uznalo', lapCutU * 100)
+    T.diag.lastDeleted = string.format('nesmazáno: isLapValid=ne na %.0f %% kola, ale AC kolo uznalo%s', lapCutU * 100,
+      fresh and '' or ' (vzalo ho jako nejlepší čas)')
   else
-    rememberDeleted(cutWaitMs)
-    if fresh and cbMs > 0 then rememberDeleted(cbMs) end
+    rememberDeleted(cutWaitMs, fresh)
+    if fresh and cbMs > 0 then rememberDeleted(cbMs, true) end
     T.diag.lastDeleted = string.format('smazáno: isLapValid=ne na %.0f %% kola, %s', lapCutU * 100,
       fresh and 'AC potvrdilo neplatné' or 'AC kolo nepotvrdilo (callback nepřišel)')
   end
@@ -494,8 +499,8 @@ local function finalizePending(now)
     -- the lap was deleted: not the best, shown red
     if bestFlashMs == pendingMs then bestFlashMs = bestFlashBefore end
     T.flashKind, T.lastLapState = 5, 2
-    rememberDeleted(ms)
-    rememberDeleted(pendingMs)
+    rememberDeleted(ms, true)
+    rememberDeleted(pendingMs, true)
   end
   if valid then
     T.diag.references = T.diag.references + 1
@@ -649,6 +654,40 @@ local function updateDelta(dt, s, t, car)
   end
 end
 
+-- AC took a lap the app deleted on its own observation as its best lap: AC knows better, the lap is valid.
+-- (A lap AC's own callback called invalid stays deleted.)
+local function undeleteIfACBest(ms)
+  local found = false
+  for i = 1, DELETED_N do
+    if deletedLaps[i] > 0 and not deletedByAC[i] and math.abs(deletedLaps[i] - ms) <= 2 then
+      deletedLaps[i], found = 0, true
+    end
+  end
+  if not found then return end
+  if ownBestMs == 0 or ms < ownBestMs then ownBestMs = ms end
+  if math.abs(T.lastLapMs - ms) <= 2 then
+    T.lastLapState = 1
+    if T.flashKind == 5 then
+      if bestFlashMs == 0 or ms < bestFlashMs then T.flashKind, bestFlashMs = 1, ms
+      else T.flashKind = (prevLapMs > 0 and ms < prevLapMs) and 2 or 3 end
+    end
+  end
+  T.diag.lastDeleted = 'nesmazáno: AC kolo vzalo jako svůj nejlepší čas'
+end
+
+-- Validity of the running timed lap. AC may still report the previous lap (an out lap is always invalid) for a while
+-- after the line, so only a change from valid to invalid within this lap is a cut.
+local function checkValidity(car)
+  if car.isInPitlane then T.clean = false end
+  if car.isLapValid then
+    lapSeenValid = true
+    return
+  end
+  if not lapSeenValid then return end
+  T.clean = false
+  if not lapCut and not car.isInPitlane and not car.isInPit then lapCut, lapCutU = true, prevU end
+end
+
 local function updateTiming(sim, car, now)
   T.position = car.racePosition
   T.carsCount = sim.carsCount
@@ -657,6 +696,7 @@ local function updateTiming(sim, car, now)
   -- AC's best, unless it is a lap that was deleted: then AC's best before it, or the tracker's own best valid lap
   local best = car.bestLapTimeMs
   if best ~= seenACBest then
+    if best > 0 then undeleteIfACBest(best) end
     if seenACBest > 0 and not T.isDeletedLap(seenACBest) and (keptACBest == 0 or seenACBest < keptACBest) then
       keptACBest = seenACBest
     end
@@ -730,7 +770,7 @@ local function resetSession()
   for i = 1, MAX_SECTORS do sessionBest[i] = 0 end
   bestFlashMs, prevLapMs, ownBestMs = 0, 0, 0
   T.lastLapMs, T.lastLapState, T.prevLapPartial = 0, 0, false
-  for i = 1, DELETED_N do deletedLaps[i] = 0 end
+  for i = 1, DELETED_N do deletedLaps[i], deletedByAC[i] = 0, false end
   cutWait, seenACBest, keptACBest = false, 0, 0
   pendingActive = false
   T.flashUntil = 0
@@ -857,11 +897,7 @@ local function updateInner(dt)
     elseif u > prevU then
       advance(u, t)
     end
-    if T.clean and (not car.isLapValid or car.isInPitlane) then T.clean = false end
-    -- cut: AC marked the lap invalid on track (not the pits, not the first metres where it may lag)
-    if not lapCut and not car.isLapValid and not car.isInPitlane and not car.isInPit and prevU > 0.01 then
-      lapCut, lapCutU = true, prevU
-    end
+    checkValidity(car)
   end
   prevSpline, prevRawT = s, t
   if heldRawT then

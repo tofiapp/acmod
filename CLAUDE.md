@@ -64,7 +64,9 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
 - Deleted laps (cut on track, or AC's callback says invalid) flash red (`flashKind 5`), never become the flash best,
   are listed in `deletedLaps` so `T.bestMs` ignores AC's best when it equals one; `T.lastLapMs/lastLapState` feed the
   timing window's POSL column; `T.bestMs` then falls back to AC's previous best. `ac.onLapCompleted` gives
-  `(carIndex, lapTime, valid, cuts, ...)`; invalid with 0 cuts on a lap seen clean is not deleted. Diagnostika shows
+  `(carIndex, lapTime, valid, cuts, ...)`; invalid with 0 cuts on a lap seen clean is not deleted. A cut is only a
+  change of `isLapValid` from true to false within the lap (`checkValidity`; AC keeps the out lap's false after the line).
+  A lap deleted on the app's own observation (no callback) is undeleted when AC takes it as its best (`undeleteIfACBest`). Diagnostika shows
   `diag.lastDeleted` / `diag.lastCallback`. AC system messages are translated to Czech in `originals.lua` (`PHRASES`).
 - Out laps, laps that start or pass through the pit lane, and invalid laps are never references. A full lap that
   cannot be a reference (started in the pit lane, cut) is a **provisional** reference until a valid one exists

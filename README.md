@@ -19,7 +19,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.13.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.13.1.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -185,7 +185,7 @@ Nastavení je společné pro všechna okna a má osm záložek.
 | Červená | Pomalejší než předchozí kolo, nebo smazané kolo (řezání, nebo ho AC po dojetí označilo za neplatné) |
 | Šedá | Out lap nebo kolo z boxové uličky |
 
-Smazané kolo nikdy není nejrychlejší, ani když ho AC ukáže jako svůj nejlepší čas; NEJ pak ukáže nejlepší čas před ním. Proč bylo kolo smazané, ukazuje záložka Diagnostika (řádky „Smazané kolo“ a „Hlášení AC po kole“). Sloupec POSL ukazuje poslední kolo, smazané červeně.
+Za řezání se počítá jen změna z platného na neplatné během kola (AC po out lapu ještě chvíli hlásí neplatné kolo, to se nepočítá). Když AC samo kolo hlásí jako neplatné, nikdy není nejrychlejší a NEJ ukáže nejlepší čas před ním. Když kolo smazala jen aplikace a AC ho vezme jako svůj nejlepší čas, platí verdikt AC. Proč bylo kolo smazané, ukazuje záložka Diagnostika (řádky „Smazané kolo“ a „Hlášení AC po kole“). Sloupec POSL ukazuje poslední kolo, smazané červeně.
 Nejrychlejší čas (NEJ) je vaše nejlepší kolo v session podle AC (bez smazaných kol) a má fialový rámeček.
 
 ### Teploty pneumatik
