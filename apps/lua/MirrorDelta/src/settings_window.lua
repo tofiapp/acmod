@@ -108,6 +108,7 @@ local function tabDelta()
   if S.carLedsPit then
     combo('carLedsStyle', 'Diody v autě', { 'Světlo přejíždí ze strany na stranu', 'Každá druhá na střídačku' })
     combo('carLedsColor', 'Barva diod v autě', pitLights.NAMES)
+    slider('carLedsBrightness', 'Jas diod v autě', 0.3, 6, '%.1f', 0.1)
     ui.textWrapped(carLeds.count > 0
       and string.format('Diody v tomto autě: %d (%s).', carLeds.count, carLeds.source)
       or ('Diody otáček v tomto autě nenalezeny' .. (carLeds.source ~= '' and ': ' .. carLeds.source or '')

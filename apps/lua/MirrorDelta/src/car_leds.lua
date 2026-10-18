@@ -5,8 +5,10 @@
 -- render.circle) the way CSP's Traffic tool draws its virtual traffic lights.
 -- LEDs: digital_instruments.ini [LED_n] OBJECT_NAME (ac.INIConfig.carData), meshes found under
 -- ac.findNodes('carRoot:0') with :findMeshes(name); without that file the meshes CSP marks as LEDs ('{ actsAsLED:yes }',
--- CSP's show_important_wheels filter). Position: the mesh's :boundingSphere() in its parent's coordinates, through the
--- parent's live world matrix (:getWorldTransformationRaw() returns a reference, kept). Ordered left to right once.
+-- CSP's show_important_wheels filter). Position: the mesh's :boundingSphere() in its parent's space, taken to world space
+-- by multiplying the local transforms up the node chain (CSP's vr_rig_base getActualTransform does the same; the cached
+-- world matrix is not kept up to date, the lights stayed behind when the car drove off), then into car space with
+-- car.worldToLocal. Recomputed at every pit entry; each frame car.transform takes them back to the world.
 -- Cars whose dash is a CSP script or a screen texture have no such meshes. Everything under pcall; no per-frame allocation.
 
 local config = require('src/config')
@@ -15,27 +17,39 @@ local S = config.S
 
 local M = { count = 0, source = '', active = false }
 
-local leds = {}                -- { centre = vec3 (parent space), radius, matrix = parent world matrix, power }
+local leds = {}                -- { ref = mesh, centre = vec3 (parent space), radius, pos = vec3 (car space) }
 local session = -1
 local worldPos, toCam = vec3(), vec3()
 local fill, edge = rgbm(0, 0, 0, 1), rgbm(0, 0, 0, 0)
 local callbackSet = false
 
-local function maxComponent(v)
-  if type(v) == 'table' then
-    local m = 0
-    for i = 1, #v do m = math.max(m, tonumber(v[i]) or 0) end
-    return m
-  end
-  return tonumber(v) or 0
-end
-
-local function addMesh(ref, power)
+local function addMesh(ref)
   local centre, radius = ref:boundingSphere(1, vec3())
   if not centre or not radius or radius <= 0 then return end
-  local matrix = ref:getParent():getWorldTransformationRaw()
-  if not matrix then return end
-  leds[#leds + 1] = { centre = centre, radius = radius, matrix = matrix, power = power > 0 and power or 20, side = 0 }
+  leds[#leds + 1] = { ref = ref, centre = centre, radius = radius, pos = vec3(), side = 0 }
+end
+
+-- World transform of a node from its local transforms (as CSP's getActualTransform).
+local function actualTransform(n)
+  local t = nil
+  while n and #n > 0 do
+    t = (t and t or mat4x4.identity()):mulSelf(n:getTransformationRaw())
+    n = n:getParent()
+  end
+  return t
+end
+
+-- Car-space positions of all LEDs, from the scene as it is now.
+local function locate(car)
+  local w2l = car.worldToLocal
+  for k = 1, #leds do
+    local led = leds[k]
+    local m = actualTransform(led.ref:getParent())
+    if m then
+      m:transformPointTo(worldPos, led.centre)
+      w2l:transformPointTo(led.pos, worldPos)
+    end
+  end
 end
 
 local function fromInstruments(root)
@@ -47,7 +61,7 @@ local function fromInstruments(root)
     if type(name) == 'table' then name = name[1] end
     if type(name) == 'string' and name ~= '' then
       local ref = root:findMeshes(name)
-      if ref and #ref > 0 then addMesh(ref, maxComponent(ini:get(section, 'EMISSIVE', nil))) end
+      if ref and #ref > 0 then addMesh(ref) end
     end
   end
   if #leds > 0 then M.source = 'digital_instruments.ini' end
@@ -56,19 +70,13 @@ end
 local function fromCspMarks(root)
   local all = root:findMeshes('{ actsAsLED:yes }')
   if not all then return end
-  for k = 1, #all do addMesh(all:at(k), 20) end
+  for k = 1, #all do addMesh(all:at(k)) end
   if #leds > 0 then M.source = 'CSP (actsAsLED)' end
 end
 
--- Left to right across the car (for the running light).
-local function order(car)
-  local p, sd = car.position, car.side
-  for k = 1, #leds do
-    local led = leds[k]
-    led.matrix:transformPointTo(worldPos, led.centre)
-    led.side = (worldPos.x - p.x) * sd.x + (worldPos.y - p.y) * sd.y + (worldPos.z - p.z) * sd.z
-  end
-  table.sort(leds, function (a, b) return a.side < b.side end)
+-- Left to right across the car (for the running light): car space x.
+local function order()
+  table.sort(leds, function (a, b) return a.pos.x < b.pos.x end)
 end
 
 local function load(car)
@@ -77,7 +85,6 @@ local function load(car)
   if not root then return end
   pcall(fromInstruments, root)
   if #leds == 0 then pcall(fromCspMarks, root) end
-  if #leds > 0 then pcall(order, car) end
   M.count = #leds
 end
 
@@ -98,6 +105,7 @@ end
 local function draw()
   if not M.active then return end
   local cam = ac.getSim().cameraPosition
+  local tr = ac.getCar(0).transform
   local c = pitLights.colorAt(S.carLedsColor)
   local n, t = #leds, os.preciseClock()
   render.setDepthMode(render.DepthMode.Normal)
@@ -105,13 +113,13 @@ local function draw()
     local led = leds[k]
     local b = level(k, n, t)
     if b > 0.02 then
-      led.matrix:transformPointTo(worldPos, led.centre)
+      tr:transformPointTo(worldPos, led.pos)
       toCam:set(cam.x - worldPos.x, cam.y - worldPos.y, cam.z - worldPos.z)
       local len = math.max(1e-4, math.sqrt(toCam.x * toCam.x + toCam.y * toCam.y + toCam.z * toCam.z))
       -- just in front of the LED towards the eye, so the LED's own geometry does not cover the disc
       local lift = led.radius * 1.1 / len
       worldPos:set(worldPos.x + toCam.x * lift, worldPos.y + toCam.y * lift, worldPos.z + toCam.z * lift)
-      local power = led.power * b
+      local power = S.carLedsBrightness * b      -- a few times the white point: glows, but stays orange
       fill.r, fill.g, fill.b, fill.mult = c.r * power, c.g * power, c.b * power, 1
       render.circle(worldPos, toCam, led.radius, fill, edge)
     end
@@ -135,7 +143,12 @@ local function step()
     session = sim.currentSessionIndex
     load(car)
   end
-  M.active = S.carLedsPit and car.isInPitlane and #leds > 0
+  local active = S.carLedsPit and car.isInPitlane and #leds > 0
+  if active and not M.active then                 -- pit entry: where the LEDs are now, left to right
+    local ok = pcall(locate, car)
+    if ok then pcall(order) else active = false end
+  end
+  M.active = active
   if M.active and not callbackSet then
     callbackSet = true
     render.on('main.root.transparent', safeDraw)

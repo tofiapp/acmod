@@ -1397,11 +1397,31 @@ do
   local _, nB = brightestX()
   check(nA == 2 and nB == 2 and math.abs(env.circles[1].x - litA[1]) > 0.1, 'every other LED in turn')
   config.set('carLedsStyle', 1)
+  -- the lights stay on the car while it moves (the old version kept world positions and they stayed behind)
+  env.clock = 1.4 * 215
+  local xa = brightestX()
+  local za = env.circles[1].z
+  car.position.z = car.position.z + 10
+  local xb = brightestX()
+  local zb = env.circles[1].z
+  check(math.abs((zb - za) - 10) < 0.05 and math.abs(xa - xb) < 0.05, string.format('lights move with the car (%.2f -> %.2f)', za, zb))
+  car.position.z = car.position.z - 10
+  local c1 = env.circles[1]
+  check(c1.r < 5 and c1.r > c1.g * 1.5, string.format('moderate glow keeps the colour (%.2f, %.2f, %.2f)', c1.r, c1.g, c1.b))
   car.isInPitlane = false
   frame(1)
   env.circles = {}
   draw3D()
   check(#env.circles == 0, 'on track: nothing drawn')
+  -- positions come from the node chain at the pit entry (a moved parent node moves the lights)
+  env.ledParentOffset = { x = 0, y = 0.5, z = 0 }
+  car.isInPitlane = true
+  frame(1)
+  brightestX()
+  check(math.abs(env.circles[1].y - 1.5) < 0.05, 'pit entry: positions from the node chain: ' .. env.circles[1].y)
+  env.ledParentOffset = nil
+  car.isInPitlane = false
+  frame(1)
   -- no digital_instruments.ini: the meshes CSP marks as LEDs
   env.carIni = nil
   env.sim.currentSessionIndex = savedSession + 8

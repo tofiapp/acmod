@@ -39,6 +39,26 @@ vec3mt.__index = vec3mt
 function vec3mt:set(x, y, z) self.x, self.y, self.z = x, y, z; return self end
 vec3 = setmetatable({}, { __call = function (_, x, y, z) return setmetatable({ x = x or 0, y = y or 0, z = z or 0 }, vec3mt) end })
 
+-- mat4x4 (translations only, enough for the node chain in the tests)
+function M.translation(x, y, z)
+  local m = { tx = x, ty = y, tz = z }
+  function m:mulSelf(o) self.tx, self.ty, self.tz = self.tx + o.tx, self.ty + o.ty, self.tz + o.tz; return self end
+  function m:transformPointTo(dst, v) dst.x, dst.y, dst.z = v.x + self.tx, v.y + self.ty, v.z + self.tz; return dst end
+  return m
+end
+mat4x4 = { identity = function () return M.translation(0, 0, 0) end }
+
+-- car.worldToLocal: the inverse of car.transform below
+function M.worldToLocalOf(car)
+  return { transformPointTo = function (_, dst, v)
+    local p, s, u, l = car.position, car.side or { x = 1, y = 0, z = 0 }, car.up or { x = 0, y = 1, z = 0 },
+      car.look or { x = 0, y = 0, z = 1 }
+    local rx, ry, rz = v.x - p.x, v.y - p.y, v.z - p.z
+    dst.x, dst.y, dst.z = rx * s.x + ry * s.y + rz * s.z, rx * u.x + ry * u.y + rz * u.z, rx * l.x + ry * l.y + rz * l.z
+    return dst
+  end }
+end
+
 -- car.transform: local x along car.side, y along car.up, z along car.look, from car.position
 function M.transformOf(car)
   return { transformPointTo = function (_, dst, v)
@@ -118,6 +138,7 @@ end
 M.car.position, M.car.look, M.car.up = { x = 0, y = 0, z = 0 }, { x = 0, y = 0, z = 1 }, { x = 0, y = 1, z = 0 }
 M.car.side, M.car.velocity = { x = 1, y = 0, z = 0 }, { x = 0, y = 0, z = 50 }
 M.car.transform = M.transformOf(M.car)
+M.car.worldToLocal = M.worldToLocalOf(M.car)
 M.car.driverEyesPosition = { x = 0, y = 0.6, z = 0 }   -- like the old fixed camera height
 M.car.aabbCenter, M.car.aabbSize = { x = 0, y = 0.5, z = -0.1 }, { x = 1.9, y = 1.2, z = 4.5 }   -- bottom at y -0.1
 M.sim = { cameraPosition = { x = 0, y = 1, z = 0.2 }, isReplayActive = false, isPaused = false, carsCount = 12, currentSessionIndex = 0, damageDisplayerShown = true, raceFlagType = 0 }
@@ -147,10 +168,15 @@ ac = {
         out:set(p[1], p[2], p[3])
         return out, 0.01
       end
+      -- parent node: its local transform moves by M.ledParentOffset (default none), and it hangs under the scene root
       function r:getParent()
-        return { getWorldTransformationRaw = function ()
-          return { transformPointTo = function (_, dst, v) dst.x, dst.y, dst.z = v.x, v.y, v.z; return dst end }
-        end }
+        local node = { 'parent' }
+        function node:getTransformationRaw()
+          local o = M.ledParentOffset or { x = 0, y = 0, z = 0 }
+          return M.translation(o.x, o.y, o.z)
+        end
+        function node:getParent() return {} end
+        return node
       end
       function r:setMaterialProperty(prop, value)
         M.emissive = M.emissive or {}
