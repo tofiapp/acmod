@@ -18,7 +18,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.11.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.11.1.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -77,7 +77,7 @@ Nastavení je společné pro všechna okna a má osm záložek.
   - **Jen vlastní měření.**
   - **Jen delta z AC.**
 - Reference: předchozí kolo (výchozí), nejlepší kolo této session, nebo nejlepší kolo vůbec (uložené).
-  - **Předchozí kolo** porovnává jen s kolem těsně před tím a s ničím jiným (ani s uloženým kolem, ani s deltou z AC). Out lap tedy deltu nemá. Druhé kolo se porovná s out lapem, a to od místa, kde jste vyjeli z boxů; před tím místem delta není a sektory jsou šedé.
+  - **Předchozí kolo** porovnává jen s kolem těsně před tím a s ničím jiným (ani s uloženým kolem, ani s deltou z AC). Out lap tedy deltu nemá. Druhé kolo se porovná s out lapem: delta naskočí v místě, kde jste vyjeli z boxů, a počítá celý čas out lapu včetně boxové uličky, takže na cílové čáře se rovná rozdílu časů kol. Před tím místem delta není a sektory jsou šedé.
 - Tlačítko **Smazat uložená data** smaže uložené nejlepší kolo a mini sektory pro aktuální auto a trať. Potvrdíte ho druhým kliknutím.
 
 **Časy**
@@ -183,7 +183,7 @@ Nastavení je společné pro všechna okna a má osm záložek.
 | Červená | Pomalejší než předchozí kolo, nebo smazané kolo (řezání, nebo ho AC po dojetí označilo za neplatné) |
 | Šedá | Out lap nebo kolo z boxové uličky |
 
-Smazané kolo nikdy není nejrychlejší, ani když ho AC ukáže jako svůj nejlepší čas. Sloupec POSL ukazuje poslední kolo, smazané červeně.
+Smazané kolo nikdy není nejrychlejší, ani když ho AC ukáže jako svůj nejlepší čas; NEJ pak ukáže nejlepší čas před ním. Proč bylo kolo smazané, ukazuje záložka Diagnostika (řádky „Smazané kolo“ a „Hlášení AC po kole“). Sloupec POSL ukazuje poslední kolo, smazané červeně.
 Nejrychlejší čas (NEJ) je vaše nejlepší kolo v session podle AC (bez smazaných kol) a má fialový rámeček.
 
 ### Teploty pneumatik

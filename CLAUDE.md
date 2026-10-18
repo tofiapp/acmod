@@ -53,13 +53,15 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
   middle (default): `T.nowDelta` = delta change over the last 3 s (20 Hz ring buffer in `updateTrend`); default
   reference is the previous lap (`S.referenceKind = 3`, kind 5), strictly: no saved best, estimate, provisional or AC
   delta in that mode. The out lap's partial grid becomes the previous lap with an anchor (`prevLapAnchor`, first
-  recorded u); `ownDelta` compares both laps from the common anchor, no delta before it, sectors before it neutral. Keep `updateInner` under LuaJIT's
+  recorded u); `ownDelta` compares an out-lap reference directly (its grid holds AC's raw out-lap timer, pit lane included, so the delta at the line equals the lap time difference), no delta before the anchor, sectors before it neutral. Keep `updateInner` under LuaJIT's
   60-upvalue limit (move new logic into helper functions).
 - Mini sectors are boundaries at `j / N` in `u`; times are interpolated; purple needs a clean lap and an
   existing best; best sector lists are kept per sector count.
 - Deleted laps (cut on track, or AC's callback says invalid) flash red (`flashKind 5`), never become the flash best,
   are listed in `deletedLaps` so `T.bestMs` ignores AC's best when it equals one; `T.lastLapMs/lastLapState` feed the
-  timing window's POSL column. AC system messages are translated to Czech in `originals.lua` (`PHRASES`).
+  timing window's POSL column; `T.bestMs` then falls back to AC's previous best. `ac.onLapCompleted` gives
+  `(carIndex, lapTime, valid, cuts, ...)`; invalid with 0 cuts on a lap seen clean is not deleted. Diagnostika shows
+  `diag.lastDeleted` / `diag.lastCallback`. AC system messages are translated to Czech in `originals.lua` (`PHRASES`).
 - Out laps, laps that start or pass through the pit lane, and invalid laps are never references. A full lap that
   cannot be a reference (started in the pit lane, cut) is a **provisional** reference until a valid one exists
   (never saved). `activeRef()` order: chosen reference, the other one, provisional.

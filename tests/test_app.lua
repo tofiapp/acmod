@@ -729,21 +729,23 @@ do
   check(tracker.allTimeRefMs > 0, 'a saved best lap exists for this test')
   env.callbacks.session(0, false)
   car.bestLapTimeMs = 0               -- new session: AC has no best lap yet
+  car.lapTimeMs = 0                   -- AC's lap timer starts in the pit box, next to the line
   car.isInPitlane = true
-  frame(0.4)
-  car.splinePosition = 0.5            -- pit exit 0.2 of a lap after the line
-  for _ = 1, 30 do frame(0.4) end
+  car.splinePosition = LINE + 0.001
+  while car.splinePosition < 0.5 do frame(0.4) end   -- slowly down the pit lane to the exit, 0.2 of a lap
   car.isInPitlane = false
   local outDelta = false
   for _ = 1, 600 do frame(1); if tracker.hasDelta then outDelta = true end end
   check(tracker.partial and tracker.refKind == 0, 'out lap in previous-lap mode has no reference: ' .. tracker.refKind)
   driveLaps(1, 1, function () if tracker.hasDelta then outDelta = true end end)
   check(not outDelta, 'no delta on the out lap in previous-lap mode')
-  car.bestLapTimeMs = 0               -- AC never takes an out lap as the best (the mock would)
+  local outLapMs = car.previousLapTimeMs
+  check(near(tracker.lastLapMs, outLapMs, 20), 'out lap time shown as the last lap')
   check(tracker.prevLapPartial and tracker.prevLapMs > 0, 'the out lap is kept as the previous lap')
-  local early, late, minD, secEarly, secLate = 0, 0, 1, 0, 0
+  local early, late, minD, secEarly, secLate, endDelta = 0, 0, 1, 0, 0, nil
   driveLaps(1, 1.03, function ()
     local u = (car.splinePosition - LINE) % 1
+    if u > 0.99 and tracker.hasDelta then endDelta = tracker.delta end
     if tracker.hasDelta and tracker.refKind == 5 and not tracker.deltaFromAC then
       if u > 0.01 and u < 0.19 then early = early + 1 elseif u >= 0.19 then late = late + 1; minD = math.min(minD, tracker.delta) end
     end
@@ -756,6 +758,16 @@ do
   check(early == 0 and late > 1000 and minD < -0.5,
     string.format('second lap compares with the out lap from the pit exit: %d before, %d after, %.2f s', early, late, minD))
   check(secEarly == 0 and secLate >= 12, string.format('sectors before the pit exit neutral (%d), after it faster (%d)', secEarly, secLate))
+  local lapDiff = (car.previousLapTimeMs - outLapMs) / 1000
+  check(endDelta and near(endDelta, lapDiff, 0.3),
+    string.format('delta at the line equals the difference to the out lap: %.2f vs %.2f', endDelta or 99, lapDiff))
+  -- AC calls a lap invalid without any cut, on a lap driven clean: not deleted
+  local realLap0 = env.callbacks.lap
+  env.callbacks.lap = function (i, ms) realLap0(i, ms, false, 0) end
+  driveLaps(1, 1.0)
+  env.callbacks.lap = realLap0
+  for _ = 1, 5 do frame(1) end
+  check(tracker.lastLapState == 1 and tracker.flashKind ~= 5, 'invalid without cuts on a clean lap is not deleted')
   check(tracker.lastLapState == 1 and tracker.lastLapMs > 0, 'valid last lap recorded')
   -- AC deletes the next (fastest) lap after the line, e.g. track limits; AC's best still shows it
   local realLap = env.callbacks.lap
@@ -765,8 +777,9 @@ do
   for _ = 1, 5 do frame(1) end
   local deleted = tracker.lastLapMs
   check(tracker.flashKind == 5 and tracker.lastLapState == 2, 'deleted lap flashes red and is marked deleted: ' .. tracker.flashKind)
-  check(near(car.bestLapTimeMs, deleted, 2) and tracker.bestMs ~= car.bestLapTimeMs and tracker.isDeletedLap(deleted),
-    'deleted lap is not shown as the best lap')
+  check(near(car.bestLapTimeMs, deleted, 2) and tracker.bestMs > 0 and not tracker.isDeletedLap(tracker.bestMs)
+    and tracker.isDeletedLap(deleted),
+    string.format('deleted lap is not shown as the best lap, the best before it is: %.0f (deleted %.0f)', tracker.bestMs, deleted))
   env.lastTexts = {}
   env.windowW, env.windowH = 505, 60
   script.windowTiming(DT)
