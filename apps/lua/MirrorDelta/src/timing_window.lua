@@ -31,8 +31,7 @@ local bestCache = { key = -1, str = '' }
 local lastCache = { key = -1, str = '' }
 local flashCache = { key = -1, str = '' }
 local mPos, mTail, mBest, mFlash, mPit = {}, {}, {}, {}, {}
-local PIT_COLOR = rgbm(1, 0.8, 0.1, 1)
-local PIT_INK = rgbm(0.07, 0.08, 0.1, 1)
+local pitLights = require('src/pit_lights')
 
 local function visible(item)
   if item == ITEM_POS then return S.showPosition end
@@ -132,8 +131,8 @@ local function drawValue(item, ax, y, boxW, h, size, sc, rightAligned)
     local me = S.pitBox and ac.getCar(0)
     if me and me.isInPitlane then
       -- in the pit lane the current lap time gives way to a lit BOX
-      pill(ax, cy, D.measure(mPit, 'BOX', size), size, sc, rightAligned, false, PIT_COLOR)
-      D.text('BOX', size, bx, y, boxW, h, align, D.color(PIT_INK, S.opacity))
+      pill(ax, cy, D.measure(mPit, 'BOX', size), size, sc, rightAligned, false, pitLights.color())
+      D.text('BOX', size, bx, y, boxW, h, align, D.color(pitLights.ink(), S.opacity))
     elseif S.lapFlash and os.preciseClock() < tracker.flashUntil then
       local str = lapText(flashCache, tracker.flashLapMs, 3)
       pill(ax, cy, D.measure(mFlash, str, size), size, sc, rightAligned, false, flashColor())

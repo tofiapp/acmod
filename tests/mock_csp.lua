@@ -16,6 +16,24 @@ vec2mt.__index = vec2mt
 function vec2mt:set(x, y) self.x, self.y = x, y; return self end
 vec2 = setmetatable({}, { __call = function (_, x, y) return setmetatable({ x = x or 0, y = y or 0 }, vec2mt) end })
 
+-- vec3
+local vec3mt = {}
+vec3mt.__index = vec3mt
+function vec3mt:set(x, y, z) self.x, self.y, self.z = x, y, z; return self end
+vec3 = setmetatable({}, { __call = function (_, x, y, z) return setmetatable({ x = x or 0, y = y or 0, z = z or 0 }, vec3mt) end })
+
+-- car.transform: local x along car.side, y along car.up, z along car.look, from car.position
+function M.transformOf(car)
+  return { transformPointTo = function (_, dst, v)
+    local p, s, u, l = car.position, car.side or { x = 1, y = 0, z = 0 }, car.up or { x = 0, y = 1, z = 0 },
+      car.look or { x = 0, y = 0, z = 1 }
+    dst.x = p.x + s.x * v.x + u.x * v.y + l.x * v.z
+    dst.y = p.y + s.y * v.x + u.y * v.y + l.y * v.z
+    dst.z = p.z + s.z * v.x + u.z * v.y + l.z * v.z
+    return dst
+  end }
+end
+
 -- rgbm
 local rgbmt = {}
 rgbmt.__index = rgbmt
@@ -82,6 +100,8 @@ end
 -- own car at the origin facing +z; side points left (+x)
 M.car.position, M.car.look, M.car.up = { x = 0, y = 0, z = 0 }, { x = 0, y = 0, z = 1 }, { x = 0, y = 1, z = 0 }
 M.car.side, M.car.velocity = { x = 1, y = 0, z = 0 }, { x = 0, y = 0, z = 50 }
+M.car.transform = M.transformOf(M.car)
+M.car.driverEyesPosition = { x = 0, y = 0.6, z = 0 }   -- like the old fixed camera height
 M.sim = { isReplayActive = false, isPaused = false, carsCount = 12, currentSessionIndex = 0, damageDisplayerShown = true, raceFlagType = 0 }
 M.cars = {}
 M.overlayBoard = { displayMode = 2, verticalLayout = false }                   -- other cars by index (1..); missing ones are nil like unused slots
@@ -90,6 +110,7 @@ M.session = { laps = 15, isTimedRace = false, type = 3 }
 ac = {
   FolderID = { ScriptConfig = 1, ExtCfgUser = 18 },
   INIConfig = {
+    carData = function (i, name) return M.carIni and M.carIni[name] and { get = function (_, section, key, default) local v = M.carIni[name][section .. '/' .. key]; if v == nil then return default end; return v end } or nil end,
     load = function (path)
       M.iniFiles = M.iniFiles or {}
       local file = M.iniFiles[path] or {}

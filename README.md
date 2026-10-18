@@ -21,7 +21,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.18.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.19.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -74,7 +74,7 @@ Nastavení je společné pro všechna okna a má osm záložek.
 - Tloušťka čar, mezera mezi čarami, velikost čísla a průhlednost. Hodnoty v pixelech platí pro okno široké 600 px a se šířkou okna se škálují.
 - Čára delty (výchozí) je rozdělená uprostřed a pohybuje se plynule jako původní ukazatel AC. Doprava roste zelená, když teď jedete rychleji než v referenčním kole, doleva červená, když pomaleji. Porovnává se posledních zhruba 3 sekund jízdy, ne celkový čas. Plná délka na jednu stranu odpovídá rozdílu 0,1 s (nastavitelné). Číslo pod čarou ukazuje celkovou deltu. Jde přepnout na celou čáru barvou podle celkové delty.
 - Na omezovači blikají modře čára delty i mini sektory, stejně jako okno s převodem (jde vypnout).
-- V boxové uličce bliká čára delty žlutě ze strany na stranu a mini sektory s ní: střídavě jednotlivé, nebo po polovinách pod svítící polovinou čáry (nastavitelné, jde vypnout). V okně časů místo aktuálního času svítí BOX.
+- V boxové uličce svítí na čáře delty a mini sektorech světla boxů. Styl: skener (výchozí, jedno měkké světlo plynule běhá ze strany na stranu), vlny ze středu ke krajům, pomalé dýchání, nebo poloviny na střídačku (původní). Barva: modrá (výchozí), oranžová, bílá nebo žlutá. Jde vypnout. V okně časů místo aktuálního času svítí BOX ve stejné barvě.
 - Intenzita barvy podle velikosti delty: když je zapnutá, plnou barvu má delta od ±0,5 s (nastavitelné).
 - Zdroj delty:
   - **Vlastní měření, jinak delta z AC** (výchozí): dokud aplikace nemá vlastní referenci (out lap, první kolo, kolo po resetu), ukazuje deltu, kterou počítá samotné AC (ne v režimu Předchozí kolo).
@@ -127,7 +127,8 @@ Nastavení je společné pro všechna okna a má osm záložek.
 - Dvě nejbližší auta za vámi mají kolem sebe rohový rámeček jako radar v GT3, ve výrazných barvách s tmavým obrysem: zelený (nedotahuje), oranžový (dotahuje), červený (blízko, méně než 8 m nebo u vás do 1,5 s; navíc šipka nad ním). Velikost rámečku odpovídá vzdálenosti, značky se pohybují plynule. U nejbližšího auta je odstup v sekundách.
 - Počítají se jen auta, která jsou za vámi i podle polohy na trati, takže auto na vedlejší rovince se neoznačí.
 - Auto za vámi mimo zobrazený výřez: šipka u toho okraje. Auto vedle vás: červený pruh na té straně, jeho jasná část ukazuje, jestli je auto vepředu, na úrovni nebo vzadu.
-- Šířka záběru (výchozí 50°) se nastavuje tak, aby značky seděly přesně na autech; hlídaná vzdálenost výchozí 60 m.
+- Rámeček obepíná skutečný obrys auta: promítnou se rohy karoserie (rozměry auta z CSP) podle toho, jak je auto natočené, takže sedí na střed i na auto v zatáčce nebo ve smyku. Díváme se z místa kamery zrcátka (`MIRROR_POSITION` v `car.ini`, jinak z očí řidiče), ne ze středu auta, proto rámečky sedí i u blízkých aut.
+- Šířka záběru (výchozí 50°) se nastavuje tak, aby značky seděly přesně na autech; když jsou všechny značky trochu vedle, srovná je posun do strany a nahoru/dolů. Hlídaná vzdálenost výchozí 60 m.
 - Nastavitelné: kolik nejbližších aut se označí (1–6, výchozí 2), značka (rohový rámeček, celý rámeček, šipka nad autem), barvy (zelená/oranžová/červená, bílá/žlutá/červená, modrá/žlutá/červená), tloušťka čar, výplň a odstup u nejbližšího auta. Když by se značky aut překrývaly (auto schované za jiným), ukáže se jen značka bližšího auta a místo vzdálenějšího se označí další volné auto (jde vypnout).
 - Okna jiných aplikací, která vypadají jako zpětné zrcátko nebo vlajky, aplikace skryje (pokud je AC vede jako okna aplikací) a jednou to oznámí notifikací. Vestavěné virtuální zrcátko a vlajky AC, které okny nejsou, CSP aplikacím vypnout nedovolí. Když AC zpětný pohled zrovna nevykresluje (třeba mimo kokpit), okno to napíše.
 

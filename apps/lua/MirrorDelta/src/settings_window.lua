@@ -8,6 +8,8 @@ local damage = require('src/damage_window')
 local layout = require('src/layout')
 local originals = require('src/originals')
 local setupLine = require('src/setup_line')
+local pitLights = require('src/pit_lights')
+local mirror = require('src/mirror_window')
 local D = require('src/draw')
 local S = config.S
 
@@ -92,9 +94,13 @@ local function tabDelta()
   if S.deltaLineMode == 1 then slider('splitFull', 'Plná délka čáry při rozdílu', 0.03, 0.5, '%.2f s za 3 s') end
   checkbox('deltaPanel', 'Matné průhledné pozadí')
   checkbox('deltaLimiterFlash', 'Na omezovači blikat modře: čára delty i mini sektory')
-  checkbox('pitBlink', 'V boxech blikat žlutě: čára delty ze strany na stranu a s ní mini sektory')
+  checkbox('pitBlink', 'V boxech světla na čáře delty a mini sektorech')
   if S.pitBlink then
-    combo('pitSectorPattern', 'Mini sektory v boxech', { 'Střídavě jednotlivé', 'Po polovinách s čárou' })
+    combo('pitStyle', 'Světla v boxech', pitLights.STYLES)
+    combo('pitColor', 'Barva světel v boxech (i BOX v časech)', pitLights.NAMES)
+    if S.pitStyle == 4 then
+      combo('pitSectorPattern', 'Mini sektory v boxech', { 'Střídavě jednotlivé', 'Po polovinách s čárou' })
+    end
   end
   checkbox('intensityByDelta', 'Intenzita barvy podle velikosti delty')
   if S.intensityByDelta then
@@ -242,6 +248,10 @@ local function tabMirror()
   checkbox('mirrorSideArrows', 'Červený pruh na straně, když je auto vedle mě')
   slider('mirrorFov', 'Šířka záběru', 20, 90, '%.0f°', 1)
   ui.textWrapped('Šířku záběru nastavte tak, aby rámečky seděly přesně na autech v zrcátku.')
+  slider('mirrorOffsetX', 'Posun značek do strany', -60, 60, '%.0f px', 1)
+  slider('mirrorOffsetY', 'Posun značek nahoru/dolů', -40, 40, '%.0f px', 1)
+  ui.textWrapped('Pozice kamery zrcátka: ' .. (mirror.camSource or 'zatím nezjištěna')
+    .. '. Rámeček obepíná skutečný obrys auta (jeho rozměry a natočení).')
   slider('mirrorRange', 'Hlídat do vzdálenosti', 20, 150, '%.0f m', 5)
   slider('mirrorZoom', 'Přiblížení', 1, 2.5, '%.2f×', 0.05)
   slider('mirrorBrightness', 'Jas obrazu', 0.3, 3, '%.2f×', 0.05)

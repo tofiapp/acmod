@@ -912,8 +912,13 @@ do
   end
   local function carAt(x, z, vz)
     return { index = 1, bestLapTimeMs = 0, isInPitlane = false, isInPit = false, isConnected = true, racePosition = 1,
-      lapCount = 0, isLapValid = true, position = { x = x, y = 0, z = z }, velocity = { x = 0, y = 0, z = vz } }
+      lapCount = 0, isLapValid = true, position = { x = x, y = 0, z = z }, velocity = { x = 0, y = 0, z = vz },
+      look = { x = 0, y = 0, z = 1 }, side = { x = 1, y = 0, z = 0 }, up = { x = 0, y = 1, z = 0 },
+      aabbCenter = { x = 0, y = 0.2, z = 0 }, aabbSize = { x = 1.9, y = 1.2, z = 4.5 } }
   end
+  local function withTransform(c) c.transform = env.transformOf(c); return c end
+  local plainCarAt = carAt
+  carAt = function (x, z, vz) return withTransform(plainCarAt(x, z, vz)) end
   env.cars[1] = carAt(1, -8, 58)       -- close behind on the left, closing in
   env.cars[2] = carAt(-2, -50, 40)     -- far behind on the right, slower
   env.windowW, env.windowH = 400, 150
@@ -1003,6 +1008,44 @@ do
   config.set('mirrorPalette', 1)
   env.cars[3] = nil
   env.sim.carsCount = savedCount
+  -- centring: the box is the projection of the car's real outline seen from the mirror camera
+  local function only(c)
+    env.cars[1], env.cars[2] = c, nil
+    for _ = 1, 3 do script.windowMirror(DT) end
+    return mirror.drawnX[1], mirror.drawnW[1], mirror.drawnY[1]
+  end
+  local centre = 200
+  local x0, w0 = only(carAt(0, -20, 50))
+  check(mirror.shown == 1 and math.abs(x0 - centre) < 0.5 and mirror.camSource == 'oči řidiče',
+    string.format('car right behind: marker centred (%.1f), camera from the driver eyes (%s)', x0 or -1, tostring(mirror.camSource)))
+  local turned = carAt(0, -20, 50)
+  turned.look, turned.side = { x = 1, y = 0, z = 0 }, { x = 0, y = 0, z = -1 }   -- broadside, e.g. spinning
+  local x1, w1 = only(turned)
+  check(math.abs(x1 - centre) < 0.5 and w1 > w0 * 1.8, string.format('turned car: wider box (%.1f vs %.1f), still centred', w1, w0))
+  local offCentre = carAt(0, -20, 50)
+  offCentre.aabbCenter = { x = 0, y = 0.2, z = -1 }  -- body longer at the back: the box follows the body, not the origin
+  local x2 = only(offCentre)
+  check(math.abs(x2 - centre) < 0.5, 'bounding box centre used')
+  -- the mirror camera from car.ini (MIRROR_POSITION), read again after a session change
+  env.carIni = { ['car.ini'] = { ['GRAPHICS/MIRROR_POSITION'] = '0.5, 0.9, 0.2' } }
+  env.sim.currentSessionIndex = env.sim.currentSessionIndex + 1
+  local x3 = only(carAt(0, -20, 50))
+  check(mirror.camSource == 'MIRROR_POSITION' and x3 > centre + 3,
+    string.format('camera to the left (car.ini): a car right behind us is right of the centre (%.1f)', x3))
+  env.carIni = nil
+  env.sim.currentSessionIndex = env.sim.currentSessionIndex - 1
+  config.set('mirrorOffsetX', 20)
+  config.set('mirrorOffsetY', -10)
+  local x4, _, y4 = only(carAt(0, -20, 50))
+  config.set('mirrorOffsetX', 0)
+  config.set('mirrorOffsetY', 0)
+  local x5, _, y5 = only(carAt(0, -20, 50))
+  check(math.abs(x4 - x5 - 20) < 0.5 and math.abs(y4 - y5 + 10) < 0.5, 'manual offset moves the markers')
+  local noBox = plainCarAt(0, -20, 50)              -- older CSP without the fields: the old estimate
+  noBox.aabbSize = nil
+  local x6 = only(noBox)
+  check(mirror.shown == 1 and math.abs(x6 - centre) < 0.5, 'car without a bounding box still marked')
+  env.cars[1], env.cars[2] = saved1, saved2
   local ok3, err3 = pcall(function ()
     env.windowW, env.windowH = 60, 30
     script.windowMirror(DT)
@@ -1086,7 +1129,10 @@ do
 end
 
 -- 31. Pit lane: BOX instead of the lap time, the delta line and mini sectors blink yellow side to side
+--     (the halves style in yellow, the first version), then the newer styles
 do
+  config.set('pitStyle', 4)
+  config.set('pitColor', 4)
   local yellow = config.S.colYellow
   local function countYellow()
     local left, right = 0, 0
@@ -1120,6 +1166,43 @@ do
   box = false
   for _, t in ipairs(env.lastTexts) do if t == 'BOX' then box = true end end
   check(not box, 'on track: lap time again')
+  -- scanner (default): one light runs along the line; its centre moves between two moments
+  config.set('pitStyle', 1)
+  config.set('pitColor', 1)
+  local function litCentre()
+    local sum, wsum = 0, 0
+    local saved = ui.drawRectFilled
+    ui.drawRectFilled = function (p1, p2, color)
+      if color.b > 0.9 and color.r < 0.3 and color.mult > 0.05 then
+        sum = sum + (p1.x + p2.x) / 2 * color.mult
+        wsum = wsum + color.mult
+      end
+    end
+    env.windowW, env.windowH = 600, 80
+    script.windowDelta(DT)
+    ui.drawRectFilled = saved
+    return wsum > 0 and sum / wsum or nil
+  end
+  car.isInPitlane = true
+  env.clock = 0.2
+  local c1 = litCentre()
+  env.clock = 0.85
+  local c2 = litCentre()
+  check(c1 and c2 and c1 < 200 and c2 > 400, string.format('pit scanner: blue light runs across (%s -> %s)', tostring(c1), tostring(c2)))
+  local allOk = true
+  for style = 1, 4 do
+    config.set('pitStyle', style)
+    for t = 0, 2, 0.25 do
+      env.clock = t
+      local okD, errD = pcall(script.windowDelta, DT)
+      local okT, errT = pcall(script.windowTiming, DT)
+      if not (okD and okT) then print('pit style ' .. style .. ': ' .. tostring(errD or errT)) end
+      allOk = allOk and okD and okT
+    end
+  end
+  check(allOk and tracker.diag.error == nil, 'all pit light styles draw')
+  config.set('pitStyle', 1)
+  car.isInPitlane = false
 end
 
 print(string.format('%d passed, %d failed', passed, failed))

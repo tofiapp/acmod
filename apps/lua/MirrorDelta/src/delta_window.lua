@@ -21,14 +21,11 @@ local function limiterBlink()
   local limiter = car.rpmLimiter > 0 and car.rpmLimiter or 8000
   return car.rpm >= limiter * 0.98 and math.floor(os.preciseClock() * 8) % 2 == 0
 end
--- In the pit lane: 1 or 2, alternating (about 3 times a second), else 0. The delta line lights its left and right half
--- in turn, mini sectors blink with it (every other one, or the half under the lit half of the line).
-local PIT_YELLOW = rgbm(1, 0.8, 0.1, 1)
-local function pitPhase()
-  if not S.pitBlink then return 0 end
-  local car = ac.getCar(0)
-  if not car or not car.isInPitlane then return 0 end
-  return math.floor(os.preciseClock() / 0.35) % 2 + 1
+-- In the pit lane the delta line and mini sectors show the pit lights (src/pit_lights.lua, style and colour settings).
+local pitLights = require('src/pit_lights')
+local PIT_SLICES = 48          -- the delta line is drawn in this many slices while a light runs along it
+local function pitClock()
+  return pitLights.active() and os.preciseClock() or nil
 end
 local deltaStrings = {}        -- cache: hundredths -> "+0.23"
 
@@ -106,15 +103,13 @@ local function drawSectors(x, y, w, h, sc, blink, pit)
         px = px + gap
       end
     end
-    local color
-    if pit > 0 then
-      local on
-      if S.pitSectorPattern == 2 then on = (i <= count / 2) == (pit == 1) else on = i % 2 == pit % 2 end
-      color = on and PIT_YELLOW or S.colIdle
+    if pit then                       -- pit lights over the idle colour
+      D.rect(px, y, px + segW, y + h, D.color(S.colIdle, S.opacity))
+      local k = pitLights.sectorLevel(i, count, pit)
+      if k > 0.01 then D.rect(px, y, px + segW, y + h, D.color(pitLights.color(), S.opacity * k)) end
     else
-      color = blink and LIMITER_BLUE or sectorColor(i)
+      D.rect(px, y, px + segW, y + h, D.color(blink and LIMITER_BLUE or sectorColor(i), S.opacity))
     end
-    D.rect(px, y, px + segW, y + h, D.color(color, S.opacity))
     px = px + segW
   end
 end
@@ -136,11 +131,27 @@ end
 -- Split line (default): the middle is "same as the reference right now"; green grows to the right while you
 -- gain over the last 3 s, red grows to the left while you lose.
 local SPLIT_TICK = rgbm(0.95, 0.96, 0.97, 1)
-local function drawPitLine(x, y, w, h, pit)
+local function drawPitLine(x, y, w, h, t)
   D.rect(x, y, x + w, y + h, D.color(S.colIdle, S.opacity))
-  local cx = x + w / 2
-  if pit == 1 then D.rect(x, y, cx, y + h, D.color(PIT_YELLOW, S.opacity))
-  else D.rect(cx, y, x + w, y + h, D.color(PIT_YELLOW, S.opacity)) end
+  local color = pitLights.color()
+  if S.pitStyle == 3 or S.pitStyle == 4 then          -- the whole line, or one half at a time
+    if S.pitStyle == 3 then
+      D.rect(x, y, x + w, y + h, D.color(color, S.opacity * pitLights.level(0.5, t)))
+    elseif pitLights.level(0.25, t) > 0.5 then
+      D.rect(x, y, x + w / 2, y + h, D.color(color, S.opacity))
+    else
+      D.rect(x + w / 2, y, x + w, y + h, D.color(color, S.opacity))
+    end
+    return
+  end
+  local sw = w / PIT_SLICES
+  for j = 1, PIT_SLICES do
+    local k = pitLights.level((j - 0.5) / PIT_SLICES, t)
+    if k > 0.01 then
+      local x1 = x + (j - 1) * sw
+      D.rect(x1, y, x1 + sw + 0.5, y + h, D.color(color, S.opacity * k))
+    end
+  end
 end
 
 local function drawSplit(x, y, w, h, blink)
@@ -163,7 +174,7 @@ local function drawSplit(x, y, w, h, blink)
 end
 
 local function drawLine(x, y, w, h, blink, pit)
-  if pit > 0 then return drawPitLine(x, y, w, h, pit) end
+  if pit then return drawPitLine(x, y, w, h, pit) end
   if S.deltaLineMode ~= 2 then return drawSplit(x, y, w, h, blink) end
   local alpha = S.opacity
   if S.intensityByDelta and tracker.hasDelta then
@@ -192,7 +203,7 @@ local function drawInner()
   if n == 0 or w <= 0 or h <= 0 then return end
   local sc = math.min(w / BASE_W, h / contentH)
   local blink = limiterBlink()
-  local pit = pitPhase()
+  local pit = pitClock()
   if S.deltaPanel then
     local top = (h - contentH * sc) / 2
     D.panel(0, math.max(0, top - 6 * sc), w, math.min(h, top + contentH * sc + 6 * sc), 6 * sc)

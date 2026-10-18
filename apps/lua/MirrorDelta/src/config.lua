@@ -31,8 +31,10 @@ local defaults = {
   showLast = true,
   setupLine = true,           -- car settings line at the top (TC, ABS, brake bias...) and AC's system messages
   setupTime = 2.5,            -- s the line stays
-  pitBlink = true,            -- in the pit lane the delta line and mini sectors blink yellow
-  pitSectorPattern = 1,       -- 1 every other mini sector, 2 the half under the lit half of the line
+  pitBlink = true,            -- in the pit lane the delta line and mini sectors show the pit lights
+  pitStyle = 1,               -- pit lights: 1 scanner, 2 waves from the centre, 3 breathing, 4 halves in turn
+  pitColor = 1,               -- 1 blue, 2 orange, 3 white, 4 yellow
+  pitSectorPattern = 1,       -- halves style: 1 every other mini sector, 2 the half under the lit half of the line
   pitBox = true,              -- in the pit lane the timing window shows BOX instead of the lap time
   standingsCount = 7,         -- standings window: cars shown (the player in the middle)
   standingsGapMode = 2,       -- race gaps: 1 live, 2 after every sector (timing loop), 3 at the line only
@@ -47,6 +49,8 @@ local defaults = {
   mirrorFill = true,          -- light fill inside the marker
   mirrorGapLabel = true,      -- time gap of the nearest car
   mirrorHideOverlap = true,   -- a marker that would overlap a nearer car's marker is not shown
+  mirrorOffsetX = 0,          -- px (at 400x150): manual shift of the markers, + = right
+  mirrorOffsetY = 0,          -- px: + = down
   mirrorMarkers = true,       -- mirror window: triangles above the cars behind
   mirrorSideArrows = true,    -- mirror window: red arrow at the side when a car is alongside
   mirrorFov = 50,             -- degrees the rear view covers horizontally (markers line up with the cars)
@@ -133,7 +137,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.18.0' }
+local M = { S = S, defaults = defaults, VERSION = '1.19.0' }
 
 function M.set(key, value)
   S[key] = value

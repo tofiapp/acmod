@@ -70,7 +70,7 @@ local lastClock = nil
 local gapStrings = {}
 
 -- For tests: what was drawn last frame (screen x of each marker and its threat 1 white, 2 yellow, 3 red).
-local M = { shown = 0, drawnX = {}, drawnThreat = {}, edgeLeft = false, edgeRight = false, sideLeft = nil, sideRight = nil }
+local M = { shown = 0, drawnW = {}, drawnY = {}, drawnX = {}, drawnThreat = {}, edgeLeft = false, edgeRight = false, sideLeft = nil, sideRight = nil }
 
 local function col(c, a)
   tint:set(c)
@@ -122,6 +122,105 @@ local function trackGap(mySpline, other, length)
   return d * length
 end
 
+-- ---------------------------------------------------------------- projection
+-- AC's rear view camera sits at the car's mirror position (car.ini [GRAPHICS] MIRROR_POSITION, local), not at the
+-- car's origin; without it the driver's eyes (car.driverEyesPosition) are close. Another car's box is the projection
+-- of the 8 corners of its bounding box (car.aabbCenter / car.aabbSize, local, full size, as the official Radar uses
+-- it) through its car.transform, so the marker follows the car's real outline, also when it is turned in a corner.
+-- Every field is probed under pcall; without them the old estimate (origin + CAM_UP, fixed car size) is used.
+local camLocal, camWorld, cornerL, cornerW = vec3(), vec3(), vec3(), vec3()
+local camState, camSession = 0, -1             -- 0 not read yet, 1 camLocal is valid, -1 no camera position
+local camSource = 'odhad'                      -- for Diagnostika / tests: where the camera position comes from
+local boxState = 0                             -- 0 not probed, 1 bounding boxes work, -1 they do not
+local SX = { -0.5, 0.5, -0.5, 0.5, -0.5, 0.5, -0.5, 0.5 }
+local SY = { -0.5, -0.5, 0.5, 0.5, -0.5, -0.5, 0.5, 0.5 }
+local SZ = { -0.5, -0.5, -0.5, -0.5, 0.5, 0.5, 0.5, 0.5 }
+local bx1, bx2, by1, by2 = 0, 0, 0, 0           -- last projected box
+
+local function vectorFromIni(v)
+  if type(v) == 'string' then
+    local x, y, z = v:match('^%s*([%-%d%.eE]+)%s*,%s*([%-%d%.eE]+)%s*,%s*([%-%d%.eE]+)')
+    return tonumber(x), tonumber(y), tonumber(z)
+  elseif type(v) == 'table' then
+    return tonumber(v[1]), tonumber(v[2]), tonumber(v[3])
+  end
+end
+
+local function readMirrorPosition()
+  local ini = ac.INIConfig.carData(0, 'car.ini')
+  if not ini then return false end
+  local x, y, z = vectorFromIni(ini:get('GRAPHICS', 'MIRROR_POSITION', nil))
+  if not (x and y and z) then return false end
+  camLocal:set(x, y, z)
+  return true
+end
+
+local function readEyes(me)
+  local e = me.driverEyesPosition
+  if not e or (e.x == 0 and e.y == 0 and e.z == 0) then return false end
+  camLocal:set(e.x, e.y, e.z)
+  return true
+end
+
+local function loadCamera(me)
+  camState, camSource = -1, 'odhad'
+  local ok, found = pcall(readMirrorPosition)
+  if ok and found then camState, camSource = 1, 'MIRROR_POSITION' else
+    ok, found = pcall(readEyes, me)
+    if ok and found then camState, camSource = 1, 'oči řidiče' end
+  end
+  if camState == 1 and not pcall(me.transform.transformPointTo, me.transform, camWorld, camLocal) then
+    camState, camSource = -1, 'odhad'
+  end
+end
+
+-- World position of the rear view camera into camWorld.
+local function cameraPosition(me, sim)
+  if camState == 0 or sim.currentSessionIndex ~= camSession then
+    camSession = sim.currentSessionIndex
+    loadCamera(me)
+  end
+  if camState == 1 then
+    me.transform:transformPointTo(camWorld, camLocal)
+  else
+    local p, u = me.position, me.up
+    camWorld:set(p.x + u.x * CAM_UP, p.y + u.y * CAM_UP, p.z + u.z * CAM_UP)
+  end
+end
+
+local function probeBox(c)
+  local cc, hs = c.aabbCenter, c.aabbSize
+  if not cc or not hs or hs.x <= 0 or hs.z <= 0 then return false end
+  c.transform:transformPointTo(cornerW, cornerL:set(cc.x, cc.y, cc.z))
+  return true
+end
+
+-- Projects car c's bounding box into bx1..by2; false when it cannot (no fields, a corner beside or ahead of the camera).
+local function projectBox(c, lk, sd, up, ls, cx, cy, fx, fy)
+  if boxState == 0 then
+    local ok, works = pcall(probeBox, c)
+    boxState = (ok and works) and 1 or -1
+  end
+  if boxState ~= 1 then return false end
+  local cc, hs, tr = c.aabbCenter, c.aabbSize, c.transform
+  if not cc or not hs or not tr or hs.x <= 0 then return false end
+  local x1, x2, y1, y2 = 1e9, -1e9, 1e9, -1e9
+  for k = 1, 8 do
+    tr:transformPointTo(cornerW, cornerL:set(cc.x + SX[k] * hs.x, cc.y + SY[k] * hs.y, cc.z + SZ[k] * hs.z))
+    local rx, ry, rz = cornerW.x - camWorld.x, cornerW.y - camWorld.y, cornerW.z - camWorld.z
+    local back = -(rx * lk.x + ry * lk.y + rz * lk.z)
+    if back < 0.5 then return false end
+    local x = cx - (rx * sd.x + ry * sd.y + rz * sd.z) * ls / back * fx
+    local y = cy - (rx * up.x + ry * up.y + rz * up.z) / back * fy
+    if x < x1 then x1 = x end
+    if x > x2 then x2 = x end
+    if y < y1 then y1 = y end
+    if y > y2 then y2 = y end
+  end
+  bx1, bx2, by1, by2 = x1, x2, y1, y2
+  return true
+end
+
 local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
   local sim = ac.getSim()
   local now = os.preciseClock()
@@ -137,6 +236,13 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
   local tanH = math.tan(math.rad(math.max(10, S.mirrorFov) / 2))
   local tanV = tanH / 4                          -- the rear view is 4:1 with square pixels
   local cx, cy = dx + dw / 2, oy + mh / 2        -- centre of the whole rear view
+  cameraPosition(me, sim)
+  -- camera relative to our origin (for the fallback estimate): forward, to the left, up
+  local crx, cry, crz = camWorld.x - mp.x, camWorld.y - mp.y, camWorld.z - mp.z
+  local camFwd = crx * lk.x + cry * lk.y + crz * lk.z
+  local camLat = (crx * sd.x + cry * sd.y + crz * sd.z) * ls
+  local camHgt = crx * up.x + cry * up.y + crz * up.z
+  local offX, offY = S.mirrorOffsetX * sc, S.mirrorOffsetY * sc   -- manual calibration (px at 400x150)
   local fx, fy = dw / 2 / tanH, dw / 8 / tanV    -- pixels per unit of tangent
   local t = math.max(1, S.mirrorLineWidth * sc)
   COLORS = PALETTES[S.mirrorPalette] or PALETTES[1]
@@ -171,10 +277,18 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
           elseif closing > 1 then level = 2 end
           threat[i] = level
           -- perspective projection (mirror: a car behind on our left is on the left of the picture)
-          local x = cx - (lat / back) * fx
-          local hw = CAR_HALF_W / back * fx
-          local yTop = cy - ((hgt + CAR_TOP - CAM_UP) / back) * fy
-          local yBot = cy - ((hgt + CAR_BOTTOM - CAM_UP) / back) * fy
+          local x, hw, yTop, yBot
+          if projectBox(c, lk, sd, up, ls, cx, cy, fx, fy) then
+            x, hw, yTop, yBot = (bx1 + bx2) / 2, (bx2 - bx1) / 2, by1, by2
+          else
+            local cb = back + camFwd                 -- distance from the camera, not from our origin
+            local cl = lat - camLat
+            x = cx - (cl / cb) * fx
+            hw = CAR_HALF_W / cb * fx
+            yTop = cy - ((hgt + CAR_TOP - camHgt) / cb) * fy
+            yBot = cy - ((hgt + CAR_BOTTOM - camHgt) / cb) * fy
+          end
+          x, yTop, yBot = x + offX, yTop + offY, yBot + offY
           if x + hw < ox or x - hw > ox + mw then
             if x < ox then edgeL = math.max(edgeL, level) else edgeR = math.max(edgeR, level) end
           else
@@ -261,11 +375,11 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
           triangle(sx[i] - s, ty - s * 1.1, sx[i] + s, ty - s * 1.1, sx[i], ty, col(COLORS[3], a * vis[i]))
         end
         shown = shown + 1
-        M.drawnX[shown], M.drawnThreat[shown] = sx[i], threat[i]
+        M.drawnX[shown], M.drawnThreat[shown], M.drawnW[shown], M.drawnY[shown] = sx[i], threat[i], sw[i], sy[i]
       end
     end
   end
-  for j = shown + 1, #M.drawnX do M.drawnX[j], M.drawnThreat[j] = nil, nil end
+  for j = shown + 1, #M.drawnX do M.drawnX[j], M.drawnThreat[j], M.drawnW[j], M.drawnY[j] = nil, nil, nil, nil end
 
   -- time gap of the nearest car under its brackets
   if S.mirrorGapLabel and nearest > 0 and vis[nearest] > 0.5 then
@@ -310,6 +424,7 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
   end
   M.sideLeft, M.sideRight = hasL and sideL or nil, hasR and sideR or nil
   M.shown = shown
+  M.camSource = camSource
 end
 
 -- The mirror texture is HDR (before AC's post-processing): drawn as it is, it is dark and greenish. Four ways to turn it

@@ -14,8 +14,10 @@ each with its own taskbar icon:
   engine brake, fuel map, turbo, MGU-K/H, limiters, auto shift/clutch; fields as in the official Unbound app, each
   probed once under pcall) plus AC's non-penalty system messages (`src/setup_line.lua`).
 - **mirror** (`MirrorDelta Mirror`): AC's rear view via `ui.drawVirtualMirror` (ac_apps.lua, used by CSP's OBS view);
-  GT3-style radar markers on the `S.mirrorTargets` nearest cars behind (style, palette, line width, fill, gap label settings; nearest first, a marker overlapping a nearer one is skipped with `S.mirrorHideOverlap`) from a perspective projection (look/side/up, `S.mirrorFov`,
-  camera 0.6 m up, 4:1 square pixels), smoothed, threat colours, time gap label on the nearest, edge arrows for cars
+  GT3-style radar markers on the `S.mirrorTargets` nearest cars behind (style, palette, line width, fill, gap label settings; nearest first, a marker overlapping a nearer one is skipped with `S.mirrorHideOverlap`) from a perspective projection (look/side/up, `S.mirrorFov`, 4:1 square pixels; camera at car.ini `[GRAPHICS] MIRROR_POSITION`
+  via `ac.INIConfig.carData`, else `car.driverEyesPosition`, through `car.transform:transformPointTo`, else origin + 0.6 m; the box is
+  the 8 projected corners of `aabbCenter`/`aabbSize` through the other car's transform, each probed under pcall; manual
+  `S.mirrorOffsetX/Y`), smoothed, threat colours, time gap label on the nearest, edge arrows for cars
   outside the crop, side bars for cars alongside; cars must also be behind by spline gap (`sim.trackLengthM`). Left/right from `wheels[0/1].position` vs `car.side`. The mirror texture is HDR (pre post-processing). `S.mirrorMode`
   (click in the window cycles, hover shows version + mode): 1 gamma = `ui.drawVirtualMirror` into a float `ui.ExtraCanvas`, then
   `ui.renderShader` with `pow(saturate(c * exposure), 0.4545)` (SDK example in ac_wfx_impl.lua); 2 YEBIS canvas with exposure 30
@@ -73,8 +75,9 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
   delta in that mode. The out lap's partial grid becomes the previous lap with an anchor (`prevLapAnchor`, first
   recorded u); `ownDelta` compares an out-lap reference directly (its grid holds AC's raw out-lap timer, pit lane included, so the delta at the line equals the lap time difference), no delta before the anchor, sectors before it neutral. Keep `updateInner` under LuaJIT's
   60-upvalue limit (move new logic into helper functions).
-- Pit lane (`car.isInPitlane`): delta line lights its halves in turn in yellow (`pitPhase`, ~3 Hz), mini sectors blink
-  with it (`S.pitSectorPattern`: every other one or the half under the lit half); the timing window shows BOX (`S.pitBox`).
+- Pit lane (`car.isInPitlane`): `src/pit_lights.lua` gives a brightness 0..1 per place on the delta line and per mini
+  sector (`S.pitStyle`: 1 scanner, 2 waves from the centre, 3 breathing, 4 halves in turn with `S.pitSectorPattern`),
+  colour `S.pitColor` (blue default, orange, white, yellow); the timing window shows BOX in that colour (`S.pitBox`).
 - Mini sectors are boundaries at `j / N` in `u`; times are interpolated; purple needs a clean lap and an
   existing best; best sector lists are kept per sector count.
 - Deleted laps (cut on track, or AC's callback says invalid) flash red (`flashKind 5`), never become the flash best,
