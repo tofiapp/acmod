@@ -1372,6 +1372,33 @@ do
   local draw3D = env.renderCallbacks and env.renderCallbacks['main.root.transparent']
   check(carLeds.count == 4 and carLeds.source == 'digital_instruments.ini' and draw3D ~= nil,
     'shift LEDs from digital_instruments.ini, drawn in the 3D pass: ' .. carLeds.count .. ' ' .. carLeds.source)
+  -- main way: each LED mesh drawn again in its own shape, lit ones in colour, the others dark (covers AC's RPM lights)
+  local function meshFrame()
+    env.meshDraws = {}
+    draw3D()
+    local best, name, dark = -1, nil, 0
+    for _, d in ipairs(env.meshDraws) do
+      if d.r > best then best, name = d.r, d.name end
+      if d.r < 0.05 then dark = dark + 1 end
+    end
+    return name, #env.meshDraws, dark
+  end
+  env.clock = 1.4 * 215
+  local m1, nm, dark1 = meshFrame()
+  env.clock = 1.4 * 215.5
+  local m2 = meshFrame()
+  check(nm == 4 and dark1 >= 1 and m1 ~= m2 and ((m1 == 'LED_D' and m2 == 'LED_A') or (m1 == 'LED_A' and m2 == 'LED_D')),
+    string.format('LED meshes redrawn in shape: the light runs from one end (%s) to the other (%s), the rest dark (%d)',
+      tostring(m1), tostring(m2), dark1))
+  local lit = env.meshDraws[1]
+  for _, d in ipairs(env.meshDraws) do if d.r > lit.r then lit = d end end
+  check(lit.r > lit.g * 1.5 and lit.g > lit.b * 3 and lit.r < 5, 'lit LED orange, moderate')
+  -- fallback when render.mesh cannot draw scene meshes: discs over the LEDs
+  env.meshFails = true
+  env.circles = {}
+  draw3D()
+  env.meshFails = nil
+  check(#env.circles > 0 and carLeds.meshError ~= nil, 'fallback to glowing discs')
   local function brightestX()
     env.circles = {}
     draw3D()

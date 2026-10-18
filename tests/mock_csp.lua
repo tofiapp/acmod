@@ -15,7 +15,18 @@ render = { AntialiasingMode = { None = 0, YEBIS = 104, SimplifiedYEBIS = 105 }, 
     M.circles[#M.circles + 1] = { x = pos.x, y = pos.y, z = pos.z, r = color.r, g = color.g, b = color.b, radius = radius }
   end,
   setDepthMode = function () end,
-  DepthMode = { Normal = 0 },
+  setBlendMode = function () end,
+  setCullMode = function () end,
+  DepthMode = { Normal = 0, LessEqual = 3 },
+  BlendMode = { Opaque = 0, OpaqueForced = 27 },
+  CullMode = { None = 0 },
+  mesh = function (params)
+    if M.meshFails then error('render.mesh not available') end
+    assert(params.transform == 'original' and params.shader and params.values.gColor, 'mesh draw parameters')
+    M.meshDraws = M.meshDraws or {}
+    local c = params.values.gColor
+    M.meshDraws[#M.meshDraws + 1] = { name = params.mesh[1], r = c.r, g = c.g, b = c.b }
+  end,
   TextureFormat = { R16G16B16A16 = { Float = 10 }, R8G8B8A8 = { UNorm = 28 } } }
 
 -- vec2

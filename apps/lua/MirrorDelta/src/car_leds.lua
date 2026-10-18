@@ -1,8 +1,7 @@
 -- Pit lane lights on the car's own shift LEDs: while our car is in the pit lane, a light runs across the cockpit RPM
 -- LEDs from side to side (or every other LED blinks in turn), in the pit colour.
--- The LEDs are not changed: AC keeps driving them by RPM (writing their ksEmissive as well made them flicker, the two
--- fought every frame). Instead glowing discs are drawn over them in the main 3D pass (render.on('main.root.transparent'),
--- render.circle) the way CSP's Traffic tool draws its virtual traffic lights.
+-- The LEDs' materials are not changed: AC keeps driving them by RPM (writing their ksEmissive as well made them flicker,
+-- the two fought every frame). Instead they are drawn again on top in the main 3D pass (render.on('main.root.transparent')).
 -- LEDs: digital_instruments.ini [LED_n] OBJECT_NAME (ac.INIConfig.carData), meshes found under
 -- ac.findNodes('carRoot:0') with :findMeshes(name); without that file the meshes CSP marks as LEDs ('{ actsAsLED:yes }',
 -- CSP's show_important_wheels filter). Position: the mesh's :boundingSphere() in its parent's space, taken to world space
@@ -10,6 +9,7 @@
 -- the pit entry; CSP's vr_rig_base getActualTransform does the same). Earlier tries: the cached world matrix was stale
 -- (the lights stayed behind), and going through car.worldToLocal / car.transform put them above the LEDs (the model
 -- is offset from the physics body). Following the model's own nodes also follows a turning steering wheel.
+-- Drawing: the LED meshes themselves in our colour (render.mesh), see drawMeshes; discs only as a fallback.
 -- Cars whose dash is a CSP script or a screen texture have no such meshes. Everything under pcall; no per-frame allocation.
 
 local config = require('src/config')
@@ -70,7 +70,9 @@ local function fromInstruments(root)
     local name = ini:get(section, 'OBJECT_NAME', '')
     if type(name) == 'table' then name = name[1] end
     if type(name) == 'string' and name ~= '' then
-      local ref = root:findMeshes(name)
+      -- the cockpit LOD's mesh of that name (as CSP's Radar filters '& lod:A'), else any mesh of that name
+      local ok, refA = pcall(root.findMeshes, root, '{ (' .. name .. ') & lod:A }')
+      local ref = (ok and refA and #refA > 0) and refA or root:findMeshes(name)
       if ref and #ref > 0 then addMesh(ref) end
     end
   end
@@ -112,12 +114,47 @@ local function level(k, n, t)
   return x * x * (3 - 2 * x)
 end
 
-local function draw()
-  if not M.active then return end
+-- Main way: every LED mesh is drawn again with its own shape (render.mesh with the scene reference and transform
+-- 'original', as CSP's Radar draws brake light and tyre meshes), opaque, at the same depth (LessEqual), in our colour:
+-- the running light on the lit ones, a dark unlit LED on the others. That covers AC's own RPM lights until the pit exit
+-- and fits each LED exactly. Colours are relative to gWhiteRefPoint (as CSP's own scene shaders do), so the exposure
+-- does not burn them white.
+local MESH = {
+  mesh = false,
+  transform = 'original',
+  textures = {},
+  values = { gColor = rgbm(0, 0, 0, 1) },
+  cacheKey = 7301,
+  shader = [[
+    float4 main(PS_IN pin) {
+      return float4(gColor.rgb * gWhiteRefPoint, 1);
+    }
+  ]],
+}
+local OFF_R, OFF_G, OFF_B = 0.025, 0.025, 0.03   -- an unlit LED
+local meshFailed = false
+
+local function drawMeshes(c, n, t)
+  render.setBlendMode(render.BlendMode.OpaqueForced)
+  render.setDepthMode(render.DepthMode.LessEqual)
+  render.setCullMode(render.CullMode.None)
+  local col = MESH.values.gColor
+  local br = S.carLedsBrightness
+  for k = 1, n do
+    local led = leds[k]
+    local b = level(k, n, t)
+    col.r = OFF_R + (c.r * br - OFF_R) * b
+    col.g = OFF_G + (c.g * br - OFF_G) * b
+    col.b = OFF_B + (c.b * br - OFF_B) * b
+    MESH.mesh = led.ref
+    render.mesh(MESH)
+  end
+end
+
+-- Fallback (no render.mesh with scene meshes in this CSP): glowing discs over the LEDs.
+local function drawDiscs(c, n, t)
   local cam = ac.getSim().cameraPosition
   local up = ac.getCar(0).up
-  local c = pitLights.colorAt(S.carLedsColor)
-  local n, t = #leds, os.preciseClock()
   render.setDepthMode(render.DepthMode.Normal)
   for k = 1, n do
     local led = leds[k]
@@ -133,11 +170,24 @@ local function draw()
       -- just in front of the LED towards the eye, so the LED's own geometry does not cover the disc
       local lift = led.radius * 1.1 / len
       worldPos:set(worldPos.x + toCam.x * lift, worldPos.y + toCam.y * lift, worldPos.z + toCam.z * lift)
-      local power = S.carLedsBrightness * b      -- a few times the white point: glows, but stays orange
+      local power = S.carLedsBrightness * b
       fill.r, fill.g, fill.b, fill.mult = c.r * power, c.g * power, c.b * power, 1
       render.circle(worldPos, toCam, led.radius, fill, edge)
     end
   end
+end
+
+local function draw()
+  if not M.active then return end
+  local c = pitLights.colorAt(S.carLedsColor)
+  local n, t = #leds, os.preciseClock()
+  if not meshFailed then
+    local ok, err = pcall(drawMeshes, c, n, t)
+    if ok then return end
+    meshFailed = true
+    M.meshError = tostring(err)
+  end
+  drawDiscs(c, n, t)
 end
 
 local drawFailed = false

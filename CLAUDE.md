@@ -96,8 +96,10 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
   `:getTransformationRaw()` references up the node chain (kept from the pit entry; CSP's vr_rig_base getActualTransform).
   Not the kept `getWorldTransformationRaw()` (stale, discs stayed behind) nor car.worldToLocal/car.transform (model is
   offset from the physics body: discs above the LEDs); `S.carLedsOffset` cm nudge; ordered left to right;
-  drawn as `render.circle` discs (colour x `S.carLedsBrightness`, default 2: 40 turned them white) in
-  `render.on('main.root.transparent')` like CSP's Traffic virtual lights.
+  drawn in `render.on('main.root.transparent')`: each LED mesh again with `render.mesh{ mesh = ref, transform = 'original' }`
+  (as CSP's Radar draws brake light / tyre meshes; LOD A first), OpaqueForced + LessEqual depth, shader colour x
+  gWhiteRefPoint: lit in the pit colour x `S.carLedsBrightness`, the rest dark, so AC's RPM lights are covered until the
+  pit exit and the shape fits; fallback `render.circle` discs like CSP's Traffic virtual lights.
   Writing the LEDs' ksEmissive flickered (AC writes it by RPM every frame), so the material is never touched.
 - Mini sectors are boundaries at `j / N` in `u`; times are interpolated; purple needs a clean lap and an
   existing best; best sector lists are kept per sector count.

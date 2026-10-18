@@ -109,7 +109,9 @@ local function tabDelta()
     combo('carLedsStyle', 'Diody v autě', { 'Světlo přejíždí ze strany na stranu', 'Každá druhá na střídačku' })
     combo('carLedsColor', 'Barva diod v autě', pitLights.NAMES)
     slider('carLedsBrightness', 'Jas diod v autě', 0.3, 6, '%.1f', 0.1)
-    slider('carLedsOffset', 'Posun světel na diodách nahoru/dolů', -20, 20, '%+.1f cm', 0.5)
+    if carLeds.meshError then
+      slider('carLedsOffset', 'Posun světel na diodách nahoru/dolů', -20, 20, '%+.1f cm', 0.5)
+    end
     ui.textWrapped(carLeds.count > 0
       and string.format('Diody v tomto autě: %d (%s).', carLeds.count, carLeds.source)
       or ('Diody otáček v tomto autě nenalezeny' .. (carLeds.source ~= '' and ': ' .. carLeds.source or '')
