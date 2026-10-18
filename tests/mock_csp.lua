@@ -175,6 +175,15 @@ ui = {
       M.path = nil
     end
   end,
+  renderShader = function (params)
+    assert(params.p1 and params.p2 and params.textures and params.shader, 'shader without rect, textures or code')
+    count('shader')
+    local m = M.lastShader or {}
+    m[1], m[2], m[3], m[4] = params.p1.x, params.p1.y, params.p2.x, params.p2.y
+    m[5], m[6], m[7], m[8] = params.uv1.x, params.uv1.y, params.uv2.x, params.uv2.y
+    M.lastShader = m
+    return true
+  end,
   drawVirtualMirror = function (p1, p2, color)
     assert(p1 and p2 and color and color.mult, 'mirror without rect or colour')
     count('mirror')

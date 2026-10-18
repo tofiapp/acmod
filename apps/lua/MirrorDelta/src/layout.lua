@@ -5,7 +5,7 @@
 local config = require('src/config')
 local S = config.S
 
-local LAYOUT_VERSION = 7
+local LAYOUT_VERSION = 8
 
 -- Each window's top left corner: offset from the screen centre ('c'), the top right corner ('tr'), the top edge
 -- at the horizontal middle ('tc') or the left edge at the vertical middle ('l'), px,
@@ -19,7 +19,7 @@ local PLACES = {
   ['MirrorDelta Damage'] = { 30, -100, 'l', 4 },            -- left edge, vertical middle
   ['MirrorDelta Flags'] = { -290, 40, 'tr', 2 },
   ['MirrorDelta Setup'] = { -150, 8, 'tc', 5 },
-  ['MirrorDelta Mirror'] = { -140, 60, 'tc', 7, 280, 240 }, -- rear view under the settings line, square-ish             -- one line at the top centre
+  ['MirrorDelta Mirror'] = { -200, 60, 'tc', 8, 400, 150 }, -- rear view under the settings line, a rectangle             -- one line at the top centre
 }
 
 local M = { lastResult = '-' }

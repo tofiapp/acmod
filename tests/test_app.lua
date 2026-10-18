@@ -603,9 +603,9 @@ do
   for _ = 1, 300 do frame(1) end      -- arranged a few seconds after start
   local moved = 0
   for _ in pairs(env.moved or {}) do moved = moved + 1 end
-  check(moved == 9 and config.S.layoutVersion == 7, 'all nine windows placed: ' .. moved)
-  check(env.moved.w10 and math.abs(env.moved.w10.x + 140 - 960) < 2 and env.moved.w10.y > 40 and env.moved.w10.y < 100
-    and env.resized and env.resized.w10 and env.resized.w10.x == 280, 'mirror at the top centre under the settings line, square-ish')
+  check(moved == 9 and config.S.layoutVersion == 8, 'all nine windows placed: ' .. moved)
+  check(env.moved.w10 and math.abs(env.moved.w10.x + 200 - 960) < 2 and env.moved.w10.y > 40 and env.moved.w10.y < 100
+    and env.resized and env.resized.w10 and env.resized.w10.x == 400, 'mirror at the top centre under the settings line, a rectangle')
   check(env.shown and env.shown.w11 == false and env.shown.w12 == false and env.shown.w13 == nil and env.shown.w10 ~= false,
     'other mirror and flag windows hidden, ours and the mirror configurator kept')
   check(env.moved.w9 and math.abs(env.moved.w9.x + 150 - 960) < 2 and env.moved.w9.y < 20, 'car settings line at the top centre')
@@ -915,17 +915,26 @@ do
   end
   env.cars[1] = carAt(1, -8, 58)       -- close behind on the left, closing in
   env.cars[2] = carAt(-2, -50, 40)     -- far behind on the right, slower
-  env.windowW, env.windowH = 280, 240
+  env.windowW, env.windowH = 400, 150
   env.recordFills, env.fills = true, {}
   local ok, err = pcall(script.windowMirror, DT)
   env.recordFills = false
-  check(ok and env.lastMirror and env.lastMirror[3] - env.lastMirror[1] == 552 and env.lastMirror[4] - env.lastMirror[2] == 236,
-    'square window shows the middle half of the 4:1 rear view: ' .. tostring(err))
+  local sh = env.lastShader
+  local shownW, shownH = sh and (sh[5] - sh[7]) or 0, sh and (sh[8] - sh[6]) or 0
+  local boxW, boxH = sh and (sh[3] - sh[1]) or 1, sh and (sh[4] - sh[2]) or 1
+  check(ok and sh and math.abs(boxW / boxH - shownW * 4 / shownH) < 0.01 and shownH == 1 and shownW < 1,
+    string.format('rear view not stretched: box %.2f, picture part %.3f x %.3f (%s)', boxW / boxH, shownW, shownH, tostring(err)))
+  env.windowW, env.windowH = 600, 100           -- wider than 4:1: the middle of the height
+  script.windowMirror(DT)
+  sh = env.lastShader
+  check(math.abs((sh[3] - sh[1]) / (sh[4] - sh[2]) - (sh[5] - sh[7]) * 4 / (sh[8] - sh[6])) < 0.01 and sh[5] - sh[7] == 1,
+    'wide window: whole width, part of the height, still not stretched')
+  env.windowW, env.windowH = 400, 150
   check(mirror.shown == 2, 'two cars behind get a marker: ' .. mirror.shown)
   local left, right
   for _, f in ipairs(env.fills) do
     local x = f.pts[5]
-    if x and x < 140 then left = f elseif x then right = f end
+    if x and x < 200 then left = f elseif x then right = f end
   end
   check(left and left.r > 0.9 and left.g < 0.5, 'close car closing in on the left: red marker on the left')
   check(right and right.r > 0.9 and right.g > 0.9 and right.b > 0.9, 'slower car far behind on the right: white marker on the right')

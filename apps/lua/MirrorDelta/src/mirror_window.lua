@@ -1,4 +1,4 @@
--- Mirror window: AC's rear view (ui.drawVirtualMirror, as CSP's own OBS view draws it) in a movable, square-ish frame,
+-- Mirror window: AC's rear view (the virtual mirror texture, as CSP's own OBS view uses it) in a movable rectangle,
 -- with car markers like a GT3 rear view camera: a triangle above every car behind (white, yellow when it closes
 -- in, red when it is close), and a red arrow at the side of the frame when a car is alongside, out of the picture.
 -- Car fields as in the official apps: position, look, up, side, velocity (Radar, gamepad assist), wheels[i].position
@@ -94,25 +94,43 @@ local function markers(me, ox, oy, mw, mh, dx, dw, sc, a)
   M.shown = shown
 end
 
+-- The rear view texture is drawn with a small shader (ui.renderShader, as the official Radar app draws its picture):
+-- AC's virtual mirror texture comes out dark, and colours above 1 do nothing in a normal UI draw. The shader multiplies
+-- it by S.mirrorBrightness. The table is reused every frame (as the SDK recommends), only vectors and values change.
+local SHADER = {
+  async = true,
+  p1 = vec2(), p2 = vec2(), uv1 = vec2(), uv2 = vec2(),
+  textures = { txMirror = 'dynamic::mirror' },
+  values = { gExposure = 1.5, gAlpha = 1 },
+  shader = [[
+    float4 main(PS_IN pin) {
+      float3 c = txMirror.SampleLevel(samLinearClamp, pin.Tex, 0).rgb * gExposure;
+      return float4(saturate(c), gAlpha);
+    }
+  ]],
+}
+
 function M.draw()
   local w, h = ui.windowWidth(), ui.windowHeight()
   if w <= 0 or h <= 0 then return end
   local me = ac.getCar(0)
   if not me then return end
-  -- The window can be any shape (square by default). AC's rear view is 4:1: it is drawn as high as the window and
-  -- wide enough that the window shows the middle part of it (S.mirrorView of its width), clipped to the window.
-  local sc = math.min(w, h) / 240
+  local sc = math.min(w / 400, h / 150)
   local b = math.max(1, 2 * sc)
   local ox, oy, mw, mh = b, b, w - 2 * b, h - 2 * b
-  local dw = mw / math.max(0.25, math.min(1, S.mirrorView))
-  local dx = ox + (mw - dw) / 2
   local a = S.opacity
   D.rect(0, 0, w, h, col(FRAME, a), 6 * sc)
-  ui.pushClipRect(p1:set(ox, oy), p2:set(ox + mw, oy + mh), true)
-  local k = S.mirrorBrightness
-  tint:set(WHITE)
-  tint.r, tint.g, tint.b, tint.mult = k, k, k, a
-  local ok = ui.drawVirtualMirror(p1:set(dx, oy), p2:set(dx + dw, oy + mh), tint)
+
+  -- AC's rear view is 4:1. The window shows a part of it with the window's own proportions, never stretched:
+  -- a window narrower than 4:1 shows the middle of the width, a wider one the middle of the height. Zoom crops more.
+  local zoom = math.max(1, S.mirrorZoom)
+  local aspect = mw / mh
+  local fw = math.min(1, aspect / 4) / zoom      -- part of the width shown
+  local fh = math.min(1, 4 / aspect) / zoom      -- part of the height shown
+
+  -- asking for the mirror keeps AC rendering it and tells whether there is one (drawn into an empty clip)
+  ui.pushClipRect(p1:set(0, 0), p2:set(0, 0), true)
+  local ok = ui.drawVirtualMirror(p1:set(0, 0), p2:set(4, 1), col(WHITE, a))
   ui.popClipRect()
   if not ok then
     D.rect(ox, oy, ox + mw, oy + mh, col(NONE, a), 4 * sc)
@@ -121,7 +139,18 @@ function M.draw()
     ui.popDWriteFont()
     return
   end
-  if S.mirrorMarkers then markers(me, ox, oy, mw, mh, dx, dw, sc, a) end
+  -- mirrored like a real mirror (as ui.drawVirtualMirror maps it: u from 1 to 0)
+  SHADER.p1:set(ox, oy)
+  SHADER.p2:set(ox + mw, oy + mh)
+  SHADER.uv1:set(0.5 + fw / 2, 0.5 - fh / 2)
+  SHADER.uv2:set(0.5 - fw / 2, 0.5 + fh / 2)
+  SHADER.values.gExposure = S.mirrorBrightness
+  SHADER.values.gAlpha = a
+  ui.renderShader(SHADER)
+  if S.mirrorMarkers then
+    local dw = mw / fw                            -- width the whole rear view would have at this scale
+    markers(me, ox, oy, mw, mh, ox + mw / 2 - dw / 2, dw, sc, a)
+  end
 end
 
 return M

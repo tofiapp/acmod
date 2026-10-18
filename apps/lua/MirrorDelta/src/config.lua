@@ -35,8 +35,8 @@ local defaults = {
   mirrorSideArrows = true,    -- mirror window: red arrow at the side when a car is alongside
   mirrorFov = 50,             -- degrees the rear view covers horizontally (markers line up with the cars)
   mirrorRange = 60,           -- m behind in which cars get a marker
-  mirrorView = 0.5,           -- part of the rear view's width the (square) window shows
-  mirrorBrightness = 1.5,     -- multiplier for the rear view picture (AC's virtual mirror texture is dark)
+  mirrorZoom = 1,             -- 1: the window shows as much of the rear view as its shape allows, more = closer
+  mirrorBrightness = 2,       -- multiplier for the rear view picture (AC's virtual mirror texture is dark)
   timingLayout = 2,         -- 1: stacked, 2: side by side
   bestHighlight = true,
   lapFlash = true,
@@ -116,7 +116,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.14.1' }
+local M = { S = S, defaults = defaults, VERSION = '1.14.2' }
 
 function M.set(key, value)
   S[key] = value
