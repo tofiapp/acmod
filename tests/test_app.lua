@@ -240,7 +240,7 @@ do
     script.windowDamage(DT)
     env.windowW, env.windowH = 520, 110
     script.windowNotify(DT)
-    env.windowW, env.windowH = 520, 44
+    env.windowW, env.windowH = 300, 44
     script.windowSetup(DT)
   end
   for _ = 1, 300 do frameAndDraw() end
@@ -596,7 +596,7 @@ do
   local moved = 0
   for _ in pairs(env.moved or {}) do moved = moved + 1 end
   check(moved == 8 and config.S.layoutVersion == 5, 'all eight windows placed: ' .. moved)
-  check(env.moved.w9 and math.abs(env.moved.w9.x + 260 - 960) < 2 and env.moved.w9.y < 20, 'car settings line at the top centre')
+  check(env.moved.w9 and math.abs(env.moved.w9.x + 150 - 960) < 2 and env.moved.w9.y < 20, 'car settings line at the top centre')
   check(env.moved.w6 and env.moved.w6.x > 1300 and env.moved.w6.y > 100 and env.moved.w6.y < 200, 'notifications under the flag')
   check(env.moved.w5 and env.moved.w5.x < 100 and env.moved.w5.y > 300 and env.moved.w5.y < 600, 'damage window at the left edge, vertical middle')
   check(env.moved.w7 and env.moved.w7.x > 1500 and env.moved.w7.y < 100, 'flag window in the top right corner')
@@ -818,7 +818,7 @@ do
   car.tractionControlMode = 3
   frame(1)
   local label, value = setup.current()
-  check(label == 'TRAKČNÍ KONTROLA' and value == '3 / 8', 'TC change shown: ' .. label .. ' / ' .. value)
+  check(label == 'TC' and value == '3 / 8', 'TC change shown: ' .. label .. ' / ' .. value)
   env.callbacks.message('TC', '3', 'info', 2)
   for _ = 1, 60 do frame(1) end
   label, value = setup.current()
@@ -833,7 +833,7 @@ do
   car.brakeBias = 0.6
   frame(1)
   label, value = setup.current()
-  check(label == 'ROZLOŽENÍ BRZD' and value == '60,0 % vpředu', 'brake bias shown: ' .. value)
+  check(label == 'BRZDY VPŘEDU' and value == '60,0 %', 'brake bias shown: ' .. value)
   car.absMode = 0
   frame(1)
   label, value = setup.current()

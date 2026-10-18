@@ -18,7 +18,7 @@ local PLACES = {
   ['MirrorDelta Gear'] = { -130, 90, 'c', 1 },
   ['MirrorDelta Damage'] = { 30, -100, 'l', 4 },            -- left edge, vertical middle
   ['MirrorDelta Flags'] = { -290, 40, 'tr', 2 },
-  ['MirrorDelta Setup'] = { -260, 8, 'tc', 5 },             -- one line at the top centre
+  ['MirrorDelta Setup'] = { -150, 8, 'tc', 5 },             -- one line at the top centre
 }
 
 local M = { lastResult = '-' }
