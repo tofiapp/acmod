@@ -6,6 +6,7 @@
 
 local config = require('src/config')
 local D = require('src/draw')
+local carData = require('src/car_data')
 local S = config.S
 
 local PAD, COL_GAP, ROW_GAP, ITEM_GAP, PAIR_GAP = 6, 16, 12, 8, 22
@@ -21,7 +22,8 @@ local GROOVE = rgbm(0, 0, 0, 0.4)
 local BAR_BACK = rgbm(0, 0, 0, 0.75)
 
 local tempColor = rgbm()
-local core, zin, zmid, zout, optimum = { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 0, 0, 0 }
+local core, zin, zmid, zout = { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 0, 0, 0 }
+local optLo, optHi = { 0, 0, 0, 0 }, { 0, 0, 0, 0 }   -- optimal window per tyre, °C
 local fieldsOk, optimumOk = nil, false
 local degreeStrings, plainStrings = {}, {}
 
@@ -43,12 +45,16 @@ local function readTyres(car)
     zin[i] = wheel.tyreInsideTemperature
     zmid[i] = wheel.tyreMiddleTemperature
     zout[i] = wheel.tyreOutsideTemperature
-    local o = S.tyreOptimum
-    if S.tyreOptimumAuto and optimumOk then
+    -- optimal window: the car's tyre curve (tyres.ini), else CSP's optimum, else the manual value
+    local lo, hi = S.tyreOptimum, S.tyreOptimum
+    local axle = i <= 2 and 1 or 2
+    if S.tyreOptimumAuto and carData.tyreLo[axle] > 0 then
+      lo, hi = carData.tyreLo[axle], carData.tyreHi[axle]
+    elseif S.tyreOptimumAuto and optimumOk then
       local v = wheel.tyreOptimumTemperature
-      if v > 1 then o = v end
+      if v > 1 then lo, hi = v, v end
     end
-    optimum[i] = o
+    optLo[i], optHi[i] = lo, hi
   end
 end
 
@@ -68,10 +74,11 @@ local function stopColor(k)
   return S.colRed
 end
 
--- Shared colour for a temperature; use it right away.
-local function colorFor(temp, opt)
+-- Shared colour for a temperature of tyre i (distance from its optimal window); use it right away.
+local function colorFor(temp, i)
   if not fieldsOk then return D.color(S.colNeutral, S.opacity) end
-  local d = temp - opt
+  local d = 0
+  if temp < optLo[i] then d = temp - optLo[i] elseif temp > optHi[i] then d = temp - optHi[i] end
   if d <= STOPS[1] then
     tempColor:set(COLD)
   elseif d >= STOPS[6] then
@@ -140,14 +147,14 @@ local function drawBar(x, y, w, h, i, sc)
   local b = math.max(1, 1.6 * sc)
   D.rect(x - b, y - b, x + w + b, y + h + b, D.color(BAR_BACK, S.opacity), h / 2 + b)
   if not S.tyreZones then
-    D.rect(x, y, x + w, y + h, colorFor(core[i], optimum[i]), h / 2)
+    D.rect(x, y, x + w, y + h, colorFor(core[i], i), h / 2)
     return
   end
   local sw = (w - b * 2) / 3
   local r = math.min(h / 2, 3 * sc)
   for k = 1, 3 do
     local sx = x + (k - 1) * (sw + b)
-    D.rect(sx, y, sx + sw, y + h, colorFor(zoneTemp(i, k), optimum[i]), r)
+    D.rect(sx, y, sx + sw, y + h, colorFor(zoneTemp(i, k), i), r)
   end
 end
 
@@ -159,14 +166,14 @@ local function drawTyre(x, y, w, h, i, sc)
   local ix, iy, iw, ih = x + inset, y + inset, w - inset * 2, h - inset * 2
   local ri = math.max(0, r - inset)
   if not S.tyreZones then
-    D.rect(ix, iy, ix + iw, iy + ih, colorFor(core[i], optimum[i]), ri)
+    D.rect(ix, iy, ix + iw, iy + ih, colorFor(core[i], i), ri)
     return
   end
   local zw = iw / 3
   -- overlapping rects give the outer zones rounded outer corners and a square middle
-  D.rect(ix, iy, ix + iw, iy + ih, colorFor(zoneTemp(i, 1), optimum[i]), ri)
-  D.rect(ix + zw, iy, ix + iw, iy + ih, colorFor(zoneTemp(i, 3), optimum[i]), ri)
-  D.rect(ix + zw, iy, ix + zw * 2, iy + ih, colorFor(zoneTemp(i, 2), optimum[i]), 0)
+  D.rect(ix, iy, ix + iw, iy + ih, colorFor(zoneTemp(i, 1), i), ri)
+  D.rect(ix + zw, iy, ix + iw, iy + ih, colorFor(zoneTemp(i, 3), i), ri)
+  D.rect(ix + zw, iy, ix + zw * 2, iy + ih, colorFor(zoneTemp(i, 2), i), 0)
   local gw = math.max(1, 1.6 * sc)
   D.rect(ix + zw - gw / 2, iy, ix + zw + gw / 2, iy + ih, D.color(GROOVE, S.opacity))
   D.rect(ix + zw * 2 - gw / 2, iy, ix + zw * 2 + gw / 2, iy + ih, D.color(GROOVE, S.opacity))
@@ -174,7 +181,7 @@ local function drawTyre(x, y, w, h, i, sc)
   local cx, cy = ix + (iw - cw) / 2, iy + (ih - ch) / 2
   local b, cr = math.max(1, 2 * sc), 5 * sc
   D.rect(cx - b, cy - b, cx + cw + b, cy + ch + b, D.color(DARK, S.opacity), cr + b)
-  D.rect(cx, cy, cx + cw, cy + ch, colorFor(core[i], optimum[i]), cr)
+  D.rect(cx, cy, cx + cw, cy + ch, colorFor(core[i], i), cr)
 end
 
 local function drawCell(i, x, y, sc)
@@ -197,7 +204,7 @@ local function drawCell(i, x, y, sc)
   else
     local cy = y
     if S.tyreNumbers then
-      D.text(degreeText(core[i]), 40 * sc, x, cy, cw, NUM_ROW_1 * sc, D.ALIGN_CENTER, colorFor(core[i], optimum[i]))
+      D.text(degreeText(core[i]), 40 * sc, x, cy, cw, NUM_ROW_1 * sc, D.ALIGN_CENTER, colorFor(core[i], i))
       cy = cy + NUM_ROW_1 * sc
     end
     local bw = 56 * sc
@@ -212,7 +219,7 @@ function M.available()
 end
 
 function M.optimumFromCar()
-  return optimumOk
+  return optimumOk or carData.tyreFromCurve
 end
 
 function M.draw()

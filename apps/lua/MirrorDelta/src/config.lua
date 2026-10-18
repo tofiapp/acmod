@@ -81,7 +81,9 @@ local defaults = {
   gearShowBar = true,
   gearShowSpeed = true,
   gearRpmStart = 0.6,       -- first segment lights up at this share of the rev limiter
-  gearShiftFlash = true,    -- bar and gear tile blink blue at the limiter
+  gearShiftFlash = true,    -- bar and gear tile blink blue at the shift point
+  gearRpmSource = 1,        -- shift point: 1 the car's optimal up-shift (ai.ini), 2 the rev limiter
+  gearShiftAdjust = 0,      -- %: fine tuning of the shift point
   gearSpeedStep = 3,        -- km/h; the speed only changes once it moved a whole step
   gearPlate = false,
 
@@ -141,7 +143,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.21.0' }
+local M = { S = S, defaults = defaults, VERSION = '1.22.0' }
 
 function M.set(key, value)
   S[key] = value

@@ -7,7 +7,10 @@ each with its own taskbar icon:
 
 - **delta** (`MirrorDelta`): mini sector line, delta line, delta in seconds. Sits above the mirror.
 - **timing** (`MirrorDelta Timing`): position, lap, current time, best lap.
-- **tyres** (`MirrorDelta Tyres`): tyre core temperature (big number) and tread zones (inner/middle/outer).
+- **tyres** (`MirrorDelta Tyres`): tyre core temperature (big number) and tread zones (inner/middle/outer). Colours from
+  an optimal window per axle: `src/car_data.lua` reads tyres.ini `THERMAL_FRONT/REAR[_compoundIndex]` `PERFORMANCE_CURVE`
+  via `ac.INIConfig.carData` + `:tryGetLut` (sections as CSP's shared/sim/cars.lua), grip >= 99.5 % of the best; else
+  CSP's `tyreOptimumTemperature`, else `S.tyreOptimum`.
 - **notify** (`MirrorDelta Notifications`): short messages at the top (flags, fastest lap, positions, pits,
   invalid lap, disconnects), three styles (pill, slanted strip, thin line).
 - **setup** (`MirrorDelta Setup`): one line at the top centre when a car setting changes (TC, TC2, ABS, brake bias,
@@ -36,8 +39,9 @@ each with its own taskbar icon:
   modes: live (lapCount + splinePosition, `sim.trackLengthM`, player's speed) or a timing loop (`M.update(dt)` from
   script.update records every car's crossing time of `S.standingsSectors` checkpoints, interpolated in the frame; gap =
   difference at the last checkpoint both passed, every sector or only the line). Otherwise best lap difference.
-- **gear** (`MirrorDelta Gear`): 12-segment RPM bar lighting from both edges to the centre (range from
-  `car.rpmLimiter`), gear on a rounded tile coloured by revs (white/yellow/red, blinking blue at the limiter),
+- **gear** (`MirrorDelta Gear`): 12-segment RPM bar lighting from both edges to the centre (range up to the shift point
+  from `src/car_data.lua`: ai.ini `[GEARS] UP` as CSP's RGBControl/led_colors use it, else `car.rpmLimiter`; also the delta
+  window's blue blink), gear on a rounded tile coloured by revs (white/yellow/red, blinking blue at the limiter),
   calm speed (changes only by whole steps) on a dark bar under it. Font: bundled Unbounded Bold.
 
 The user speaks Czech: talk to them in Czech, write code, comments and commit messages in English.

@@ -2,6 +2,7 @@
 -- plus optional lap timing, tyres, gear, damage and notification windows.
 
 local tracker = require('src/tracker')
+local carData = require('src/car_data')
 local deltaWindow = require('src/delta_window')
 local timingWindow = require('src/timing_window')
 local tyresWindow = require('src/tyres_window')
@@ -47,6 +48,8 @@ function script.update(dt)
   if not ok and not tracker.diag.error then tracker.diag.error = 'pořadí: ' .. tostring(err) end
   ok, err = pcall(setupLine.update)
   if not ok and not tracker.diag.error then tracker.diag.error = 'nastavení auta: ' .. tostring(err) end
+  ok, err = pcall(carData.update)
+  if not ok and not tracker.diag.error then tracker.diag.error = 'data auta: ' .. tostring(err) end
   ok, err = pcall(layout.update)
   if not ok and not tracker.diag.error then tracker.diag.error = 'rozmístění oken: ' .. tostring(err) end
 end

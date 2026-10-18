@@ -10,6 +10,7 @@ local originals = require('src/originals')
 local setupLine = require('src/setup_line')
 local pitLights = require('src/pit_lights')
 local mirror = require('src/mirror_window')
+local carData = require('src/car_data')
 local D = require('src/draw')
 local S = config.S
 
@@ -171,7 +172,11 @@ local function tabTyres()
   checkbox('tyresPanel', 'Matné průhledné pozadí')
   gap()
   ui.header('Optimální teplota')
-  checkbox('tyreOptimumAuto', 'Podle auta (pokud ji CSP poskytuje)')
+  checkbox('tyreOptimumAuto', 'Podle auta (křivka přilnavosti pneumatik z dat auta, jinak hodnota z CSP)')
+  if S.tyreOptimumAuto and carData.tyreFromCurve then
+    ui.textWrapped(string.format('Optimální okno podle aktuální směsi: vpředu %d–%d °C, vzadu %d–%d °C.',
+      carData.tyreLo[1], carData.tyreHi[1], carData.tyreLo[2], carData.tyreHi[2]))
+  end
   slider('tyreOptimum', S.tyreOptimumAuto and 'Záložní hodnota' or 'Optimum', 50, 120, '%.0f °C', 1)
   gap()
   local available = tyres.available()
@@ -205,8 +210,12 @@ local function tabGear()
   end)
   gap()
   ui.header('Otáčky (rozsah podle omezovače auta)')
-  slider('gearRpmStart', 'První dílky od', 0.3, 0.9, '%.2f × omezovač')
-  checkbox('gearShiftFlash', 'Na omezovači blikat modře (čára, převod i rychlost)')
+  combo('gearRpmSource', 'Kdy řadit (plný ukazatel, modré blikání)', { 'Podle auta: optimální řazení (jako kontrolky v autě)', 'Omezovač otáček' })
+  slider('gearShiftAdjust', 'Doladit bod řazení', -10, 5, '%+.1f %%', 0.5)
+  local me = ac.getCar(0)
+  if me then ui.textWrapped('Řadí se při: ' .. carData.shiftSourceText(me)) end
+  slider('gearRpmStart', 'První dílky od', 0.3, 0.9, '%.2f × bod řazení')
+  checkbox('gearShiftFlash', 'V bodě řazení blikat modře (čára, převod i rychlost)')
 end
 
 local function tabDamage()

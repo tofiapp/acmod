@@ -21,7 +21,7 @@ Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.21.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.22.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -73,7 +73,7 @@ Nastavení je společné pro všechna okna a má osm záložek.
 - Počet mini sektorů (výchozí 24), počet skupin (výchozí 3, tedy 8 | 8 | 8) a mezera mezi skupinami.
 - Tloušťka čar, mezera mezi čarami, velikost čísla a průhlednost. Hodnoty v pixelech platí pro okno široké 600 px a se šířkou okna se škálují.
 - Čára delty (výchozí) je rozdělená uprostřed a pohybuje se plynule jako původní ukazatel AC. Doprava roste zelená, když teď jedete rychleji než v referenčním kole, doleva červená, když pomaleji. Porovnává se posledních zhruba 3 sekund jízdy, ne celkový čas. Plná délka na jednu stranu odpovídá rozdílu 0,1 s (nastavitelné). Číslo pod čarou ukazuje celkovou deltu. Jde přepnout na celou čáru barvou podle celkové delty.
-- Na omezovači blikají modře čára delty i mini sektory, stejně jako okno s převodem (jde vypnout).
+- V bodě řazení blikají modře čára delty i mini sektory, stejně jako okno s převodem (jde vypnout).
 - V boxové uličce svítí na čáře delty a mini sektorech světla boxů. Styl: skener (výchozí, jedno měkké světlo plynule běhá ze strany na stranu), vlny ze středu ke krajům, pomalé dýchání, nebo poloviny na střídačku (původní). Barva: modrá (výchozí), oranžová, bílá nebo žlutá. Jde vypnout. V okně časů místo aktuálního času svítí BOX ve stejné barvě.
 - Intenzita barvy podle velikosti delty: když je zapnutá, plnou barvu má delta od ±0,5 s (nastavitelné).
 - Zdroj delty:
@@ -103,14 +103,14 @@ Nastavení je společné pro všechna okna a má osm záložek.
   - velké číslo jádra, tvar pneumatiky a pod ní tři čísla pláště.
 - Uspořádání: 2 × 2 jako na autě, nebo vedle sebe v řadě.
 - Zobrazit: teplotu jádra a zóny pláště.
-- Optimální teplota: podle auta, pokud ji CSP poskytuje. Jinak platí záložní hodnota (výchozí 85 °C).
+- Optimální teplota: podle auta. Aplikace přečte z dat auta (`tyres.ini`) křivku přilnavosti pneumatik podle teploty pro aktuální směs a vezme celé okno, kde je přilnavost nejvyšší (vpředu a vzadu zvlášť, při výměně směsi znovu). Závodní pneumatiky s širokým nebo posunutým oknem tak svítí zeleně přesně v něm. Když křivka chybí, platí optimum z CSP, jinak záložní hodnota (výchozí 85 °C). Okno je vidět v nastavení.
 - Tmavý podklad.
 
 **Převody**
 - Zobrazit: ukazatel otáček, rychlost pod převodem a tmavý podklad (každé zvlášť).
-- Ukazatel otáček má 12 dílků a rozsvěcuje se od obou krajů ke středu: zelená, žlutá, červená. Rozsah se bere z omezovače (`rpmLimiter`) daného auta. První dílky se rozsvítí od nastaveného podílu omezovače (výchozí 0,6).
+- Ukazatel otáček má 12 dílků a rozsvěcuje se od obou krajů ke středu: zelená, žlutá, červená. Ukazatel je plný v bodě řazení: podle auta je to jeho optimální řazení nahoru z dat auta (`ai.ini`, stejný údaj používají oficiální aplikace CSP pro barvy řazení), takže se shoduje s kontrolkami v autě i u závoďáků, které řadí dřív než na omezovači. Když údaj chybí, platí omezovač. Jde zvolit i omezovač a bod řazení doladit o pár procent. První dílky se rozsvítí od nastaveného podílu bodu řazení (výchozí 0,6).
 - Dlaždice s převodem je bílá, s rostoucími otáčkami žlutá a pak červená.
-- Na omezovači bliká modře čára, dlaždice s převodem i pruh s rychlostí (jde vypnout).
+- V bodě řazení bliká modře čára, dlaždice s převodem i pruh s rychlostí (jde vypnout).
 - Rychlost se nemění po každém km/h, ale až když se posune o celý krok (1, 2, 3 nebo 5 km/h, výchozí 3). Číslo tak neposkakuje.
 - Písmo okna je Unbounded. Je přibalené ve složce `fonts` i s licencí SIL OFL.
 
@@ -213,7 +213,7 @@ Nejrychlejší čas (NEJ) je vaše nejlepší kolo v session podle AC (bez smaza
 
 - Velké číslo je vždy **teplota jádra** pneumatiky.
 - Plášť (běhoun) má tři zóny: vnitřní, střed a vnější. Vnitřní strana je vždy blíž ke středu auta.
-- Barva vychází z optimální teploty: modrá je studená, zelená optimum, žlutá a červená přehřátá.
+- Barva vychází z optimálního okna: modrá je studená, zelená v okně, žlutá a červená přehřátá.
 - Hodnoty čte aplikace přímo z CSP. Pokud je vaše verze CSP neposkytuje, okno ukáže `-` a v nastavení na záložce Pneumatiky je o tom zpráva.
 
 ### Ukládání

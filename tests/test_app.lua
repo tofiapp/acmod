@@ -1296,5 +1296,59 @@ do
   car.isInPitlane = false
 end
 
+-- 32. Car data: shift point from the car's optimal up-shift (ai.ini), tyre window from its grip curve (tyres.ini)
+do
+  local carData = require('src/car_data')
+  local savedIni, savedSession, savedRpm = env.carIni, env.sim.currentSessionIndex, car.rpm
+  car.rpmLimiter = 7800
+  env.carIni = {
+    ['ai.ini'] = { ['GEARS/UP'] = 7000 },
+    ['tyres.ini'] = {
+      ['THERMAL_FRONT/PERFORMANCE_CURVE'] = { { 0, 0.8 }, { 70, 0.96 }, { 90, 1 }, { 105, 1 }, { 140, 0.9 } },
+      ['THERMAL_REAR/PERFORMANCE_CURVE'] = { { 0, 0.8 }, { 60, 1 }, { 75, 1 }, { 120, 0.9 } },
+      ['THERMAL_FRONT_1/PERFORMANCE_CURVE'] = { { 0, 0.8 }, { 50, 1 }, { 65, 1 }, { 120, 0.9 } },
+    },
+  }
+  env.sim.currentSessionIndex = savedSession + 5
+  frame(1)
+  check(carData.aiShiftRpm == 7000 and carData.shiftRpm(car) == 7000,
+    'shift point: the car\'s optimal up-shift instead of the limiter: ' .. carData.shiftRpm(car))
+  check(carData.tyreLo[1] >= 87 and carData.tyreLo[1] <= 89 and carData.tyreHi[1] >= 105 and carData.tyreHi[1] <= 107
+    and carData.tyreLo[2] < 62 and carData.tyreHi[2] > 74,
+    string.format('tyre window from the grip curve: front %d-%d, rear %d-%d',
+      carData.tyreLo[1], carData.tyreHi[1], carData.tyreLo[2], carData.tyreHi[2]))
+  car.compoundIndex = 1
+  frame(1)
+  check(carData.tyreLo[1] < 52 and carData.tyreHi[1] > 63 and carData.tyreLo[2] == 0,
+    'other compound: its own section (THERMAL_FRONT_1), the rear without one falls back')
+  car.compoundIndex = nil
+  -- the gear window blinks at 7000 already, not only at the limiter
+  config.set('gearShiftFlash', true)
+  car.rpm = 7100
+  env.windowW, env.windowH = 260, 102
+  local blue = 0
+  local saved = ui.drawRectFilled
+  ui.drawRectFilled = function (p1, p2, color) if color.b > 0.9 and color.r < 0.4 and color.g < 0.7 then blue = blue + 1 end end
+  for t = 0, 0.25, 0.0625 do env.clock = 100 + t; script.windowGear(DT) end
+  local blueAtShift = blue
+  config.set('gearRpmSource', 2)
+  blue = 0
+  for t = 0, 0.25, 0.0625 do env.clock = 100 + t; script.windowGear(DT) end
+  ui.drawRectFilled = saved
+  check(blueAtShift > 0 and blue == 0,
+    string.format('gear window blinks blue at the car\'s shift point (%d), not yet with the limiter as source (%d)', blueAtShift, blue))
+  check(carData.shiftRpm(car) == 7800 * 0.98, 'limiter as the source when chosen')
+  config.set('gearRpmSource', 1)
+  config.set('gearShiftAdjust', -2)
+  check(math.abs(carData.shiftRpm(car) - 6860) < 0.01, 'fine tuning of the shift point')
+  config.set('gearShiftAdjust', 0)
+  env.windowW, env.windowH = 180, 140
+  local okT = pcall(script.windowTyres, DT)
+  check(okT and tracker.diag.error == nil, 'tyres window draws with the curve window')
+  env.carIni, car.rpm = savedIni, savedRpm
+  env.sim.currentSessionIndex = savedSession
+  frame(1)
+end
+
 print(string.format('%d passed, %d failed', passed, failed))
 return failed

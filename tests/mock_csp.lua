@@ -131,7 +131,31 @@ ac = {
   end,
   FolderID = { ScriptConfig = 1, ExtCfgUser = 18 },
   INIConfig = {
-    carData = function (i, name) return M.carIni and M.carIni[name] and { get = function (_, section, key, default) local v = M.carIni[name][section .. '/' .. key]; if v == nil then return default end; return v end } or nil end,
+    carData = function (i, name)
+      local data = M.carIni and M.carIni[name]
+      if not data then return nil end
+      return {
+        get = function (_, section, key, default) local v = data[section .. '/' .. key]; if v == nil then return default end; return v end,
+        -- LUT given as { {input, output}, ... }: linear interpolation like ac.DataLUT11
+        tryGetLut = function (_, section, key)
+          local pts = data[section .. '/' .. key]
+          if type(pts) ~= 'table' then return nil end
+          local lut = {}
+          for k = 1, #pts do lut[k] = pts[k] end
+          lut.get = function (_, x)
+            if x <= pts[1][1] then return pts[1][2] end
+            for k = 2, #pts do
+              if x <= pts[k][1] then
+                local a, b = pts[k - 1], pts[k]
+                return a[2] + (b[2] - a[2]) * (x - a[1]) / (b[1] - a[1])
+              end
+            end
+            return pts[#pts][2]
+          end
+          return lut
+        end,
+      }
+    end,
     load = function (path)
       M.iniFiles = M.iniFiles or {}
       local file = M.iniFiles[path] or {}

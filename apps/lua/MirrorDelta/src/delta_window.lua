@@ -2,6 +2,7 @@
 -- Lines span the full window width; thickness, gaps and text scale with the window.
 
 local config = require('src/config')
+local carData = require('src/car_data')
 local tracker = require('src/tracker')
 local D = require('src/draw')
 local S = config.S
@@ -18,8 +19,7 @@ local function limiterBlink()
   if not S.deltaLimiterFlash then return false end
   local car = ac.getCar(0)
   if not car then return false end
-  local limiter = car.rpmLimiter > 0 and car.rpmLimiter or 8000
-  return car.rpm >= limiter * 0.98 and math.floor(os.preciseClock() * 8) % 2 == 0
+  return car.rpm >= carData.shiftRpm(car) and math.floor(os.preciseClock() * 8) % 2 == 0
 end
 -- In the pit lane the delta line and mini sectors show the pit lights (src/pit_lights.lua, style and colour settings).
 local pitLights = require('src/pit_lights')
