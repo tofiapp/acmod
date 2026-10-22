@@ -1,22 +1,27 @@
 # MirrorDelta
 
-Lua aplikace pro Assetto Corsa s Custom Shaders Patch (CSP). Hlavní částí je minimalistický ukazatel delty, který si umístíte nad zpětné zrcátko. Má dvě tenké čáry a deltu v sekundách, bez pozadí a bez titulku. K tomu jsou dvě volitelná okna: pozice s časy kola a teploty pneumatik.
+Lua aplikace pro Assetto Corsa s Custom Shaders Patch (CSP). Hlavní částí je minimalistický ukazatel delty, který si umístíte nad zpětné zrcátko. Má dvě tenké čáry a deltu v sekundách, bez pozadí a bez titulku. K tomu jsou volitelná okna: pozice s časy kola, teploty pneumatik, převod, poškození a notifikace.
 
 Každé okno má vlastní ikonu na liště aplikací a zapíná se zvlášť:
 
 | Okno | Co ukazuje |
 | --- | --- |
 | **MirrorDelta** | Čára mini sektorů, čára delty a delta v sekundách (±) |
-| **MirrorDelta Timing** | Pozice, kolo, aktuální čas a nejrychlejší kolo |
+| **MirrorDelta Timing** | Pozice, kolo, aktuální čas, poslední kolo (smazané červeně) a nejrychlejší kolo |
 | **MirrorDelta Tyres** | Teplota jádra pneumatik a teploty pláště (vnitřní / střed / vnější) |
-| **MirrorDelta Damage** | Auto shora: čtyři strany karoserie barevně podle poškození a uprostřed stav motoru v % |
+| **MirrorDelta Damage** | Poškození jako jednoduchý kříž: předek, zadek, boky, 4 pneumatiky, 4 zavěšení a motor v % |
 | **MirrorDelta Gear** | Ukazatel otáček z 12 dílků, pod ním převod na barevné dlaždici a pod převodem rychlost |
+| **MirrorDelta Flags** | Aktuální vlajka v pravém horním rohu: vlajka a její název, dokud platí |
+| **MirrorDelta Mirror** | Zpětné zrcátko v posuvném obdélníku se šipkami nad auty za vámi (jako kamera v GT3) |
+| **MirrorDelta Standings** | Pořadí dole místo původního pořadí AC (F9): vy a auta kolem vás, odstupy |
+| **MirrorDelta Setup** | Jeden řádek nahoře uprostřed při změně nastavení auta (TC, ABS, brzdy…) |
+| **MirrorDelta Notifications** | Krátké zprávy nahoře: vlajky, nejrychlejší kolo, předjetí, boxy, neplatné kolo, odpojení |
 
 ## Instalace
 
 ### Přes Content Manager (doporučeno)
 
-1. Vezměte soubor `MirrorDelta-1.3.1.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
+1. Vezměte soubor `MirrorDelta-1.27.0.zip`. Buď ho máte stažený, nebo ho vytvoříte build skriptem (viz [Vytvoření ZIPu](#vytvoření-zipu)).
 2. Přetáhněte ZIP do okna Content Manageru.
 3. Content Manager nabídne instalaci. Potvrďte ji.
 
@@ -38,16 +43,27 @@ U výchozí instalace Steamu je to `C:\Program Files (x86)\Steam\steamapps\commo
 ## Zapnutí ve hře
 
 1. Ve hře najeďte myší k pravému okraji obrazovky. Otevře se lišta aplikací.
-2. Klikněte na ikonu **MirrorDelta** (případně **MirrorDelta Timing**, **MirrorDelta Tyres**, **MirrorDelta Gear** a **MirrorDelta Damage**).
+2. Klikněte na ikonu **MirrorDelta** (případně **MirrorDelta Timing**, **MirrorDelta Tyres**, **MirrorDelta Gear**, **MirrorDelta Damage** a **MirrorDelta Notifications**).
 3. **Přesun okna:** najeďte na okno myší. Objeví se titulek, za který okno přetáhnete.
 4. **Velikost:** táhněte za pravý dolní roh okna. Čáry vyplní celou šířku okna. Tloušťka čar, mezery a velikost čísla se zvětšují úměrně šířce okna, takže okno stačí roztáhnout přesně na šířku zrcátka.
 5. **Nastavení:** při najetí myší klikněte v titulku na ozubené kolečko.
+
+Po instalaci nové verze se všechna okna MirrorDelta jednou sama zobrazí a rozmístí kolem středu obrazovky. Kdykoli je tam vrátíte tlačítkem **Zobrazit všechna okna uprostřed obrazovky** nahoře v nastavení.
+
+### Vypnutí původních ukazatelů AC
+
+- **Pořadí AC (F9)** aplikace vypne sama, stejně jako to dělá oficiální aplikace CSP Unbound.
+- **Systémové zprávy AC** (původní řádek nahoře: ABS, TC, penalizace, připojení…) aplikace skryje tak, že zapne volbu CSP „Hide system messages“ ve vašem `Documents/Assetto Corsa/cfg/extension/gui.ini` (stejně zapisuje nastavení CSP oficiální aplikace ControllerTweaks). Je to stejná volba jako **Content Manager > Nastavení > Custom Shaders Patch > GUI > Hide system messages**. Když v nastavení MirrorDelta skrývání vypnete, vrátí ji zpět. Zprávy o nastavení auta pak ukáže okno MirrorDelta Setup, ostatní okno MirrorDelta Notifications. Kdyby se původní řádek dál ukazoval, zapněte volbu ručně v Content Manageru a restartujte jízdu.
+- **Vlajky** ukazuje okno MirrorDelta Flags v pravém horním rohu a pod ním okno MirrorDelta Notifications se všemi zprávami ve stejném stylu (barevná ikona vpravo, text vlevo od ní). Po instalaci se tam obě samy přesunou.
+- Okna s deltou, časy, pneumatikami, notifikacemi, vlajkou a poškozením mají matné průsvitné pozadí podle velikosti obsahu. Sytost jde změnit v nastavení na záložce Barvy.
+
+Když některé okno narazí na chybu, ukáže ji červeně přímo v sobě a ostatní okna běží dál. Chyba je i v záložce Diagnostika.
 
 Pokud se ikony na liště neobjeví, aktualizujte CSP a zkontrolujte, že jsou v nastavení CSP zapnuté Lua aplikace.
 
 ## Nastavení
 
-Nastavení je společné pro všechna okna a má sedm záložek.
+Nastavení je společné pro všechna okna a má osm záložek.
 
 **Delta**
 - Zobrazit: mini sektory, čáru delty, deltu v sekundách (každé zvlášť).
@@ -56,13 +72,31 @@ Nastavení je společné pro všechna okna a má sedm záložek.
   - **B** (výchozí): mini sektory nahoře, čára delty uprostřed, čas dole.
 - Počet mini sektorů (výchozí 24), počet skupin (výchozí 3, tedy 8 | 8 | 8) a mezera mezi skupinami.
 - Tloušťka čar, mezera mezi čarami, velikost čísla a průhlednost. Hodnoty v pixelech platí pro okno široké 600 px a se šířkou okna se škálují.
-- Na omezovači čára delty bliká modře stejně jako okno s převodem (jde vypnout).
+- Čára delty (výchozí) je rozdělená uprostřed a pohybuje se plynule jako původní ukazatel AC. Doprava roste zelená, když teď jedete rychleji než v referenčním kole, doleva červená, když pomaleji. Porovnává se posledních zhruba 3 sekund jízdy, ne celkový čas. Plná délka na jednu stranu odpovídá rozdílu 0,1 s (nastavitelné). Číslo pod čarou ukazuje celkovou deltu. Jde přepnout na celou čáru barvou podle celkové delty.
+- V bodě řazení blikají modře čára delty i mini sektory, stejně jako okno s převodem (jde vypnout).
+- V boxové uličce svítí na čáře delty a mini sektorech světla boxů. Styl: skener (výchozí, jedno měkké světlo plynule běhá ze strany na stranu), vlny ze středu ke krajům, pomalé dýchání, nebo poloviny na střídačku (původní). Barva: modrá (výchozí), oranžová, bílá nebo žlutá. Jde vypnout. V okně časů místo aktuálního času svítí BOX ve stejné barvě.
+- V boxové uličce svítí světla i v kokpitu: oranžové světlo přejíždí ze strany na stranu (nebo blikají každá druhá na střídačku; barva, styl a jas jdou změnit, celé jde vypnout). Buď po diodách otáček přímo v autě, nebo po **virtuální liště diod** před řidičem, která vypadá u každého auta stejně.
+  - Diody auta: aplikace je najde v datech auta (`digital_instruments.ini`), podle označení CSP, nebo podle názvu dílů (LED, RPM, SHIFT). Při každém vjezdu do boxů (v kokpitu, ne při startu session, kdy může být aktivní jiná kamera a jiný LOD) zkontroluje, jestli sedí: palubní deska kreslená skriptem CSP, skryté díly, díly větší než dioda nebo mimo kokpit se vyřadí, a když nezbudou aspoň dvě, diody auta se nepoužijí. Diody, které sedí, překreslí přímo v jejich tvaru (nepatrně zvětšené a o pár milimetrů blíž ke kameře, aby původní dioda nikde neprobleskovala): svítící barvou, ostatní jako zhasnuté, takže původní otáčková světla do výjezdu z boxů nejsou vidět. Materiál diod nemění (ten dál řídí AC podle otáček).
+  - Virtuální lišta: řada diod (výchozí 10, 28 cm široká) 55 cm před očima řidiče a 14 cm pod nimi, vždy viditelná; počet, šířka, vzdálenost a výška jdou nastavit. Výchozí nastavení ji ukáže jen u aut, kde diody auta nesedí; jde zvolit i „vždy“ (stejný vzhled u všech aut) nebo „nikdy“.
+  - V nastavení je vidět výsledek kontroly, způsob kreslení a co právě svítí; pro každé auto jde zvlášť zvolit „podle kontroly“, „vždy diody auta“ nebo „nikdy diody auta“ (pamatuje si to). Tlačítko „Vyzkoušet teď“ spustí světla na 8 s i mimo boxy.
+- V boxové uličce blikají i přední světla auta (a volitelně výstražná světla), stejně jako to dělají ovládací tlačítka oficiální aplikace Unbound; při výjezdu se vrátí stav, jaký byl před vjezdem. Funguje u aut, která mají diody řazení jako diody AC (`digital_instruments.ini`), u aut, kde je CSP jako diody pozná, a jako poslední možnost u dílů kokpitu pojmenovaných jako diody (LED, RPM, SHIFT); auta s palubní deskou ze skriptu nebo z textury ne. Kolik diod aplikace v autě našla, je vidět v nastavení.
 - Intenzita barvy podle velikosti delty: když je zapnutá, plnou barvu má delta od ±0,5 s (nastavitelné).
-- Reference: nejlepší kolo této session, nebo nejlepší kolo vůbec (uložené).
+- Zdroj delty:
+  - **Vlastní měření, jinak delta z AC** (výchozí): dokud aplikace nemá vlastní referenci (out lap, první kolo, kolo po resetu), ukazuje deltu, kterou počítá samotné AC (ne v režimu Předchozí kolo).
+  - **Jen vlastní měření.**
+  - **Jen delta z AC.**
+- Reference: předchozí kolo (výchozí), nejlepší kolo této session, nebo nejlepší kolo vůbec (uložené).
+  - **Předchozí kolo** porovnává jen s kolem těsně před tím a s ničím jiným (ani s uloženým kolem, ani s deltou z AC). Out lap tedy deltu nemá, mini sektory v něm ale svítí: podle delty z AC (změna přes sektor), a když ta není, podle jiného známého kola (nejlepší kolo session nebo uložené); stejně tak sektory druhého kola před místem výjezdu z boxů. Druhé kolo se porovná s out lapem: delta naskočí v místě, kde jste vyjeli z boxů, a počítá celý čas out lapu včetně boxové uličky, takže na cílové čáře se rovná rozdílu časů kol. Před tím místem delta není a sektory jsou šedé.
 - Tlačítko **Smazat uložená data** smaže uložené nejlepší kolo a mini sektory pro aktuální auto a trať. Potvrdíte ho druhým kliknutím.
 
+**Pořadí dole (MirrorDelta Standings)**
+- Vy uprostřed a auta před vámi a za vámi v pořadí AC (výchozí 7 aut, nastavitelné v záložce Časy). Každé auto: pozice, zkratka jména (tři písmena příjmení) a odstup.
+- V závodě odstup v sekundách (auto před vámi záporně, červeně; za vámi kladně, zeleně; o kolo a víc „KOLO“). Odstup se počítá podle nastavení: průběžně z polohy na trati, po každém sektoru, nebo jen po projetí cílem. Po sektoru a cíli se měří jako na časomíře: z časů, kdy obě auta projela stejný bod trati (počet sektorů na kolo nastavitelný, výchozí 3).
+- Odstup k vám, nebo k autu před ním (interval). Jména: zkratka, celé příjmení, nebo bez jmen. Barvy odstupů jdou vypnout.
+- V tréninku a kvalifikaci rozdíl nejlepších kol. Auto v boxech ukazuje BOX.
+
 **Časy**
-- Zobrazit: pozici, počet kol, aktuální čas a nejrychlejší čas (každé zvlášť).
+- Zobrazit: pozici, počet kol, aktuální čas, poslední kolo a nejrychlejší čas (každé zvlášť). Smazané poslední kolo je červené.
 - Uspořádání: vedle sebe (výchozí), nebo pod sebou.
 - Zvýraznění nejlepšího kola fialovým rámečkem.
 - Obarvení času po projetí cíle a jak dlouho trvá (výchozí 4 s).
@@ -74,22 +108,49 @@ Nastavení je společné pro všechna okna a má sedm záložek.
   - velké číslo jádra, tvar pneumatiky a pod ní tři čísla pláště.
 - Uspořádání: 2 × 2 jako na autě, nebo vedle sebe v řadě.
 - Zobrazit: teplotu jádra a zóny pláště.
-- Optimální teplota: podle auta, pokud ji CSP poskytuje. Jinak platí záložní hodnota (výchozí 85 °C).
+- Optimální teplota: podle auta. Aplikace přečte z dat auta (`tyres.ini`) křivku přilnavosti pneumatik podle teploty pro aktuální směs a vezme celé okno, kde je přilnavost nejvyšší (vpředu a vzadu zvlášť, při výměně směsi znovu). Závodní pneumatiky s širokým nebo posunutým oknem tak svítí zeleně přesně v něm. Když křivka chybí, platí optimum z CSP, jinak záložní hodnota (výchozí 85 °C). Okno je vidět v nastavení.
 - Tmavý podklad.
 
 **Převody**
 - Zobrazit: ukazatel otáček, rychlost pod převodem a tmavý podklad (každé zvlášť).
-- Ukazatel otáček má 12 dílků a rozsvěcuje se od obou krajů ke středu: zelená, žlutá, červená. Rozsah se bere z omezovače (`rpmLimiter`) daného auta. První dílky se rozsvítí od nastaveného podílu omezovače (výchozí 0,6).
+- Ukazatel otáček má 12 dílků a rozsvěcuje se od obou krajů ke středu: zelená, žlutá, červená. Ukazatel je plný v bodě řazení: podle auta je to jeho optimální řazení nahoru z dat auta (`ai.ini`, stejný údaj používají oficiální aplikace CSP pro barvy řazení), takže se shoduje s kontrolkami v autě i u závoďáků, které řadí dřív než na omezovači. Když údaj chybí, platí omezovač. Jde zvolit i omezovač a bod řazení doladit o pár procent. První dílky se rozsvítí od nastaveného podílu bodu řazení (výchozí 0,6).
 - Dlaždice s převodem je bílá, s rostoucími otáčkami žlutá a pak červená.
-- Na omezovači bliká modře čára, dlaždice s převodem i pruh s rychlostí (jde vypnout).
+- V bodě řazení bliká modře čára, dlaždice s převodem i pruh s rychlostí (jde vypnout).
 - Rychlost se nemění po každém km/h, ale až když se posune o celý krok (1, 2, 3 nebo 5 km/h, výchozí 3). Číslo tak neposkakuje.
 - Písmo okna je Unbounded. Je přibalené ve složce `fonts` i s licencí SIL OFL.
 
 **Poškození**
-- Strany karoserie (přední, zadní, levá, pravá) jsou tmavé, dokud nejsou poškozené. S poškozením se barví od žluté po červenou.
-- Uprostřed je dlaždice motoru se zbývající životností v %: bílá, pod 95 % žlutá, pod 50 % červená.
-- Volba „Ukázat jen při poškození“ okno skryje, dokud je auto v pořádku.
+- Jeden jednoduchý vzhled (kříž): předek a zadek jsou vodorovné pruhy nahoře a dole, levý a pravý bok svislé pruhy po stranách. V každém rohu je pneumatika (opotřebení, defekt) a vedle ní čtvereček zavěšení s vlastním stavem. Uprostřed je motor v %: bílá, pod 95 % žlutá, pod 50 % červená.
+- Část v pořádku je světle šedá, s poškozením se barví od žluté po červenou. Část, do které jste právě narazili, krátce blikne bíle.
+- Okno je vlevo uprostřed obrazovky a ukáže se jen po nárazu na 8 sekund, jako původní ukazatel AC. V nastavení jde přepnout na „vždy“ nebo „dokud je něco poškozené“. Při najetí myší je vidět vždy, ať ho jde přesunout.
+- Poškození zavěšení CSP v žádné oficiální aplikaci neukazuje. Aplikace ho zkouší číst, a když ho vaše verze CSP nedá, čtverečky zavěšení zůstanou šedé (stav je vidět v nastavení).
 - Citlivost: od jaké hodnoty z AC je strana plně červená. Aktuální hodnoty z AC vidíte přímo v nastavení, podle nich jde citlivost doladit.
+
+**Zrcátko**
+- Okno MirrorDelta Mirror ukazuje zpětný pohled AC (stejný obraz jako virtuální zrcátko) v rámečku, který jde posunout a zvětšit kamkoli. Výchozí tvar je obdélník 400 × 150. Obraz se nikdy nedeformuje: okno ukáže výřez zrcátka ve svém poměru stran (užší okno prostředek šířky), přiblížení jde zvýšit. Obraz zrcátka dává CSP v HDR (před úpravou obrazu AC), proto jsou čtyři způsoby, jak z něj udělat normální obraz: gamma (výchozí), YEBIS jako pohled pro OBS, tonemapping UI a bez úprav. Přepínají se kliknutím do okna; po najetí myší okno ukáže verzi a aktivní způsob. Jas jde zvýšit i snížit.
+- **Vlastní kamera (obraz 5 a 6):** aplikace si pohled dozadu vykreslí sama (stejně jako kamery v OBS integraci CSP), z místa kamery zrcátka a se zvolenou šířkou záběru. Značky se počítají ze stejné kamery, takže sedí na autech přesně a nic se nekalibruje; šířka záběru mění i obraz. Vlastní auto se do obrazu nedostane. 5 = vypadá jako hra (úprava obrazu hry), 6 = jas se nastavuje sám podle scény jako u fotoaparátu (posuvník Jas ho doladí). Kvalita stejně jako u kamer v OBS: rychlá (bez stínů a úprav obrazu, tmavší), jako hra (výchozí: stíny a úprava obrazu jako hra) a nejlepší (vlastní stíny a tráva, náročné). Kamera je standardně na zadním nárazníku (uprostřed, 0,5 m nad zemí), jde ji dát i na místo řidiče jako zrcátko AC. Jde ji posunout výš nebo níž a sklopit dolů (Výška kamery, Sklon kamery dolů); značky se posunou s ní. Výkonově je to podobné jako druhé zrcátko.
+- Původní zrcátko AC se vypíná ve hře volbou virtual cockpit / virtuální zrcátko.
+- Dvě nejbližší auta za vámi mají kolem sebe rohový rámeček jako radar v GT3, ve výrazných barvách s tmavým obrysem: zelený (nedotahuje), oranžový (dotahuje), červený (blízko, méně než 8 m nebo u vás do 1,5 s; navíc šipka nad ním). Velikost rámečku odpovídá vzdálenosti, značky se pohybují plynule. U nejbližšího auta je odstup v sekundách.
+- Počítají se jen auta, která jsou za vámi i podle polohy na trati, takže auto na vedlejší rovince se neoznačí.
+- Auto za vámi mimo zobrazený výřez: šipka u toho okraje. Auto vedle vás: červený pruh na té straně, jeho jasná část ukazuje, jestli je auto vepředu, na úrovni nebo vzadu.
+- Rámeček obepíná skutečný obrys auta: promítnou se rohy karoserie (rozměry auta z CSP) podle toho, jak je auto natočené, takže sedí na střed i na auto v zatáčce nebo ve smyku. Díváme se z místa kamery zrcátka (`MIRROR_POSITION` v `car.ini`, jinak z očí řidiče), ne ze středu auta, proto rámečky sedí i u blízkých aut.
+- Šířka záběru (výchozí 50°) se nastavuje tak, aby značky seděly přesně na autech; když jsou všechny značky trochu vedle, srovná je posun do strany a nahoru/dolů (jen u obrazu 1–4, vlastní kamera ho nepotřebuje). Značky se nevyhlazují, takže v zatáčce za autem nezaostávají. Hlídaná vzdálenost výchozí 60 m.
+- Nastavitelné: kolik nejbližších aut se označí (1–6, výchozí 2), značka (rohový rámeček, celý rámeček, šipka nad autem), barvy (zelená/oranžová/červená, bílá/žlutá/červená, modrá/žlutá/červená), tloušťka čar, výplň a odstup u nejbližšího auta. Když by se značky aut překrývaly (auto schované za jiným), ukáže se jen značka bližšího auta a místo vzdálenějšího se označí další volné auto (jde vypnout).
+- Okna jiných aplikací, která vypadají jako zpětné zrcátko nebo vlajky, aplikace skryje (pokud je AC vede jako okna aplikací) a jednou to oznámí notifikací. Vestavěné virtuální zrcátko a vlajky AC, které okny nejsou, CSP aplikacím vypnout nedovolí. Když AC zpětný pohled zrovna nevykresluje (třeba mimo kokpit), okno to napíše.
+
+**Notifikace**
+- Vzhled: zaoblená pilulka (výchozí), šikmý pruh jako v TV grafice, nebo jen tenká linka s textem.
+- Jak dlouho zpráva zůstane (výchozí 4,5 s) a kolik zpráv je vidět najednou (výchozí 2).
+- Co oznamovat (každé jde vypnout):
+  - nejrychlejší kolo session (kdokoli, se jménem a časem),
+  - vaše pozice: posun nahoru a ztráta, s tím, koho jste předjeli nebo kdo vás předjel (nová pozice musí vydržet 1 s, takže boj bok po boku nebliká),
+  - ostatní auta v boxech a z boxů,
+  - vlajky: žlutá, modrá, černá, penalizace, poslední kolo a cíl,
+  - vaše neplatné kolo (řezání trati), jen během měřeného kola, ne v out lapu,
+  - odpojení jezdce, jen online.
+- Pozice a boxy se standardně hlásí jen v závodě, v tréninku by jich bylo moc.
+- Tlačítko **Ukázat ukázku** zobrazí dvě zkušební zprávy, podle nich okno umístěte (výchozí šířka 520 px, patří doprostřed nahoru).
+- **Nastavení auta (jeden řádek nahoře):** okno MirrorDelta Setup ukáže na 2,5 s (nastavitelné) jeden řádek, když změníte trakční kontrolu, TC2, ABS, rozložení brzd, brzdění motorem, mapu paliva, turbo, MGU-K / MGU-H, omezovač v boxech nebo rychlosti, automatické řazení nebo spojku. Řádek má pořád stejnou velikost: krátký název vlevo (TC, ABS, BRZDY VPŘEDU…), hodnota vpravo a dole dílky úrovně, třeba „TC 3 / 8“. Nová změna řádek přepíše, takže při držení tlačítka brzd se hodnota jen plynule mění. Řádek je jen pro nastavení auta: zprávu AC o nastavení ukáže jen tehdy, když změnu nezachytila aplikace sama (nic se nezdvojí). Ostatní systémové zprávy AC (česky) a penalizace jsou zvlášť v notifikacích. Hodnoty čte stejně jako oficiální aplikace Unbound; co daná verze CSP nemá, se vynechá.
 
 **Diagnostika**
 - Ukazuje, co aplikace při měření kola vidí: jestli se kolo měří, kolik průjezdů cílem a referencí zaznamenala a proč naposledy kolo zahodila nebo nezapočítala.
@@ -102,13 +163,25 @@ Nastavení je společné pro všechna okna a má sedm záložek.
 
 ### Delta
 
-- Referencí je vaše nejlepší **platné** kolo, podle nastavení buď z této session, nebo nejlepší vůbec.
+- Výchozí referencí je **předchozí kolo** (i neplatné, i out lap od výjezdu z boxů). Nic jiného se v tomto režimu nepoužije.
+- V režimech nejlepšího kola je referencí vaše nejlepší **platné** kolo, podle nastavení buď z této session, nebo nejlepší vůbec. Když zvolená reference není, použije se ta druhá. Následující čtyři body platí jen pro tyto režimy.
+- Když AC uzná kolo jako své nejlepší a aplikace ho měla celé změřené, stane se referencí, i když ho vlastní kontrola nevzala.
+- Když vlastní reference není, ale AC nejlepší čas zná, běží delta proti tomuto času. Průběh kola se odhadne podle změřeného kola, nebo rovnoměrně.
+- **Od prvního kola:** dokud platné kolo není, slouží jako dočasná reference celé kolo, které platné být nemůže (kolo začínající v boxové uličce nebo kolo s řezáním). První platné kolo ji nahradí. Dočasná reference se nikdy neukládá.
+- **Out lap:** mini sektory se měří vždy už od výjezdu z boxové uličky. Sektor, ve kterém jste vyjeli, zůstane šedý.
+  - S referencí (uloženou nebo z této session) se sektory barví proti ní a běží i delta. Ukazuje, kolik jste od výjezdu ztratili nebo získali proti referenci na stejném úseku trati.
+  - Bez reference se sektory barví podle delty z AC, pokud ji AC má. Jinak se jen označí jako projeté.
+  - Polohu cílové čáry si aplikace pamatuje pro každé auto a trať, takže sektory sedí i před prvním průjezdem cílem.
+- Kdy delta zatím není a proč, ukazuje záložka Diagnostika. V okně delty žádný nápis není.
 - Během kola aplikace zaznamenává čas v 1000 bodech (každých 0,1 % délky kola). Mezi framy body dopočítává.
 - Delta = aktuální čas v kole − čas reference na stejném místě trati.
 - Delta je lehce vyhlazená (asi 0,15 s). Barva se přepne až při překročení ±0,02 s, takže kolem nuly nebliká.
+- Když vlastní reference ještě není, použije se delta z AC (`performanceMeter`). AC ji počítá proti svému nejlepšímu kolu v session. Mini sektory se pak barví podle toho, jestli se delta z AC v sektoru zlepšila (zeleně), nebo zhoršila (žlutě).
 - Zelená znamená rychlejší než reference, červená pomalejší. Když reference ještě neexistuje, jsou obě čáry šedé a číslo ukazuje `-.--`.
 
 ### Mini sektory
+
+- Fialový sektor je osobní rekord. Počítá se po sektorech: sektor projetý bez řezání a mimo boxy platí, i když celé kolo platné není.
 
 - Kolo je rozdělené na N stejně dlouhých úseků (výchozí 24). Čas průjezdu hranicí úseku se dopočítá mezi framy.
 - Po projetí se úsek obarví:
@@ -121,7 +194,8 @@ Nastavení je společné pro všechna okna a má sedm záložek.
 ### Cílová čára, boxy a resety
 
 - Pozice v kole se měří od místa, kde AC počítá kola. To nemusí ležet přesně na nule pozice na trati, proto aplikace polohu čáry změří při každém průjezdu.
-- **Out lap** a kolo, které začalo v boxové uličce, se nikdy nestanou referencí. Čáry jsou během nich šedé.
+- **Out lap** a kolo, které začalo v boxové uličce, se nikdy nestanou platnou referencí (jen dočasnou, viz výše).
+- Kolo se počítá, jen když AC zároveň zvýší počet kol. Samotné vynulování časovače (třeba při výjezdu z boxů) se za průjezd cílem nepovažuje.
 - **Neplatné kolo** (řezání trati podle AC nebo průjezd boxy) se nikdy nestane referencí.
 - **Teleport do boxů, reset auta a replay:** aktuální kolo se zahodí a měří se znovu od dalšího průjezdu cílem.
 - **Nová session nebo restart:** vynuluje se reference session. Uložená nejlepší kola zůstanou.
@@ -134,16 +208,17 @@ Nastavení je společné pro všechna okna a má sedm záložek.
 | --- | --- |
 | Fialová | Nové nejlepší kolo |
 | Zelená | Rychlejší než předchozí kolo |
-| Červená | Pomalejší než předchozí kolo |
-| Šedá | Out lap nebo neplatné kolo |
+| Červená | Pomalejší než předchozí kolo, nebo smazané kolo (řezání, nebo ho AC po dojetí označilo za neplatné) |
+| Šedá | Out lap nebo kolo z boxové uličky |
 
-Nejrychlejší čas (NEJ) je vaše nejlepší kolo v session podle AC a má fialový rámeček.
+Za řezání se počítá jen změna z platného na neplatné během kola (AC po out lapu ještě chvíli hlásí neplatné kolo, to se nepočítá). Když AC samo kolo hlásí jako neplatné, nikdy není nejrychlejší a NEJ ukáže nejlepší čas před ním. Když AC kolo vezme jako svůj nejlepší čas, AC ho počítá, a aplikace ho nikdy neukáže jako smazané (AC neplatná kola za nejlepší nebere). Smazané kolo ohlásí notifikace „KOLO SMAZÁNO“ s důvodem (kdo ho smazal a nejlepší čas v AC). Proč bylo kolo smazané, ukazuje záložka Diagnostika (řádky „Smazané kolo“ a „Hlášení AC po kole“). Sloupec POSL ukazuje poslední kolo, smazané červeně.
+Nejrychlejší čas (NEJ) je vaše nejlepší kolo v session podle AC (bez smazaných kol) a má fialový rámeček.
 
 ### Teploty pneumatik
 
 - Velké číslo je vždy **teplota jádra** pneumatiky.
 - Plášť (běhoun) má tři zóny: vnitřní, střed a vnější. Vnitřní strana je vždy blíž ke středu auta.
-- Barva vychází z optimální teploty: modrá je studená, zelená optimum, žlutá a červená přehřátá.
+- Barva vychází z optimálního okna: modrá je studená, zelená v okně, žlutá a červená přehřátá.
 - Hodnoty čte aplikace přímo z CSP. Pokud je vaše verze CSP neposkytuje, okno ukáže `-` a v nastavení na záložce Pneumatiky je o tom zpráva.
 
 ### Ukládání
@@ -179,5 +254,7 @@ python tests/run_tests.py
 
 ## Známá omezení
 
+- Písmo ve všech oknech je bez stínu.
+- Původní pořadí (leaderboard) z AC aplikace skrýt neumí, protože CSP umí skrýt jen všechny aplikace najednou. Zavřete ho ručně na liště aplikací.
 - Aplikace zatím nebyla vyzkoušená přímo ve hře, jen v simulaci. Prosím o zpětnou vazbu z prvních jízd.
 - Názvy polí pro teploty pneumatik (`tyreCoreTemperature`, `tyreInsideTemperature`, `tyreMiddleTemperature`, `tyreOutsideTemperature`, `tyreOptimumTemperature`) nejsou ve veřejném SDK. Aplikace je proto při startu ověří a bez nich nespadne.

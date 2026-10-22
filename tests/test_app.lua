@@ -33,18 +33,23 @@ local function speed(p) -- spline units per second, varies around the lap
 end
 
 local tracker = loadApp()
+require('src/config').set('referenceKind', 2)   -- most checks below are written against the best lap
 
 local lateLapTime = false   -- AC updating previousLapTimeMs one frame late
 local lateCallback = false  -- ac.onLapCompleted arriving one frame late
 local pendingPrev, pendingCb = nil, nil
 local splitEvent = false    -- lapCount changes one frame before the timer restarts
 local pendingTimer = nil
+local lateCount = false     -- lapCount changes one frame after the timer restarts
+local pendingCount = false
+local invalidCarry = false  -- AC keeps reporting the finished lap as invalid for a while after the line
 
 local function frame(pace)
   env.clock = env.clock + DT
   if pendingPrev then car.previousLapTimeMs, pendingPrev = pendingPrev, nil end
   if pendingCb then env.callbacks.lap(0, pendingCb[1], pendingCb[2]); pendingCb = nil end
   if pendingTimer then car.lapTimeMs = pendingTimer - DT * 1000; pendingTimer = nil end
+  if pendingCount then car.lapCount = car.lapCount + 1; pendingCount = false end
   local p0 = car.splinePosition
   local p1 = p0 + DT * speed(p0) * pace
   local before = (p0 - LINE) % 1
@@ -56,12 +61,12 @@ local function frame(pace)
     local lapMs = car.lapTimeMs - DT * 1000 + f * DT * 1000
     if lateLapTime then pendingPrev = lapMs else car.previousLapTimeMs = lapMs end
     if splitEvent then pendingTimer = (1 - f) * DT * 1000 + DT * 1000 else car.lapTimeMs = (1 - f) * DT * 1000 end
-    car.lapCount = car.lapCount + 1
+    if lateCount then pendingCount = true else car.lapCount = car.lapCount + 1 end
     if car.isLapValid and not car.wasPit and (car.bestLapTimeMs == 0 or lapMs < car.bestLapTimeMs) then
       car.bestLapTimeMs = lapMs
     end
     if lateCallback then pendingCb = { lapMs, car.isLapValid } else env.callbacks.lap(0, lapMs, car.isLapValid) end
-    car.isLapValid = true
+    if not invalidCarry then car.isLapValid = true end
     car.wasPit = car.isInPitlane
   end
   car.splinePosition = p1 % 1
@@ -74,6 +79,7 @@ local function driveLaps(n, pace, onFrame)
   while car.lapCount < target do
     frame(pace)
     if onFrame then onFrame() end
+    if lateCount and pendingCount then frame(pace) end
   end
 end
 
@@ -95,16 +101,20 @@ local refLap = tracker.sessionRefMs
 
 -- 2. A faster lap: delta negative, mini sectors purple
 local minDelta, sawSign = 0, 0
+local liveGreen, liveFrames = 0, 0
 local u0 = car.lapCount
 driveLaps(1, 1.01, function ()
   if tracker.hasDelta then
     minDelta = math.min(minDelta, tracker.delta)
     sawSign = tracker.deltaSign
+    liveFrames = liveFrames + 1
+    if tracker.liveSign < 0 then liveGreen = liveGreen + 1 end
   end
 end)
 local expected = refLap / 1000 * (1 - 1 / 1.01)
 check(near(minDelta, -expected, 0.06), string.format('faster lap delta %.3f, expected about %.3f', minDelta, -expected))
 check(sawSign == -1, 'delta colour is green when faster')
+check(liveGreen > liveFrames * 0.8, string.format('line is green (gaining now) through a faster lap: %d of %d', liveGreen, liveFrames))
 check(tracker.flashKind == 1, 'faster lap flashes purple (new best)')
 for _ = 1, 120 do frame(1.01) end
 check(tracker.sessionRefMs < refLap, 'faster lap becomes the new reference')
@@ -133,7 +143,7 @@ for _ = 1, 120 do frame(1) end
 for _ = 1, 600 do frame(1.05) end
 car.isLapValid = false
 driveLaps(1, 1.05)
-check(tracker.flashKind == 4, 'cut lap flashes grey')
+check(tracker.flashKind == 5 and tracker.lastLapState == 2, 'cut lap flashes red as deleted')
 for _ = 1, 120 do frame(1) end
 check(tracker.sessionRefMs == bestBefore, 'cut lap does not become the reference')
 
@@ -192,8 +202,10 @@ local ok, err = pcall(function ()
     env.windowW, env.windowH = 150, 168
     car.damage[0], car.damage[2] = layout == 1 and 0 or 30, layout == 1 and 80 or 0
     car.engineLifeLeft = layout == 1 and 1000 or 420
-    config.set('damageAutoHide', layout == 2)
+    config.set('damageShow', layout == 2 and 2 or 1)
     script.windowDamage(DT)
+    env.windowW, env.windowH = 520, 110
+    script.windowNotify(DT)
     env.windowW, env.windowH = 600, 80
   end
   settings.draw()
@@ -204,6 +216,7 @@ check(tracker.diag.error == nil, 'tracker ran without script errors: ' .. tostri
 check(tracker.diag.lapEvents > 5 and tracker.diag.references > 0, 'diagnostics count line crossings and references')
 check((env.calls.rect or 0) > 100, 'rectangles were drawn')
 check(tyres.available() == true and tyres.optimumFromCar() == true, 'tyre temperatures detected')
+check(env.sim.damageDisplayerShown == false and env.calls['Hide Damage'] == 1, 'damage window hides AC damage displayer once')
 
 -- 6b. No per-frame allocation once caches are warm (JIT off: trace compilation would count too)
 do
@@ -226,6 +239,12 @@ do
     script.windowGear(DT)
     env.windowW, env.windowH = 150, 168
     script.windowDamage(DT)
+    env.windowW, env.windowH = 520, 110
+    script.windowNotify(DT)
+    env.windowW, env.windowH = 300, 44
+    script.windowSetup(DT)
+    env.windowW, env.windowH = 480, 120
+    script.windowMirror(DT)
   end
   for _ = 1, 300 do frameAndDraw() end
   jit.off()
@@ -238,7 +257,7 @@ do
   jit.on()
   ui.measureDWriteText, ui.dwriteTextAligned = savedMeasure, savedText
   -- the running lap time string changes ten times a second; everything else is cached
-  check(perFrame < 16, string.format('per-frame allocation %.1f bytes', perFrame))
+  check(perFrame < 16, string.format('per-frame allocation %.1f bytes (error: %s)', perFrame, tostring(tracker.diag.error)))
 end
 
 -- 7. Saved reference loads in a new session
@@ -246,7 +265,7 @@ local saved = tracker.allTimeRefMs
 env.callbacks.release()
 tracker = loadApp()
 config = require('src/config')
-config.set('referenceMode', 2)
+config.set('referenceKind', 2)
 env.callbacks.session(0, false)
 frame(1)
 check(tracker.allTimeRefMs == saved, 'all-time reference loaded from disk')
@@ -265,6 +284,1349 @@ check(ok and tyres2.available() == false, 'tyre window survives missing fields: 
 -- 9. Clearing saved data
 tracker.clearSaved()
 check(not io.fileExists(tracker.dataFile()) and tracker.allTimeRefMs == 0, 'saved data cleared')
+
+-- 10. Without own reference the delta falls back to AC's performanceMeter (deltaSource 1 only)
+car.performanceMeter = -0.42
+env.callbacks.release()
+tracker = loadApp()
+config = require('src/config')
+config.set('deltaSource', 2)
+env.callbacks.session(0, false)
+for _ = 1, 120 do frame(1) end
+check(not tracker.hasDelta and tracker.status ~= nil, 'own-only source shows a status instead of a delta')
+config.set('deltaSource', 1)
+for _ = 1, 120 do frame(1) end
+check(tracker.hasDelta and tracker.deltaFromAC and near(tracker.delta, -0.42, 0.02),
+  'AC delta used while there is no own reference: ' .. tostring(tracker.delta))
+check(tracker.diag.acDelta == true and tracker.status == nil, 'AC delta detected, no status text')
+ok, err = pcall(script.windowDelta, DT)
+check(ok and tracker.diag.error == nil, 'delta window draws with the AC delta: ' .. tostring(err or tracker.diag.error))
+config.set('deltaSource', 1)
+
+-- 11. A lap that starts in the pit lane is a provisional reference until the first valid lap
+tracker.clearSaved()
+env.callbacks.release()
+tracker = loadApp()
+config = require('src/config')
+config.set('deltaSource', 2)
+env.callbacks.session(0, false)
+frame(1)
+car.isInPitlane = true
+driveLaps(1, 0.8)                   -- line crossed inside the pit lane
+car.isInPitlane = false
+check(tracker.flying and not tracker.clean, 'lap starting in the pit lane is recorded but not clean')
+driveLaps(1, 1)                     -- that lap ends: nothing valid yet, so it becomes provisional
+for _ = 1, 30 do frame(1) end
+check(tracker.provisionalMs > 0 and tracker.refKind == 3, 'pit lane lap becomes the provisional reference')
+check(tracker.hasDelta, 'delta available on the first flying lap')
+driveLaps(1, 1)
+for _ = 1, 120 do frame(1) end
+check(tracker.allTimeRefMs > 0 and tracker.refKind == 2, 'first valid lap replaces the provisional reference')
+config.set('deltaSource', 1)
+
+-- 12. Mini sectors and the delta line blink blue at the rev limiter
+do
+  local blue = 0
+  local saved = ui.drawRectFilled
+  ui.drawRectFilled = function (p1, p2, color)
+    if color.b > 0.99 and color.r < 0.3 and color.g > 0.5 and color.g < 0.6 then blue = blue + 1 end
+  end
+  car.rpm = car.rpmLimiter
+  env.clock = math.floor(env.clock) + 0.01   -- the "on" half of the 8 Hz blink
+  env.windowW, env.windowH = 600, 80
+  script.windowDelta(DT)
+  ui.drawRectFilled = saved
+  car.rpm = 6000
+  check(blue >= tracker.sectorCount + 1, 'sectors and line blink blue at the limiter: ' .. blue)
+end
+
+-- 13. Notifications
+local notify = require('src/notify')
+env.cars[1] = { index = 1, bestLapTimeMs = 0, isInPitlane = false, isConnected = true, racePosition = 1, lapCount = 0, isLapValid = true }
+env.cars[2] = { index = 2, bestLapTimeMs = 0, isInPitlane = false, isConnected = true, racePosition = 2, lapCount = 0, isLapValid = true }
+env.sim.carsCount = 3
+car.racePosition = 3
+env.sim.currentSessionIndex = 1     -- new session: notify takes a fresh snapshot
+for _ = 1, 200 do frame(1) end      -- past the quiet start
+local function newest() return notify.get(1) end
+env.cars[1].bestLapTimeMs = 30000   -- faster than anything the player drove
+for _ = 1, 10 do frame(1) end
+check(newest() and newest().kind == notify.FASTEST and newest().sub:find('Jezdec 1', 1, true), 'fastest lap notification')
+env.cars[2].isInPitlane = true
+for _ = 1, 10 do frame(1) end
+check(newest().kind == notify.PIT_IN, 'pit entry notification')
+car.racePosition, env.cars[2].racePosition = 2, 3
+for _ = 1, 80 do frame(1) end
+check(newest().kind == notify.GAIN and newest().title == 'POSUN NA P2' and newest().sub:find('Jezdec 2', 1, true), 'position gained notification')
+env.sim.raceFlagType = ac.FlagType.Caution
+frame(1)
+check(notify.flagKind == notify.YELLOW and newest().kind ~= notify.YELLOW, 'yellow flag goes to the flag window, not a notification by default')
+env.sim.raceFlagType = 0
+car.isLapValid = false
+frame(1)
+check(newest().kind == notify.INVALID, 'invalid lap notification')
+env.cars[2].isConnected = false     -- offline: AI cars are not "connected", no message
+for _ = 1, 10 do frame(1) end
+check(newest().kind ~= notify.DISCONNECT, 'no disconnect notification offline')
+env.sim.isOnlineRace = true
+env.cars[1].isConnected = false
+for _ = 1, 10 do frame(1) end
+check(newest().kind == notify.DISCONNECT, 'disconnect notification online')
+env.sim.isOnlineRace = false
+do
+  local notifyWindow = require('src/notify_window')
+  local shared = vec2(10, 10)
+  local savedText = ui.dwriteTextAligned
+  ui.dwriteTextAligned = function () end
+  env.windowW, env.windowH = 520, 110
+  local ok2, err2 = pcall(function ()
+    for style = 1, 4 do config.set('notifyLook', style); notifyWindow.draw() end
+  end)
+  check(ok2, 'notification window draws all styles: ' .. tostring(err2))
+  check((env.calls.quad or 0) >= 2, 'slanted strip uses quads')
+  for _ = 1, 50 do notifyWindow.draw() end
+  jit.off()
+  collectgarbage('collect')
+  collectgarbage('stop')
+  local before = collectgarbage('count')
+  for _ = 1, 200 do notifyWindow.draw() end
+  local perFrame = (collectgarbage('count') - before) * 1024 / 200
+  collectgarbage('restart')
+  jit.on()
+  ui.dwriteTextAligned = savedText
+  check(perFrame < 1, string.format('notification window allocation %.1f bytes per frame', perFrame))
+  config.set('notifyLook', 4)
+end
+check(tracker.diag.error == nil, 'no script errors after notifications: ' .. tostring(tracker.diag.error))
+
+-- 14. Out lap: delta and mini sectors from the pit exit; timer restarts off the line are not crossings
+car.isLapValid = true
+env.callbacks.session(0, false)
+car.isInPitlane = true
+frame(0.4)
+car.splinePosition = 0.5            -- line at 0.3: the pit exit is 20 % into the lap
+for _ = 1, 60 do frame(0.4) end
+check(not tracker.flying and not tracker.partial, 'no delta while still in the pit lane')
+car.lapTimeMs = 0                   -- AC restarts the timer in the pit lane without counting a lap
+frame(0.4)
+check(not tracker.flying, 'timer restart in the pit lane is not a line crossing')
+car.isInPitlane = false
+local outColored, outDelta = 0, nil
+for _ = 1, 1200 do frame(1) end
+for i = 1, tracker.sectorCount do
+  if tracker.secState[i] == 2 or tracker.secState[i] == 3 then outColored = outColored + 1 end
+end
+check(tracker.partial and tracker.hasDelta and math.abs(tracker.delta) < 0.15,
+  'out lap delta from the pit exit: ' .. tostring(tracker.hasDelta) .. ' ' .. tostring(tracker.delta))
+check(outColored >= 2, 'out lap mini sectors are coloured: ' .. outColored)
+driveLaps(1, 1)
+check(tracker.flying and tracker.clean, 'flying lap after the out lap')
+for _ = 1, 600 do frame(1) end
+car.lapTimeMs = 0                   -- timer restart mid-lap on track, lapCount unchanged
+frame(1)
+check(not tracker.flying and tracker.diag.lastReset:find('mimo', 1, true) ~= nil, 'timer restart away from the line is not a crossing')
+for _ = 1, 40 do frame(1) end         -- after the 0.5 s wait for a late lapCount
+check(tracker.partial, 'measuring continues as a partial lap until the line')
+check(tracker.diag.error == nil, 'no script errors in the out lap: ' .. tostring(tracker.diag.error))
+
+-- 15. Without any reference, a timer restart on track (no lapCount change) never makes a reference;
+--     lapCount arriving a frame after the timer still confirms a lap
+tracker.clearSaved()
+env.callbacks.session(0, false)
+frame(1)
+car.splinePosition = 0.6
+for _ = 1, 30 do frame(1) end
+car.lapTimeMs = 0                   -- e.g. AC restarting the timer at the pit exit
+for _ = 1, 30 do frame(1) end
+driveLaps(1, 1)                     -- the real line
+for _ = 1, 120 do frame(1) end
+check(tracker.sessionRefMs == 0 and tracker.provisionalMs == 0, 'timer restart off the line gives no reference of any kind')
+lateCount = true
+driveLaps(1, 1)
+check(tracker.flying and tracker.clean, 'lapCount one frame after the timer confirms the new lap')
+for _ = 1, 120 do frame(1) end
+lateCount = false
+check(tracker.sessionRefMs > 0, 'lap confirmed by a lapCount one frame late becomes the reference')
+check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
+
+-- 16. Without an own reference the mini sectors follow AC's delta
+tracker.clearSaved()
+env.callbacks.session(0, false)
+frame(1)
+car.performanceMeter = 0
+driveLaps(1, 1)                     -- start a flying lap, nothing to compare with yet
+for _ = 1, 1500 do
+  car.performanceMeter = car.performanceMeter - 0.0005   -- getting faster than AC's best
+  frame(1)
+end
+local acGreen = 0
+for i = 1, tracker.sectorCount do if tracker.secState[i] == 2 then acGreen = acGreen + 1 end end
+check(tracker.refKind ~= 1 and tracker.refKind ~= 2 and tracker.deltaFromAC and acGreen >= 3, 'mini sectors coloured from AC delta: ' .. acGreen)
+
+-- 17. Line crossed in the pit lane with lapCount one frame late: the lap time is still read correctly
+tracker.clearSaved()
+env.callbacks.session(0, false)
+frame(1)
+driveLaps(1, 1)                     -- first crossing on track
+car.isInPitlane = true
+lateCount = true
+driveLaps(1, 1)                     -- this lap ends in the pit lane (timer first, lapCount a frame later)
+lateCount = false
+local pitLapMs = car.previousLapTimeMs
+check(tracker.flying and tracker.flashLapMs > 0 and math.abs(tracker.flashLapMs - pitLapMs) < 30,
+  string.format('lap time read across a late lapCount in the pit lane: %.0f vs %.0f', tracker.flashLapMs, pitLapMs))
+car.isInPitlane = false
+check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
+
+-- 18. Out lap without any reference: mini sectors from the pit exit (AC delta or neutral),
+--     the measured line survives a restart, no status text in the delta window, no invalid-lap message
+tracker.clearSaved()
+env.callbacks.session(0, false)
+frame(1)
+driveLaps(1, 1)                     -- a confirmed crossing: the line position is learned and saved
+env.callbacks.release()
+tracker = loadApp()
+config = require('src/config')
+notify = require('src/notify')
+env.callbacks.session(0, false)
+car.isInPitlane = true
+frame(0.4)
+car.splinePosition = 0.5
+for _ = 1, 30 do frame(0.4) end
+car.isInPitlane = false
+local countBefore = notify.count
+car.isLapValid = false              -- AC marks the out lap invalid at the pit exit
+for _ = 1, 1500 do
+  car.performanceMeter = car.performanceMeter + 0.0005
+  frame(1)
+end
+car.isLapValid = true
+local start = tracker.lapFraction()
+local yellow = 0
+for i = 1, tracker.sectorCount do if tracker.secState[i] == 3 then yellow = yellow + 1 end end
+check(tracker.partial and tracker.refKind ~= 1 and tracker.refKind ~= 2, 'out lap without a reference is measured from the pit exit')
+check(math.abs(start - LINE) < 0.01, string.format('line position loaded from the saved file: %.4f', start))
+check(yellow >= 3, 'out lap mini sectors coloured from AC delta: ' .. yellow)
+local invalidShown = false
+for i = 1, math.min(8, notify.count - countBefore) do
+  local e = notify.get(i)
+  if e and e.kind == notify.INVALID then invalidShown = true end
+end
+check(not invalidShown, 'no invalid-lap notification on the out lap')
+env.lastTexts = {}
+env.windowW, env.windowH = 600, 80
+script.windowDelta(DT)
+local statusShown = false
+for _, str in ipairs(env.lastTexts) do if str:find('čekám', 1, true) or str:find('průjezd', 1, true) then statusShown = true end end
+check(not statusShown, 'no status text in the delta window')
+config.set('deltaSource', 2)        -- no AC delta either: sectors still advance, neutral grey
+for _ = 1, 600 do frame(1) end
+local neutral = 0
+for i = 1, tracker.sectorCount do if tracker.secState[i] == 4 then neutral = neutral + 1 end end
+check(tracker.partial and neutral >= 3, 'out lap sectors shown as passed without any comparison: ' .. neutral)
+config.set('deltaSource', 1)
+check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
+
+-- 19. A lap our checks rejected but AC took as its best lap becomes the reference
+tracker.clearSaved()
+env.callbacks.session(0, false)
+frame(1)
+driveLaps(1, 1)                     -- flying lap starts
+car.bestLapTimeMs = 0               -- AC has no best lap yet in this session
+for _ = 1, 600 do frame(1) end
+car.isLapValid = false              -- a moment our tracker sees as a cut, AC does not keep
+frame(1)
+car.isLapValid = true
+driveLaps(1, 1)
+for _ = 1, 30 do frame(1) end
+check((tracker.refKind == 1 or tracker.refKind == 2) and math.abs(tracker.sessionRefMs - car.bestLapTimeMs) < 2,
+  string.format('lap confirmed by AC best time becomes the reference: kind %d, %.0f vs %.0f', tracker.refKind, tracker.sessionRefMs, car.bestLapTimeMs))
+
+-- 20. AC knows a best lap but has no delta of its own and nothing was driven yet: no guessed delta
+tracker.clearSaved()
+car.performanceMeter = nil          -- this CSP has no performanceMeter
+env.callbacks.release()
+tracker = loadApp()
+config = require('src/config')
+env.callbacks.session(0, false)
+frame(1)
+driveLaps(1, 1)
+for _ = 1, 300 do frame(1) end
+check(tracker.refKind ~= 4 and not tracker.hasDelta,
+  'no made-up even-pace delta on the first lap without any driven lap: kind ' .. tracker.refKind)
+check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
+car.performanceMeter = 0
+
+-- 21. The damage window draws without errors, with balanced clip rects and no per-frame allocation
+do
+  local damage = require('src/damage_window')
+  local savedText = ui.dwriteTextAligned
+  ui.dwriteTextAligned = function () end
+  env.windowW, env.windowH = 160, 200
+  car.damage[0], car.damage[1], car.damage[2], car.damage[3] = 20, 0, 45, 5
+  car.engineLifeLeft = 640
+  car.wheels[1].isBlown = true
+  config.set('damageShow', 1)
+  for i = 0, 3 do                     -- section 8 emptied the wheels
+    local wh = car.wheels[i]
+    wh.tyreWear, wh.isBlown, wh.suspensionDamage = 0.1, i == 1, 0
+  end
+  car.wheels[2].suspensionDamage = 0.5
+  local ok3, err3 = pcall(function ()
+    damage.draw()
+    car.damage[1] = 40                -- a fresh hit: the rear flashes
+    damage.draw()
+  end)
+  check(ok3, 'damage window draws: ' .. tostring(err3))
+  check((env.clipDepth or 0) == 0, 'damage window pops every clip rect')
+  check(damage.suspensionFieldOk() == true, 'suspension damage read')
+  for _ = 1, 20 do damage.draw() end
+  jit.off()
+  collectgarbage('collect')
+  collectgarbage('stop')
+  local before = collectgarbage('count')
+  for _ = 1, 50 do damage.draw() end
+  local perFrame = (collectgarbage('count') - before) * 1024 / 50
+  collectgarbage('restart')
+  jit.on()
+  ui.dwriteTextAligned = savedText
+  check(perFrame < 1, string.format('damage window allocates nothing per frame (%.1f bytes)', perFrame))
+  car.wheels[2].suspensionDamage = 0
+  car.wheels[1].isBlown = false
+  car.damage[0], car.damage[1], car.damage[2], car.damage[3] = 0, 0, 0, 0
+  car.engineLifeLeft = 1000
+end
+
+-- 22. Windows get placed once
+do
+  config.set('layoutVersion', 0)
+  for _ = 1, 300 do frame(1) end      -- arranged a few seconds after start
+  local moved = 0
+  for _ in pairs(env.moved or {}) do moved = moved + 1 end
+  check(moved == 10 and config.S.layoutVersion == 9, 'all ten windows placed: ' .. moved)
+  check(env.moved.w14 and math.abs(env.moved.w14.x + 431 - 960) < 2 and env.moved.w14.y > 1000, 'standings at the bottom centre')
+  check(env.moved.w10 and math.abs(env.moved.w10.x + 200 - 960) < 2 and env.moved.w10.y > 40 and env.moved.w10.y < 100
+    and env.resized and env.resized.w10 and env.resized.w10.x == 400, 'mirror at the top centre under the settings line, a rectangle')
+  check(env.shown and env.shown.w11 == false and env.shown.w12 == false and env.shown.w13 == nil and env.shown.w10 ~= false,
+    'other mirror and flag windows hidden, ours and the mirror configurator kept')
+  check(env.moved.w9 and math.abs(env.moved.w9.x + 150 - 960) < 2 and env.moved.w9.y < 20, 'car settings line at the top centre')
+  check(env.moved.w6 and env.moved.w6.x > 1300 and env.moved.w6.y > 100 and env.moved.w6.y < 200, 'notifications under the flag')
+  check(env.moved.w5 and env.moved.w5.x < 100 and env.moved.w5.y > 300 and env.moved.w5.y < 600, 'damage window at the left edge, vertical middle')
+  check(env.moved.w7 and env.moved.w7.x > 1500 and env.moved.w7.y < 100, 'flag window in the top right corner')
+  env.moved = nil
+  for _ = 1, 300 do frame(1) end
+  check(env.moved == nil, 'windows are placed only once')
+end
+
+-- 23. A failing window shows its error and does not stop the rest
+do
+  local damage = require('src/damage_window')
+  local saved = damage.draw
+  damage.draw = function () error('test failure') end
+  local ok4 = pcall(script.windowDamage, DT)
+  damage.draw = saved
+  check(ok4, 'a window error is caught')
+  local okDelta = pcall(script.windowDelta, DT)
+  check(okDelta, 'other windows keep drawing after an error')
+  tracker.diag.error = nil
+end
+
+-- 24. AC's overlay leaderboard is turned off, system messages hidden and shown as notifications, flag window
+do
+  local notify2 = require('src/notify')
+  env.overlayBoard.displayMode = 2
+  for _ = 1, 90 do frame(1) end
+  check(env.overlayBoard.displayMode == 0, 'AC overlay leaderboard turned off')
+  local guiIni = env.iniFiles and env.iniFiles[env.folder .. '/gui.ini']
+  check(guiIni and guiIni['HIDE/HIDE_SYSTEM_MESSAGES'] == 1, 'AC system messages hidden: written to the user gui.ini [HIDE]')
+  local writes = env.iniWrites
+  for _ = 1, 120 do frame(1) end
+  check(env.iniWrites == writes, 'gui.ini written only once')
+  local before = #env.configEdits
+  for _ = 1, 60 * 60 do frame(1) end
+  check(#env.configEdits == before, 'live edit not repeated forever')
+  env.sim.currentSessionIndex = (env.sim.currentSessionIndex or 0) + 1
+  for _ = 1, 35 * 60 do frame(1) end
+  check(#env.configEdits == before + 3, 'live edit applied again 3, 10 and 30 s after a session change: ' .. (#env.configEdits - before))
+  local setup = require('src/setup_line')
+  local countBefore = notify2.count
+  env.callbacks.message('ABS', 'Level 3', 'info', 2)
+  for _ = 1, 40 do frame(1) end
+  local sl, sv = setup.current()
+  check(sl == 'ABS' and sv == 'Úroveň 3' and notify2.count == countBefore,
+    'AC settings message shown in the car settings line, not the notifications: ' .. sl .. ' / ' .. sv)
+  env.callbacks.message('Session', 'Qualifying starts in 2 minutes', 'info', 2)
+  for _ = 1, 40 do frame(1) end
+  sl = setup.current()
+  check(notify2.get(1).kind == notify2.SYSTEM and sl == 'ABS', 'other AC messages go to the notifications, not the settings line')
+  env.callbacks.message('Penalty', 'Cut', 'illegal', 2)
+  check(notify2.get(1).kind == notify2.PENALTY, 'illegal message shown as a penalty')
+  check(notify2.get(1).title == 'PENALIZACE' and notify2.get(1).sub == 'Řezání trati',
+    'AC message translated to Czech: ' .. notify2.get(1).title .. ' / ' .. notify2.get(1).sub)
+  env.callbacks.message('Traction Control', 'Level 3', 'info', 2)
+  for _ = 1, 40 do frame(1) end
+  sl, sv = setup.current()
+  check(sl == 'TRAKČNÍ KONTROLA' and sv == 'Úroveň 3', 'TC message in Czech: ' .. sl .. ' / ' .. sv)
+  env.callbacks.message('Auto Clutch', 'ON', 'info', 2)
+  for _ = 1, 40 do frame(1) end
+  sl, sv = setup.current()
+  check(sv == 'Zapnuto' and sl == 'AUTOMATICKÁ SPOJKA', 'ON translated: ' .. sv)
+  local flags = require('src/flag_window')
+  env.sim.raceFlagType = ac.FlagType.Caution
+  frame(1)
+  check(notify2.flagKind == notify2.YELLOW, 'active flag known to the flag window')
+  env.windowW, env.windowH = 260, 80
+  local before = env.calls.rect or 0
+  local ok5, err5 = pcall(script.windowFlags, DT)
+  check(ok5 and (env.calls.rect or 0) > before and tracker.diag.error == nil, 'flag window draws the yellow flag: ' .. tostring(err5 or tracker.diag.error))
+  env.sim.raceFlagType = ac.FlagType.Finished
+  frame(1)
+  pcall(script.windowFlags, DT)
+  env.sim.raceFlagType = 0
+  frame(1)
+  check(notify2.flagKind == 0, 'flag cleared')
+end
+
+-- 25. Damage window shows up only after a hit by default, and hides again
+do
+  local damage = require('src/damage_window')
+  config.set('damageShow', 3)
+  env.windowW, env.windowH = 160, 200
+  local function drawn()
+    local before = env.calls.rect or 0
+    damage.draw()
+    return (env.calls.rect or 0) > before
+  end
+  car.damage[0] = 0
+  for _ = 1, 30 do frame(1); damage.draw() end
+  for _ = 1, 600 do frame(1) end
+  check(not drawn(), 'damage window hidden without a hit')
+  car.damage[0] = 30
+  check(drawn(), 'damage window appears after a hit')
+  for _ = 1, 9 * 60 do frame(1) end
+  check(not drawn(), 'damage window hides again after a few seconds')
+  car.damage[0] = 0
+  config.set('damageShow', 1)
+end
+
+-- 26. Previous lap as the reference, and the split line follows what happens right now
+do
+  config.set('referenceKind', 3)
+  config.set('deltaSource', 2)
+  driveLaps(1, 1)                     -- lap at pace 1 becomes "the previous lap"
+  check(tracker.prevLapMs > 0, 'previous lap recorded')
+  local gain, lose, frames = 0, 0, 0
+  driveLaps(1, 1.02, function ()     -- faster than the previous lap all the way
+    if tracker.hasDelta then
+      frames = frames + 1
+      if tracker.refKind == 5 and tracker.nowDelta < 0 then gain = gain + 1 end
+    end
+  end)
+  check(gain > frames * 0.8, string.format('split line gains against the previous lap: %d of %d', gain, frames))
+  local last, jump = nil, 0
+  for _ = 1, 1200 do
+    frame(1.02)
+    if tracker.hasDelta then
+      if last then
+        local dj = math.abs(tracker.nowDelta - last)
+        jump = math.max(jump, dj)
+      end
+      last = tracker.nowDelta
+    end
+  end
+  check(jump < 0.004, string.format('split line moves smoothly (largest step %.4f s per frame)', jump))
+  driveLaps(1, 0.97, function ()     -- now slower than that faster lap
+    if tracker.hasDelta and tracker.nowDelta > 0 then lose = lose + 1 end
+  end)
+  check(lose > frames * 0.6, 'split line loses when slower than the previous lap: ' .. lose)
+  -- the split line draws: green half when gaining
+  local green = 0
+  local saved = ui.drawRectFilled
+  ui.drawRectFilled = function (p1, p2, color)
+    if math.abs(color.g - config.S.colGreen.g) < 0.01 and math.abs(color.r - config.S.colGreen.r) < 0.01 then green = green + 1 end
+  end
+  tracker.nowDelta, tracker.hasDelta = -0.05, true
+  car.rpm = 6000
+  env.windowW, env.windowH = 600, 80
+  require('src/delta_window').draw()
+  ui.drawRectFilled = saved
+  check(green >= 1, 'split line draws a green half when gaining')
+  config.set('referenceKind', 2)
+  config.set('deltaSource', 1)
+  check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
+end
+
+-- 27. Previous lap mode: the out lap compares with nothing (no saved best, no AC delta), the next lap compares
+--     with the out lap from the pit exit on; a lap deleted by AC is red, never the best, shown as the last lap
+do
+  config.set('referenceKind', 3)
+  config.set('deltaSource', 1)
+  car.performanceMeter = 0.3          -- AC's delta exists, it must not be used
+  check(tracker.allTimeRefMs > 0, 'a saved best lap exists for this test')
+  env.callbacks.session(0, false)
+  car.bestLapTimeMs = 0               -- new session: AC has no best lap yet
+  car.lapTimeMs = 0                   -- AC's lap timer starts in the pit box, next to the line
+  car.isInPitlane = true
+  car.splinePosition = LINE + 0.001
+  while car.splinePosition < 0.5 do frame(0.4) end   -- slowly down the pit lane to the exit, 0.2 of a lap
+  car.isInPitlane = false
+  local outDelta = false
+  for _ = 1, 600 do frame(1); if tracker.hasDelta then outDelta = true end end
+  check(tracker.partial and tracker.refKind == 0, 'out lap in previous-lap mode has no reference: ' .. tracker.refKind)
+  driveLaps(1, 1, function () if tracker.hasDelta then outDelta = true end end)
+  check(not outDelta, 'no delta on the out lap in previous-lap mode')
+  local outLapMs = car.previousLapTimeMs
+  check(near(tracker.lastLapMs, outLapMs, 20), 'out lap time shown as the last lap')
+  check(tracker.prevLapPartial and tracker.prevLapMs > 0, 'the out lap is kept as the previous lap')
+  local early, late, minD, secEarly, secLate, endDelta = 0, 0, 1, 0, 0, nil
+  driveLaps(1, 1.03, function ()
+    local u = (car.splinePosition - LINE) % 1
+    if u > 0.99 and tracker.hasDelta then endDelta = tracker.delta end
+    if tracker.hasDelta and tracker.refKind == 5 and not tracker.deltaFromAC then
+      if u > 0.01 and u < 0.19 then early = early + 1 elseif u >= 0.19 then late = late + 1; minD = math.min(minD, tracker.delta) end
+    end
+    if u > 0.95 and u < 0.97 then
+      secEarly, secLate = 0, 0
+      for j = 1, 4 do if tracker.secState[j] == 2 or tracker.secState[j] == 3 then secEarly = secEarly + 1 end end
+      for j = 7, 20 do if tracker.secState[j] == 1 or tracker.secState[j] == 2 then secLate = secLate + 1 end end
+    end
+  end)
+  check(early == 0 and late > 1000 and minD < -0.5,
+    string.format('second lap compares with the out lap from the pit exit: %d before, %d after, %.2f s', early, late, minD))
+  check(secEarly == 0 and secLate >= 12, string.format('sectors before the pit exit neutral (%d), after it faster (%d)', secEarly, secLate))
+  local lapDiff = (car.previousLapTimeMs - outLapMs) / 1000
+  check(endDelta and near(endDelta, lapDiff, 0.3),
+    string.format('delta at the line equals the difference to the out lap: %.2f vs %.2f', endDelta or 99, lapDiff))
+  -- AC calls a lap invalid without any cut, on a lap driven clean: not deleted
+  local realLap0 = env.callbacks.lap
+  env.callbacks.lap = function (i, ms) realLap0(i, ms, false, 0) end
+  driveLaps(1, 1.0)
+  env.callbacks.lap = realLap0
+  for _ = 1, 5 do frame(1) end
+  check(tracker.lastLapState == 1 and tracker.flashKind ~= 5, 'invalid without cuts on a clean lap is not deleted')
+  check(tracker.lastLapState == 1 and tracker.lastLapMs > 0, 'valid last lap recorded')
+  -- AC deletes the next (fastest) lap after the line, e.g. track limits, and does not take it as its best
+  local realLap = env.callbacks.lap
+  local acBestBefore = car.bestLapTimeMs
+  env.callbacks.lap = function (i, ms) car.bestLapTimeMs = acBestBefore; realLap(i, ms, false) end
+  driveLaps(1, 1.06)
+  env.callbacks.lap = realLap
+  for _ = 1, 5 do frame(1) end
+  local deleted = tracker.lastLapMs
+  check(tracker.flashKind == 5 and tracker.lastLapState == 2, 'deleted lap flashes red and is marked deleted: ' .. tracker.flashKind)
+  local nn = require('src/notify')
+  check(nn.get(1) and nn.get(1).title == 'KOLO SMAZÁNO' and nn.get(1).sub:find('AC', 1, true),
+    'deleted lap announced with the reason: ' .. (nn.get(1) and (nn.get(1).title .. ' / ' .. nn.get(1).sub) or '-'))
+  check(near(tracker.bestMs, acBestBefore, 2) and tracker.isDeletedLap(deleted),
+    string.format('deleted lap is not the best lap: %.0f (deleted %.0f)', tracker.bestMs, deleted))
+  env.lastTexts = {}
+  env.windowW, env.windowH = 505, 60
+  script.windowTiming(DT)
+  local lastShown = false
+  local str = require('src/draw').formatLap(deleted, 3)
+  for _, t in ipairs(env.lastTexts) do if t == str then lastShown = true end end
+  check(lastShown, 'timing window shows the last lap ' .. str)
+  driveLaps(1, 1.045)                 -- slower than the deleted lap, faster than the best valid one
+  for _ = 1, 5 do frame(1) end
+  check(tracker.flashKind == 1, 'next valid lap is the best, not the deleted one: ' .. tracker.flashKind)
+  -- AC's callback says invalid, but AC takes the lap as its best: AC counts it, so it is shown as valid
+  env.callbacks.lap = function (i, ms) realLap(i, ms, false) end
+  driveLaps(1, 1.07)
+  env.callbacks.lap = realLap
+  for _ = 1, 120 do frame(1) end
+  check(tracker.lastLapState == 1 and near(tracker.bestMs, car.bestLapTimeMs, 2) and near(car.bestLapTimeMs, tracker.lastLapMs, 2),
+    'a lap AC counts as its best is never shown as deleted')
+  -- AC still reports the previous lap as invalid for a while after the line (no lap callback): not a cut
+  local realLap2 = env.callbacks.lap
+  env.callbacks.lap = function () end
+  car.isLapValid = false
+  invalidCarry = true
+  driveLaps(1, 1.0)                   -- this lap ends invalid and AC keeps saying so after the line
+  invalidCarry = false
+  local fr = 0
+  driveLaps(1, 1.0, function () fr = fr + 1; if fr == 150 then car.isLapValid = true end end)
+  for _ = 1, 120 do frame(1) end
+  check(tracker.lastLapState == 1 and tracker.flashKind ~= 5, 'invalid carried over from the previous lap is not a cut: ' .. tracker.flashKind)
+  -- a lap the app deleted on its own (no callback) that AC takes as its best lap is valid after all
+  fr = 0
+  driveLaps(1, 1.0, function () fr = fr + 1; if fr == 600 then car.isLapValid = false elseif fr == 601 then car.isLapValid = true end end)
+  for _ = 1, 120 do frame(1) end
+  check(tracker.lastLapState == 2, 'cut seen on track and no callback: deleted')
+  car.bestLapTimeMs = tracker.lastLapMs
+  frame(1)
+  check(tracker.lastLapState == 1 and near(tracker.bestMs, car.bestLapTimeMs, 2),
+    'AC took the lap as its best: not deleted, shown as the best lap')
+  env.callbacks.lap = realLap2
+  config.set('referenceKind', 2)
+  check(tracker.diag.error == nil, 'no script errors: ' .. tostring(tracker.diag.error))
+end
+
+-- 28. Car settings line: a TC change shows one line at the top; AC's own message about it does not replace it
+do
+  local setup = require('src/setup_line')
+  for _ = 1, 120 do frame(1) end
+  car.tractionControlMode = 3
+  frame(1)
+  local label, value = setup.current()
+  check(label == 'TC' and value == '3 / 8', 'TC change shown: ' .. label .. ' / ' .. value)
+  env.callbacks.message('TC', '3', 'info', 2)
+  for _ = 1, 60 do frame(1) end
+  label, value = setup.current()
+  check(value == '3 / 8', 'AC message right after does not replace the own reading: ' .. value)
+  local n0 = setup.count
+  env.callbacks.message('TC', '4', 'info', 2)  -- AC first, own reading a few frames later: still one line
+  for _ = 1, 5 do frame(1) end
+  car.tractionControlMode = 4
+  for _ = 1, 60 do frame(1) end
+  label, value = setup.current()
+  check(value == '4 / 8' and setup.count == n0 + 1, 'AC message before the own reading is not shown twice: ' .. value)
+  car.brakeBias = 0.6
+  frame(1)
+  label, value = setup.current()
+  check(label == 'BRZDY VPŘEDU' and value == '60,0 %', 'brake bias shown: ' .. value)
+  car.absMode = 0
+  frame(1)
+  label, value = setup.current()
+  check(label == 'ABS' and value == 'vypnuto', 'ABS off shown: ' .. value)
+  local n = setup.count
+  car.autoClutch = false
+  config.set('setupLine', false)
+  frame(1)
+  check(setup.count == n, 'nothing shown when the line is turned off')
+  config.set('setupLine', true)
+  env.windowW, env.windowH = 520, 44
+  local before = env.calls.rect or 0
+  car.absMode = 1
+  frame(1)
+  local ok6, err6 = pcall(script.windowSetup, DT)
+  check(ok6 and (env.calls.rect or 0) > before and tracker.diag.error == nil,
+    'car settings line draws: ' .. tostring(err6 or tracker.diag.error))
+end
+
+-- 29. Mirror window: AC's rear view in a 4:1 frame, markers above the cars behind, arrows for cars alongside
+do
+  local mirror = require('src/mirror_window')
+  local saved1, saved2 = env.cars[1], env.cars[2]
+  for i = 0, 3 do                     -- earlier sections replaced the wheels
+    car.wheels[i].position = { x = (i % 2 == 0) and 0.8 or -0.8, y = 0.3, z = i < 2 and 1.3 or -1.3 }
+  end
+  local function carAt(x, z, vz)
+    return { index = 1, bestLapTimeMs = 0, isInPitlane = false, isInPit = false, isConnected = true, racePosition = 1,
+      lapCount = 0, isLapValid = true, position = { x = x, y = 0, z = z }, velocity = { x = 0, y = 0, z = vz },
+      look = { x = 0, y = 0, z = 1 }, side = { x = 1, y = 0, z = 0 }, up = { x = 0, y = 1, z = 0 },
+      aabbCenter = { x = 0, y = 0.2, z = 0 }, aabbSize = { x = 1.9, y = 1.2, z = 4.5 } }
+  end
+  local function withTransform(c) c.transform = env.transformOf(c); return c end
+  local plainCarAt = carAt
+  carAt = function (x, z, vz) return withTransform(plainCarAt(x, z, vz)) end
+  env.cars[1] = carAt(1, -8, 58)       -- close behind on the left, closing in
+  env.cars[2] = carAt(-2, -50, 40)     -- far behind on the right, slower
+  env.windowW, env.windowH = 400, 150
+  env.recordFills, env.fills = true, {}
+  local ok, err = pcall(script.windowMirror, DT)
+  env.recordFills = false
+  local m, sh = env.lastMirror, env.lastShader
+  local function stretched(t)
+    return math.abs((t[3] - t[1]) / (t[4] - t[2]) - (t[7] - t[5]) * 4 / (t[8] - t[6]))
+  end
+  check(ok and m and m[3] == 1024 and m[4] == 256 and sh and stretched(sh) < 0.01 and sh[6] == 0 and sh[8] == 1 and sh[5] > 0,
+    'gamma mode: rear view into a canvas, drawn with the HDR shader, middle of the width, not stretched: ' .. tostring(err))
+  env.windowW, env.windowH = 600, 100           -- wider than 4:1: the whole width, middle of the height
+  script.windowMirror(DT)
+  sh = env.lastShader
+  check(stretched(sh) < 0.01 and sh[5] == 0 and sh[7] == 1 and sh[6] > 0, 'wide window: whole width, middle of the height')
+  env.windowW, env.windowH = 400, 150
+  env.hovered, env.clicked = true, true         -- a click switches to the YEBIS canvas like CSP's OBS view
+  script.windowMirror(DT)
+  env.hovered, env.clicked = false, false
+  local im = env.lastImage
+  check(config.S.mirrorMode == 2 and env.canvasExposure == 30 and im and im.img == env.canvas and stretched(im) < 0.01,
+    'click: YEBIS mode with exposure 30, drawn cropped')
+  config.set('mirrorMode', 3)
+  ok, err = pcall(script.windowMirror, DT)
+  check(ok and env.tonemapDepth == 0, 'UI tonemapping mode draws: ' .. tostring(err))
+  config.set('mirrorMode', 1)
+  local function markerAt(test)
+    for j = 1, mirror.shown do if test(mirror.drawnX[j]) then return mirror.drawnThreat[j] end end
+  end
+  script.windowMirror(DT)
+  check(mirror.shown == 2, 'two cars behind get brackets: ' .. mirror.shown)
+  check(markerAt(function (x) return x < 200 end) == 3, 'close car closing in on the left: red, on the left')
+  check(markerAt(function (x) return x > 200 end) == 1, 'slower car far behind on the right: white, on the right')
+  -- a car on another part of the track (parallel straight) is not a car behind us
+  env.sim.trackLengthM = 5000
+  env.cars[2].splinePosition = (car.splinePosition + 0.3) % 1
+  env.cars[1].splinePosition = (car.splinePosition - 8 / 5000) % 1
+  script.windowMirror(DT)
+  check(mirror.shown == 1, 'car on a parallel straight ignored, the one really behind kept: ' .. mirror.shown)
+  env.sim.trackLengthM = nil
+  env.cars[1] = carAt(10, -15, 52)     -- behind, far to the left, outside the shown crop
+  env.cars[2] = carAt(-50, -20, 40)    -- far to the side: not on our piece of track
+  script.windowMirror(DT)
+  check(mirror.edgeLeft and not mirror.edgeRight, 'car behind outside the crop: arrow at the left edge only')
+  env.cars[1] = carAt(2.5, -1, 50)     -- alongside on the left, a bit behind
+  script.windowMirror(DT)
+  check(mirror.sideLeft and mirror.sideLeft > 0 and mirror.sideRight == nil, 'car alongside on the left: left side bar, slightly behind')
+  env.cars[1] = carAt(1, -8, 58)
+  env.cars[2] = carAt(-2, -20, 55)
+  local savedCount = env.sim.carsCount
+  env.sim.carsCount = 4
+  env.cars[3] = carAt(0.5, -40, 50)
+  script.windowMirror(DT)
+  check(mirror.shown == 2, 'three cars behind: only the two nearest get brackets: ' .. mirror.shown)
+  config.set('mirrorTargets', 1)
+  script.windowMirror(DT)
+  check(mirror.shown == 1, 'one target: only the nearest car is marked')
+  config.set('mirrorTargets', 3)
+  config.set('mirrorHideOverlap', false)
+  local styleOk = true
+  for style = 1, 3 do
+    for palette = 1, 3 do
+      config.set('mirrorMarkerStyle', style)
+      config.set('mirrorPalette', palette)
+      local okS = pcall(script.windowMirror, DT)
+      styleOk = styleOk and okS and mirror.shown == 3
+    end
+  end
+  check(styleOk and tracker.diag.error == nil, 'all marker styles and colour schemes draw three targets')
+  config.set('mirrorHideOverlap', true)
+  -- a car right behind another one (same line, a bit further): its marker would overlap, only the nearer one shows
+  env.cars[2] = carAt(1.1, -11, 55)
+  env.cars[3] = carAt(-4, -30, 50)     -- well to the right: its own marker
+  script.windowMirror(DT)
+  check(mirror.shown == 2, 'overlapping car hidden, the next free one marked instead: ' .. mirror.shown)
+  local nearX = false
+  for j = 1, mirror.shown do if mirror.drawnThreat[j] == 3 then nearX = true end end
+  check(nearX, 'the nearer car keeps its marker')
+  config.set('mirrorHideOverlap', false)
+  script.windowMirror(DT)
+  check(mirror.shown == 3, 'without the option all three are marked: ' .. mirror.shown)
+  config.set('mirrorHideOverlap', true)
+  env.cars[2] = carAt(-2, -20, 55)
+  config.set('mirrorTargets', 2)
+  config.set('mirrorMarkerStyle', 1)
+  config.set('mirrorPalette', 1)
+  env.cars[3] = nil
+  env.sim.carsCount = savedCount
+  -- centring: the box is the projection of the car's real outline seen from the mirror camera
+  local function only(c)
+    env.cars[1], env.cars[2] = c, nil
+    for _ = 1, 3 do script.windowMirror(DT) end
+    return mirror.drawnX[1], mirror.drawnW[1], mirror.drawnY[1]
+  end
+  local centre = 200
+  local x0, w0 = only(carAt(0, -20, 50))
+  check(mirror.shown == 1 and math.abs(x0 - centre) < 0.5 and mirror.camSource == 'oči řidiče',
+    string.format('car right behind: marker centred (%.1f), camera from the driver eyes (%s)', x0 or -1, tostring(mirror.camSource)))
+  local turned = carAt(0, -20, 50)
+  turned.look, turned.side = { x = 1, y = 0, z = 0 }, { x = 0, y = 0, z = -1 }   -- broadside, e.g. spinning
+  local x1, w1 = only(turned)
+  check(math.abs(x1 - centre) < 0.5 and w1 > w0 * 1.8, string.format('turned car: wider box (%.1f vs %.1f), still centred', w1, w0))
+  local offCentre = carAt(0, -20, 50)
+  offCentre.aabbCenter = { x = 0, y = 0.2, z = -1 }  -- body longer at the back: the box follows the body, not the origin
+  local x2 = only(offCentre)
+  check(math.abs(x2 - centre) < 0.5, 'bounding box centre used')
+  -- the mirror camera from car.ini (MIRROR_POSITION), read again after a session change
+  env.carIni = { ['car.ini'] = { ['GRAPHICS/MIRROR_POSITION'] = '0.5, 0.9, 0.2' } }
+  env.sim.currentSessionIndex = env.sim.currentSessionIndex + 1
+  local x3 = only(carAt(0, -20, 50))
+  check(mirror.camSource == 'MIRROR_POSITION' and x3 > centre + 3,
+    string.format('camera to the left (car.ini): a car right behind us is right of the centre (%.1f)', x3))
+  env.carIni = nil
+  env.sim.currentSessionIndex = env.sim.currentSessionIndex - 1
+  config.set('mirrorOffsetX', 20)
+  config.set('mirrorOffsetY', -10)
+  local x4, _, y4 = only(carAt(0, -20, 50))
+  config.set('mirrorOffsetX', 0)
+  config.set('mirrorOffsetY', 0)
+  local x5, _, y5 = only(carAt(0, -20, 50))
+  check(math.abs(x4 - x5 - 20) < 0.5 and math.abs(y4 - y5 + 10) < 0.5, 'manual offset moves the markers')
+  -- own camera (mode 6 automatic exposure): the app renders the rear view itself from the markers' camera, mirrored,
+  -- own car clipped
+  config.set('mirrorMode', 6)
+  config.set('mirrorCamPos', 2)                       -- first at the driver's place, the rear bumper below
+  config.set('mirrorOffsetX', 25)                     -- calibration offsets do not apply to the own camera
+  local x7 = only(carAt(1, -20, 50))
+  local shot = env.shots and env.shots[#env.shots]
+  check(shot and env.sceneReady and shot.aa == 0 and shot.mipCount > 8 and shot.shaders == 0 and shot.shadows == 'area'
+    and shot.scene.filter == 'sceneRoot:yes',
+    'own camera: scene shot like CSP\'s OBS camera views with MIPs, updated when the scene is ready')
+  env.sceneReady()
+  check(shot.mips == 1 and env.lastShader, 'own camera: MIPs for the automatic exposure, drawn through the shader')
+  local tanH = math.tan(math.rad(config.S.mirrorFov / 2))
+  check(shot.updates == 1 and math.abs(shot.fov - math.deg(2 * math.atan(tanH / 4))) < 0.01
+    and shot.look.z == -1 and math.abs(shot.pos.y - 0.6) < 1e-6 and shot.near > 2,
+    string.format('own camera: looks back from the mirror camera, vertical FOV %.2f, own car clipped (near %.2f)',
+      shot.fov or -1, shot.near or -1))
+  local im = env.lastShader
+  check(im and im[5] > im[7] and math.abs((im[3] - im[1]) / (im[4] - im[2]) - (im[5] - im[7]) * 4 / (im[8] - im[6])) < 0.01
+    and mirror.exact,
+    'own camera: picture mirrored left to right, not stretched')
+  check(x7 < centre - 3 and mirror.shown == 1, string.format('own camera: car behind on the left marked on the left, no offset (%.1f)', x7))
+  config.set('mirrorOffsetX', 0)
+  -- camera higher and tilted down: the shot and the markers move together
+  local _, _, yLevel = only(carAt(1, -20, 50))
+  config.set('mirrorCamHeight', 0.3)
+  config.set('mirrorCamPitch', 8)
+  local _, _, yTilted = only(carAt(1, -20, 50))
+  env.sceneReady()
+  check(math.abs(shot.pos.y - 0.9) < 1e-6 and shot.look.y < -0.1 and shot.look.z < -0.95 and shot.up.z < -0.1
+    and yTilted < yLevel - 10,
+    string.format('own camera higher and tilted down: shot follows (look.y %.2f), car higher in the picture (%.0f -> %.0f)',
+      shot.look.y, yLevel, yTilted))
+  config.set('mirrorCamHeight', 0)
+  config.set('mirrorCamPitch', 0)
+  -- default: camera on the rear bumper, middle of the back, 0.5 m above the bottom, just behind the car
+  config.set('mirrorCamPos', 1)
+  local xB = only(carAt(0, -20, 50))
+  env.sceneReady()
+  check(math.abs(shot.pos.z - (-0.1 - 2.25 - 0.05)) < 1e-6 and math.abs(shot.pos.y - 0.4) < 1e-6 and shot.pos.x == 0
+    and shot.near < 0.2 and math.abs(xB - centre) < 0.5,
+    string.format('own camera on the rear bumper (%.2f, %.2f, %.2f), near %.2f, car behind centred',
+      shot.pos.x, shot.pos.y, shot.pos.z, shot.near))
+  config.set('mirrorMode', 5)
+  only(carAt(1, -20, 50))
+  env.sceneReady()
+  local shot6 = env.shots[#env.shots]               -- (the mode 5 shot; named after the old order)
+  local im6 = env.lastImage
+  check(shot6 ~= shot and shot6.aa == 104 and shot6.shaders == 0 and shot6.shadows == 'area' and shot6.updates == 1
+    and im6 and im6.img == shot6 and im6[5] > im6[7],
+    'own camera like the game: main shaders, shadows, full YEBIS, drawn mirrored')
+  config.set('mirrorCamQuality', 1)
+  only(carAt(1, -20, 50))
+  local fast = env.shots[#env.shots]
+  check(shot6.disposed and fast ~= shot6 and fast.aa == 105 and fast.shaders == 14 and env.lastImage.img == fast,
+    'quality change makes the shot again: fast = simplified shaders and YEBIS')
+  config.set('mirrorCamQuality', 3)
+  only(carAt(1, -20, 50))
+  local best = env.shots[#env.shots]
+  check(best.shadows == 'dedicated' and best.grass == 'dedicated' and best.aa == 104, 'best quality: own shadows and grass')
+  config.set('mirrorCamQuality', 2)
+  only(carAt(1, -20, 50))
+  env.sceneReady()
+  shot6 = env.shots[#env.shots]
+  shot.updates = 0
+  env.sceneReady()
+  check(shot.updates == 0, 'the unused shot is not rendered')
+  -- no allocation per frame with the own camera either (markers + shot update)
+  config.set('mirrorMode', 5)
+  env.cars[1], env.cars[2] = carAt(1, -20, 50), carAt(-2, -30, 50)
+  local function mirrorFrame() env.clock = env.clock + DT; script.windowMirror(DT); env.sceneReady() end
+  local sharedSize = vec2(10, 10)                     -- the mocks' text functions allocate themselves
+  local savedMeasure, savedText = ui.measureDWriteText, ui.dwriteTextAligned
+  ui.measureDWriteText = function () return sharedSize end
+  ui.dwriteTextAligned = function () end
+  for _ = 1, 100 do mirrorFrame() end
+  jit.off()
+  collectgarbage('collect')
+  collectgarbage('stop')
+  local before = collectgarbage('count')
+  for _ = 1, 200 do mirrorFrame() end
+  local perFrame = (collectgarbage('count') - before) * 1024 / 200
+  collectgarbage('restart')
+  jit.on()
+  ui.measureDWriteText, ui.dwriteTextAligned = savedMeasure, savedText
+  check(perFrame < 1, string.format('own camera: no per-frame allocation (%.1f bytes)', perFrame))
+  config.set('mirrorMode', 1)
+  env.clock = env.clock + 1
+  shot6.updates = 0
+  env.sceneReady()
+  check(shot6.updates == 0, 'no shots rendered while AC\'s mirror picture is used')
+  local noBox = plainCarAt(0, -20, 50)              -- older CSP without the fields: the old estimate
+  noBox.aabbSize = nil
+  local x6 = only(noBox)
+  check(mirror.shown == 1 and math.abs(x6 - centre) < 0.5, 'car without a bounding box still marked')
+  env.cars[1], env.cars[2] = saved1, saved2
+  local ok3, err3 = pcall(function ()
+    env.windowW, env.windowH = 60, 30
+    script.windowMirror(DT)
+    env.windowW, env.windowH = 400, 150
+  end)
+  check(ok3 and tracker.diag.error == nil, 'tiny window draws without errors: ' .. tostring(err3 or tracker.diag.error))
+  env.mirrorAvailable = false
+  ok = pcall(script.windowMirror, DT)
+  env.mirrorAvailable = nil
+  check(ok and tracker.diag.error == nil, 'no rear view available: the window says so, no error')
+  env.cars[1], env.cars[2] = saved1, saved2
+end
+
+-- 30. Standings row: the player and the cars around them in AC's order, gaps, replaces AC's F9 leaderboard
+do
+  local standings = require('src/standings_window')
+  local saved = {}
+  for i = 1, 6 do saved[i] = env.cars[i] end
+  env.sim.carsCount = 7
+  car.racePosition, car.bestLapTimeMs = 4, 90000
+  for i = 1, 6 do
+    env.cars[i] = { index = i, racePosition = i < 4 and i or i + 1, bestLapTimeMs = 89000 + i * 400, isInPitlane = i == 6,
+      isConnected = true, lapCount = car.lapCount, splinePosition = car.splinePosition, isLapValid = true, isInPit = false }
+  end
+  env.windowW, env.windowH = 862, 40
+  local savedSession = env.session
+  env.session = { type = 'practice' }   -- not a race: best lap differences
+  env.lastTexts = {}
+  for _ = 1, 200 do frame(1) end
+  local ok, err = pcall(script.windowStandings, DT)
+  local seen = {}
+  for _, t in ipairs(env.lastTexts) do seen[t] = true end
+  check(ok and standings.count == 7 and standings.first == 1, 'seven tiles from P1 with the player in the middle: ' .. tostring(err))
+  check(seen['JEZ'] and seen['HRÁ'] and seen['BOX'] and seen['-0,600'] and seen['+0,600'],
+    'short names, pit and best lap differences shown')
+  -- race, live mode: gaps on track in seconds, the car ahead negative
+  config.set('standingsGapMode', 1)
+  env.session = { type = ac.SessionType.Race }
+  env.sim.trackLengthM = 5000
+  for _ = 1, 200 do frame(1) end
+  env.cars[3].splinePosition = (car.splinePosition + 50 / 5000) % 1    -- 50 m ahead of the player
+  env.cars[3].lapCount = car.lapCount + ((car.splinePosition + 50 / 5000) >= 1 and 1 or 0)
+  env.lastTexts = {}
+  script.windowStandings(DT)
+  seen = {}
+  for _, t in ipairs(env.lastTexts) do seen[t] = true end
+  local gapAhead = false
+  for t in pairs(seen) do if t:match('^%-%d,%d$') and t ~= '-0,0' then gapAhead = true end end
+  check(gapAhead, 'race: car ahead shown with a negative gap in seconds')
+  -- timing loop (after every sector): car 2 follows the player exactly 1.5 s behind on the same line
+  config.set('standingsGapMode', 2)
+  local hist = {}
+  local follower = env.cars[2]
+  follower.isInPitlane = false
+  for f = 1, 60 * 40 do
+    frame(1)
+    hist[f] = car.lapCount + car.splinePosition
+    local back = hist[math.max(1, f - 90)]
+    follower.lapCount, follower.splinePosition = math.floor(back), back % 1
+  end
+  env.lastTexts = {}
+  script.windowStandings(DT)
+  local loopGap = false
+  for _, t in ipairs(env.lastTexts) do if t == '+1,5' then loopGap = true end end
+  check(loopGap, 'timing loop: car 1.5 s behind shows +1,5 after a sector')
+  config.set('standingsGapTo', 2)
+  ok, err = pcall(script.windowStandings, DT)
+  check(ok, 'interval to the car ahead draws: ' .. tostring(err))
+  config.set('standingsGapTo', 1)
+  config.set('standingsNames', 2)
+  env.lastTexts = {}
+  script.windowStandings(DT)
+  local fullName = false
+  for _, t in ipairs(env.lastTexts) do if t == 'JEZDEC' then fullName = true end end
+  check(fullName, 'surname mode shows the whole surname')
+  config.set('standingsNames', 1)
+  env.session, env.sim.trackLengthM = savedSession, nil
+  car.racePosition = 4
+  for i = 1, 6 do env.cars[i] = saved[i] end
+  env.sim.carsCount = 12
+end
+
+-- 31. Pit lane: BOX instead of the lap time, the delta line and mini sectors blink yellow side to side
+--     (the halves style in yellow, the first version), then the newer styles
+do
+  config.set('pitStyle', 4)
+  config.set('pitColor', 4)
+  local yellow = config.S.colYellow
+  local function countYellow()
+    local left, right = 0, 0
+    local saved = ui.drawRectFilled
+    ui.drawRectFilled = function (p1, p2, color)
+      if color.r > 0.95 and color.g > 0.75 and color.g < 0.85 and color.b < 0.15 then
+        if p1.x < 300 then left = left + 1 else right = right + 1 end
+      end
+    end
+    env.windowW, env.windowH = 600, 80
+    script.windowDelta(DT)
+    ui.drawRectFilled = saved
+    return left, right
+  end
+  car.isInPitlane = true
+  env.clock = 0.1
+  local l1, r1 = countYellow()
+  env.clock = 0.45
+  local l2, r2 = countYellow()
+  check(l1 > 0 and r2 > 0 and l1 + r1 > 1 and l2 + r2 > 1 and (l1 ~= l2 or r1 ~= r2),
+    string.format('pit lane: yellow blinking alternates sides (%d/%d then %d/%d)', l1, r1, l2, r2))
+  env.lastTexts = {}
+  env.windowW, env.windowH = 505, 60
+  script.windowTiming(DT)
+  local box = false
+  for _, t in ipairs(env.lastTexts) do if t == 'BOX' then box = true end end
+  check(box, 'pit lane: BOX instead of the current lap time')
+  car.isInPitlane = false
+  env.lastTexts = {}
+  script.windowTiming(DT)
+  box = false
+  for _, t in ipairs(env.lastTexts) do if t == 'BOX' then box = true end end
+  check(not box, 'on track: lap time again')
+  -- scanner (default): one light runs along the line; its centre moves between two moments
+  config.set('pitStyle', 1)
+  config.set('pitColor', 1)
+  local function litCentre()
+    local sum, wsum = 0, 0
+    local saved = ui.drawRectFilled
+    ui.drawRectFilled = function (p1, p2, color)
+      if color.b > 0.9 and color.r < 0.3 and color.mult > 0.05 then
+        sum = sum + (p1.x + p2.x) / 2 * color.mult
+        wsum = wsum + color.mult
+      end
+    end
+    env.windowW, env.windowH = 600, 80
+    script.windowDelta(DT)
+    ui.drawRectFilled = saved
+    return wsum > 0 and sum / wsum or nil
+  end
+  car.isInPitlane = true
+  env.clock = 0.2
+  local c1 = litCentre()
+  env.clock = 0.85
+  local c2 = litCentre()
+  check(c1 and c2 and c1 < 200 and c2 > 400, string.format('pit scanner: blue light runs across (%s -> %s)', tostring(c1), tostring(c2)))
+  local allOk = true
+  for style = 1, 4 do
+    config.set('pitStyle', style)
+    for t = 0, 2, 0.25 do
+      env.clock = t
+      local okD, errD = pcall(script.windowDelta, DT)
+      local okT, errT = pcall(script.windowTiming, DT)
+      if not (okD and okT) then print('pit style ' .. style .. ': ' .. tostring(errD or errT)) end
+      allOk = allOk and okD and okT
+    end
+  end
+  check(allOk and tracker.diag.error == nil, 'all pit light styles draw')
+  config.set('pitStyle', 1)
+  car.isInPitlane = false
+end
+
+-- 32. Car data: shift point from the car's optimal up-shift (ai.ini), tyre window from its grip curve (tyres.ini)
+do
+  local carData = require('src/car_data')
+  local savedIni, savedSession, savedRpm = env.carIni, env.sim.currentSessionIndex, car.rpm
+  car.rpmLimiter = 7800
+  env.carIni = {
+    ['ai.ini'] = { ['GEARS/UP'] = 7000 },
+    ['tyres.ini'] = {
+      ['THERMAL_FRONT/PERFORMANCE_CURVE'] = { { 0, 0.8 }, { 70, 0.96 }, { 90, 1 }, { 105, 1 }, { 140, 0.9 } },
+      ['THERMAL_REAR/PERFORMANCE_CURVE'] = { { 0, 0.8 }, { 60, 1 }, { 75, 1 }, { 120, 0.9 } },
+      ['THERMAL_FRONT_1/PERFORMANCE_CURVE'] = { { 0, 0.8 }, { 50, 1 }, { 65, 1 }, { 120, 0.9 } },
+    },
+  }
+  env.sim.currentSessionIndex = savedSession + 5
+  frame(1)
+  check(carData.aiShiftRpm == 7000 and carData.shiftRpm(car) == 7000,
+    'shift point: the car\'s optimal up-shift instead of the limiter: ' .. carData.shiftRpm(car))
+  check(carData.tyreLo[1] >= 87 and carData.tyreLo[1] <= 89 and carData.tyreHi[1] >= 105 and carData.tyreHi[1] <= 107
+    and carData.tyreLo[2] < 62 and carData.tyreHi[2] > 74,
+    string.format('tyre window from the grip curve: front %d-%d, rear %d-%d',
+      carData.tyreLo[1], carData.tyreHi[1], carData.tyreLo[2], carData.tyreHi[2]))
+  car.compoundIndex = 1
+  frame(1)
+  check(carData.tyreLo[1] < 52 and carData.tyreHi[1] > 63 and carData.tyreLo[2] == 0,
+    'other compound: its own section (THERMAL_FRONT_1), the rear without one falls back')
+  car.compoundIndex = nil
+  -- the gear window blinks at 7000 already, not only at the limiter
+  config.set('gearShiftFlash', true)
+  car.rpm = 7100
+  env.windowW, env.windowH = 260, 102
+  local blue = 0
+  local saved = ui.drawRectFilled
+  ui.drawRectFilled = function (p1, p2, color) if color.b > 0.9 and color.r < 0.4 and color.g < 0.7 then blue = blue + 1 end end
+  for t = 0, 0.25, 0.0625 do env.clock = 100 + t; script.windowGear(DT) end
+  local blueAtShift = blue
+  config.set('gearRpmSource', 2)
+  blue = 0
+  for t = 0, 0.25, 0.0625 do env.clock = 100 + t; script.windowGear(DT) end
+  ui.drawRectFilled = saved
+  check(blueAtShift > 0 and blue == 0,
+    string.format('gear window blinks blue at the car\'s shift point (%d), not yet with the limiter as source (%d)', blueAtShift, blue))
+  check(carData.shiftRpm(car) == 7800 * 0.98, 'limiter as the source when chosen')
+  config.set('gearRpmSource', 1)
+  config.set('gearShiftAdjust', -2)
+  check(math.abs(carData.shiftRpm(car) - 6860) < 0.01, 'fine tuning of the shift point')
+  config.set('gearShiftAdjust', 0)
+  env.windowW, env.windowH = 180, 140
+  local okT = pcall(script.windowTyres, DT)
+  check(okT and tracker.diag.error == nil, 'tyres window draws with the curve window')
+  env.carIni, car.rpm = savedIni, savedRpm
+  env.sim.currentSessionIndex = savedSession
+  frame(1)
+end
+
+-- 33. Pit lane cockpit lights: the car's shift LEDs (digital_instruments.ini, else CSP's LED marks, else by name),
+--     checked at the pit entry, drawn again in the 3D pass; the virtual LED bar when they do not fit
+do
+  local carLeds = require('src/car_leds')
+  local savedIni, savedSession = env.carIni, env.sim.currentSessionIndex
+  local function reload(k) env.sim.currentSessionIndex = savedSession + k; car.isInPitlane = false; frame(1) end
+  local function enterPit() car.isInPitlane = true; frame(1) end
+  local function leavePit() car.isInPitlane = false; frame(1) end
+  env.carMeshes = { LED_A = true, LED_B = true, LED_C = true, LED_D = true, ABS_LIGHT = true }
+  -- side points to +x (left): LED_A is the leftmost, D the rightmost; their RPM order is different on purpose
+  env.meshPos = { LED_A = { 0.3, 1, 0.5 }, LED_B = { 0.1, 1, 0.5 }, LED_C = { -0.1, 1, 0.5 }, LED_D = { -0.3, 1, 0.5 },
+    ABS_LIGHT = { 0, 0.9, 0.5 } }
+  env.carIni = { ['digital_instruments.ini'] = {
+    ['LED_0/OBJECT_NAME'] = 'LED_C', ['LED_0/RPM_SWITCH'] = 7000, ['LED_0/EMISSIVE'] = { '40', '0', '0' },
+    ['LED_1/OBJECT_NAME'] = 'LED_A', ['LED_1/RPM_SWITCH'] = 6000,
+    ['LED_2/OBJECT_NAME'] = 'LED_B', ['LED_2/RPM_SWITCH'] = 6500,
+    ['LED_3/OBJECT_NAME'] = 'LED_D', ['LED_3/RPM_SWITCH'] = 7500,
+  } }
+  env.emissive = {}
+  reload(7)
+  check(carLeds.found == 4 and carLeds.source == 'digital_instruments.ini' and not carLeds.fits,
+    'LED meshes found at the session start, the check waits for the pit entry: ' .. carLeds.found)
+  enterPit()
+  local draw3D = env.renderCallbacks and env.renderCallbacks['main.root.transparent']
+  check(carLeds.fits and carLeds.useMeshes and not carLeds.useVirtual and carLeds.count == 4 and draw3D ~= nil,
+    'pit entry: the LEDs fit, drawn in the 3D pass')
+  -- each LED mesh drawn again in its own shape, lit ones in colour, the others dark (covers AC's RPM lights)
+  local function meshFrame()
+    env.meshDraws, env.circles = {}, {}
+    draw3D()
+    local best, name, dark = -1, nil, 0
+    for _, d in ipairs(env.meshDraws) do
+      if d.r > best then best, name = d.r, d.name end
+      if d.r < 0.05 then dark = dark + 1 end
+    end
+    return name, #env.meshDraws, dark
+  end
+  env.clock = 1.4 * 215
+  local m1, nm, dark1 = meshFrame()
+  local d1 = env.meshDraws[1]
+  check(not d1.original and d1.z and d1.z < 0.5 and d1.z > 0.49 and math.abs(d1.y - 1) < 0.01,
+    string.format('LED redrawn with an own matrix, lifted towards the camera (z %.4f)', d1.z or 0))
+  env.clock = 1.4 * 215.5
+  local m2 = meshFrame()
+  check(nm == 4 and dark1 >= 1 and m1 ~= m2 and ((m1 == 'LED_D' and m2 == 'LED_A') or (m1 == 'LED_A' and m2 == 'LED_D')),
+    string.format('the light runs from one end (%s) to the other (%s), the rest dark (%d)', tostring(m1), tostring(m2), dark1))
+  local lit = env.meshDraws[1]
+  for _, d in ipairs(env.meshDraws) do if d.r > lit.r then lit = d end end
+  check(lit.r > lit.g * 1.5 and lit.g > lit.b * 3 and lit.r < 5, 'lit LED orange, moderate')
+  check(next(env.emissive) == nil and #env.circles == 0, 'the LEDs\' own material is not touched, no virtual bar')
+  -- the LEDs follow the car and a moving node (steering wheel)
+  env.clock = 1.4 * 215
+  meshFrame()
+  local za = env.meshDraws[1].z
+  car.position.z = car.position.z + 10
+  meshFrame()
+  check(math.abs((env.meshDraws[1].z - za) - 10) < 0.05, 'lights move with the car')
+  car.position.z = car.position.z - 10
+  env.ledParentOffset = { x = 0, y = 0.2, z = 0 }
+  meshFrame()
+  check(math.abs(env.meshDraws[1].y - 1.2) < 0.05, 'live node matrices each frame: ' .. env.meshDraws[1].y)
+  env.ledParentOffset = nil
+  -- fallbacks: the own matrix fails -> 'original' transform; render.mesh fails -> discs over the LEDs
+  env.ownMatrixFails = true
+  env.meshDraws = {}
+  draw3D()
+  env.ownMatrixFails = nil
+  check(carLeds.drawMode == 2 and #env.meshDraws == 4 and env.meshDraws[1].original, 'fallback to the original transform')
+  env.meshFails = true
+  env.circles = {}
+  draw3D()
+  env.meshFails = nil
+  check(#env.circles > 0 and carLeds.drawMode == 3 and carLeds.meshError ~= nil, 'fallback to glowing discs')
+  -- every other LED in turn
+  carLeds.drawMode = 1
+  config.set('carLedsStyle', 2)
+  env.clock = 300.05
+  meshFrame()
+  local litA = {}
+  for _, d in ipairs(env.meshDraws) do if d.r > 0.05 then litA[#litA + 1] = d.name end end
+  env.clock = 300.35
+  meshFrame()
+  local litB = {}
+  for _, d in ipairs(env.meshDraws) do if d.r > 0.05 then litB[#litB + 1] = d.name end end
+  check(#litA == 2 and #litB == 2 and litA[1] ~= litB[1], 'every other LED in turn')
+  config.set('carLedsStyle', 1)
+  leavePit()
+  env.circles, env.meshDraws = {}, {}
+  draw3D()
+  check(#env.circles + #env.meshDraws == 0 and not carLeds.active, 'on track: nothing drawn')
+  -- no digital_instruments.ini: the meshes CSP marks as LEDs; nothing marked: cockpit meshes named like LEDs
+  env.carIni = nil
+  reload(8)
+  check(carLeds.found == 5 and carLeds.source == 'CSP (actsAsLED)' and carLeds.drawMode == 1,
+    'fallback to CSP LED marks, drawing way reset: ' .. carLeds.found)
+  env.carMeshes = { LED_A = false, LED_B = false, RPM_3 = false, DASH = false }
+  env.meshPos.RPM_3 = { 0, 1, 0.5 }
+  env.meshPos.DASH = { 0, 0.9, 0.5 }
+  reload(9)
+  check(carLeds.found == 3 and carLeds.source == 'podle názvu', 'last resort: meshes named like LEDs: ' .. carLeds.found)
+  env.carMeshes = { LED_A = true, LED_B = true, LED_C = true, LED_D = true, ABS_LIGHT = true }
+  env.meshPos.RPM_3, env.meshPos.DASH = nil, nil
+  -- the virtual bar: discs in front of the driver's eyes, left to right, when the car's LEDs do not fit
+  env.carIni = { ['digital_instruments.ini'] = {
+    ['LED_0/OBJECT_NAME'] = 'LED_A', ['LED_1/OBJECT_NAME'] = 'LED_B', ['LED_2/OBJECT_NAME'] = 'LED_C',
+    ['LED_3/OBJECT_NAME'] = 'LED_D' } }
+  env.hiddenMeshes = { LED_A = true }
+  env.meshRadius = { LED_B = 0.2 }
+  env.meshPos.LED_C = { 0.1, 1, 4 }                  -- far from the driver
+  reload(21)
+  enterPit()
+  check(not carLeds.fits and carLeds.reason:find('nesedí') and carLeds.dropped:find('1 skrytých')
+    and carLeds.dropped:find('1 moc velkých') and carLeds.dropped:find('1 mimo kokpit'),
+    'check: hidden, oversized and far meshes dropped, too few left: ' .. carLeds.reason)
+  env.clock = 1.4 * 215
+  env.meshDraws, env.circles = {}, {}
+  draw3D()
+  local xs, ok = {}, #env.meshDraws == 0 and #env.circles == 10 and carLeds.useVirtual
+  for _, c in ipairs(env.circles) do
+    xs[#xs + 1] = c.x
+    if math.abs(c.y - 0.46) > 0.01 or math.abs(c.z - 0.55) > 0.01 then ok = false end
+  end
+  check(ok and math.abs(xs[1] - 0.14) < 0.01 and math.abs(xs[10] + 0.14) < 0.01,
+    string.format('virtual bar: 10 discs 55 cm ahead, 14 cm below the eyes, left to right (%d discs)', #env.circles))
+  local brightest, bx = -1, nil
+  for _, c in ipairs(env.circles) do if c.r > brightest then brightest, bx = c.r, c.x end end
+  env.clock = 1.4 * 215.5
+  env.circles = {}
+  draw3D()
+  local brightest2, bx2 = -1, nil
+  for _, c in ipairs(env.circles) do if c.r > brightest2 then brightest2, bx2 = c.r, c.x end end
+  check(bx and bx2 and math.abs(bx - bx2) > 0.2, 'the light runs along the virtual bar')
+  -- all LED meshes hidden at once = another LOD / camera, not a reason to drop them (geometry is read at the
+  -- session start, so a changed mesh needs a new session)
+  env.hiddenMeshes = { LED_A = true, LED_B = true, LED_C = true, LED_D = true }
+  env.meshRadius = nil
+  env.meshPos.LED_C = { -0.1, 1, 0.5 }
+  reload(22)
+  enterPit()
+  check(carLeds.fits and carLeds.count == 4, 'all hidden (inactive LOD): still the car\'s LEDs: ' .. carLeds.reason)
+  -- per car override and the virtual bar modes
+  env.hiddenMeshes = { LED_A = true }
+  env.meshRadius = { LED_B = 0.2, LED_C = 0.2 }
+  reload(24)
+  carLeds.setCarChoice(1)
+  enterPit()
+  check(carLeds.useMeshes and carLeds.count == 4 and config.S.carLedsCars == 'test_car=1',
+    'always the car\'s LEDs for this car (remembered), the check would say no: ' .. carLeds.reason)
+  leavePit()
+  carLeds.setCarChoice(2)
+  enterPit()
+  check(not carLeds.useMeshes and carLeds.useVirtual, 'never the car\'s LEDs for this car: the virtual bar')
+  carLeds.setCarChoice(0)
+  check(config.S.carLedsCars == '', 'automatic again: entry removed')
+  env.hiddenMeshes, env.meshRadius = nil, nil
+  reload(25)
+  config.set('carLedsVirtual', 2)
+  enterPit()
+  check(carLeds.useVirtual and not carLeds.useMeshes, 'virtual bar always: the car\'s LEDs left alone')
+  leavePit()
+  config.set('carLedsVirtual', 3)
+  env.cspCarConfig = { SCRIPTABLE_DISPLAY_0 = {} }
+  enterPit()
+  check(not carLeds.fits and carLeds.reason:find('skriptem') and not carLeds.active, 'scripted dash, bar off: nothing')
+  env.cspCarConfig = nil
+  config.set('carLedsVirtual', 1)
+  leavePit()
+  -- try it now: the lights run for a while outside the pit lane
+  reload(26)
+  carLeds.test(8)
+  frame(1)
+  env.meshDraws = {}
+  draw3D()
+  check(carLeds.active and carLeds.testing and #env.meshDraws == 4, 'test button: lights on track for a while')
+  env.clock = env.clock + 9
+  frame(1)
+  check(not carLeds.active, 'test over')
+  env.carIni, env.carMeshes, env.meshPos = savedIni, nil, nil
+  env.sim.currentSessionIndex = savedSession
+  frame(1)
+end
+
+-- 34. Pit lane: headlights (and hazards as an option) blink, the previous state comes back at the exit
+do
+  local lights = require('src/pit_car_lights')
+  car.headlightsActive, car.hazardLights = true, false
+  env.calls.headlights, env.calls.hazards = 0, 0
+  car.isInPitlane = true
+  local states = {}
+  for t = 0, 1.6, 0.1 do
+    env.clock = 500 + t
+    frame(1)
+    states[#states + 1] = car.headlightsActive
+  end
+  local changes = 0
+  for i = 2, #states do if states[i] ~= states[i - 1] then changes = changes + 1 end end
+  check(lights.active and changes >= 3 and env.calls.hazards == 0,
+    string.format('headlights blink in the pit lane (%d changes), hazards left alone', changes))
+  car.isInPitlane = false
+  env.clock = 502
+  frame(1)
+  check(not lights.active and car.headlightsActive == true, 'pit exit: headlights back on as before')
+  config.set('pitHazards', true)
+  car.isInPitlane = true
+  env.clock = 503
+  frame(1)
+  env.clock = 503.45
+  frame(1)
+  check(env.calls.hazards >= 1, 'hazards blink when chosen')
+  car.isInPitlane = false
+  frame(1)
+  check(car.hazardLights == false, 'hazards back off at the exit')
+  config.set('pitHazards', false)
+  config.set('pitHeadlights', false)
+  car.headlightsActive = false
+  local before = env.calls.headlights
+  car.isInPitlane = true
+  frame(1)
+  env.clock = env.clock + 0.45
+  frame(1)
+  check(env.calls.headlights == before, 'turned off: headlights left alone')
+  config.set('pitHeadlights', true)
+  car.isInPitlane = false
+  frame(1)
+end
+
+-- 35. Previous lap mode: the mini sectors get their colour already on the out lap (AC's delta, else any known lap),
+--     the delta itself waits for the second lap
+do
+  car.performanceMeter = 0            -- (an earlier section ran without it: a fresh app probes it again)
+  env.callbacks.release()
+  tracker = loadApp()
+  config = require('src/config')
+  notify = require('src/notify')
+  config.set('referenceKind', 3)
+  config.set('deltaSource', 1)
+  env.callbacks.session(0, false)
+  car.bestLapTimeMs = 90000           -- AC has a best lap: its delta (performanceMeter) exists
+  car.lapTimeMs = 0
+  car.isInPitlane = true
+  car.splinePosition = LINE + 0.001
+  while car.splinePosition < 0.5 do frame(0.4) end
+  car.isInPitlane = false
+  local faster, anyDelta = 0, false
+  driveLaps(1, 1, function ()
+    car.performanceMeter = car.performanceMeter - 0.0005   -- getting faster than AC's best
+    if tracker.hasDelta then anyDelta = true end
+    local u = (car.splinePosition - LINE) % 1
+    if u > 0.95 and u < 0.97 then
+      faster = 0
+      for j = 7, 20 do if tracker.secState[j] == 2 then faster = faster + 1 end end
+    end
+  end)
+  check(not anyDelta and faster >= 10,
+    string.format('out lap in previous-lap mode: no delta, %d mini sectors green from AC\'s delta', faster))
+  -- without AC's delta: any lap we know (the saved best) colours the sectors
+  env.callbacks.session(0, false)
+  car.bestLapTimeMs = 0
+  car.performanceMeter = 0
+  car.lapTimeMs = 0
+  car.isInPitlane = true
+  car.splinePosition = LINE + 0.001
+  while car.splinePosition < 0.5 do frame(0.4) end
+  car.isInPitlane = false
+  local coloured = 0
+  anyDelta = false
+  driveLaps(1, 0.97, function ()
+    if tracker.hasDelta then anyDelta = true end
+    local u = (car.splinePosition - LINE) % 1
+    if u > 0.95 and u < 0.97 then
+      coloured = 0
+      for j = 7, 20 do if tracker.secState[j] == 2 or tracker.secState[j] == 3 or tracker.secState[j] == 1 then coloured = coloured + 1 end end
+    end
+  end)
+  check(not anyDelta and tracker.allTimeRefMs > 0 and coloured >= 10,
+    string.format('out lap without AC\'s delta: sectors against the saved lap (%d coloured), still no delta', coloured))
+end
 
 print(string.format('%d passed, %d failed', passed, failed))
 return failed

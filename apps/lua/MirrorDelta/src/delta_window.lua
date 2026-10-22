@@ -2,6 +2,7 @@
 -- Lines span the full window width; thickness, gaps and text scale with the window.
 
 local config = require('src/config')
+local carData = require('src/car_data')
 local tracker = require('src/tracker')
 local D = require('src/draw')
 local S = config.S
@@ -18,8 +19,13 @@ local function limiterBlink()
   if not S.deltaLimiterFlash then return false end
   local car = ac.getCar(0)
   if not car then return false end
-  local limiter = car.rpmLimiter > 0 and car.rpmLimiter or 8000
-  return car.rpm >= limiter * 0.98 and math.floor(os.preciseClock() * 8) % 2 == 0
+  return car.rpm >= carData.shiftRpm(car) and math.floor(os.preciseClock() * 8) % 2 == 0
+end
+-- In the pit lane the delta line and mini sectors show the pit lights (src/pit_lights.lua, style and colour settings).
+local pitLights = require('src/pit_lights')
+local PIT_SLICES = 48          -- the delta line is drawn in this many slices while a light runs along it
+local function pitClock()
+  return pitLights.active() and os.preciseClock() or nil
 end
 local deltaStrings = {}        -- cache: hundredths -> "+0.23"
 
@@ -78,7 +84,7 @@ local function sectorColor(i)
   return S.colIdle
 end
 
-local function drawSectors(x, y, w, h, sc)
+local function drawSectors(x, y, w, h, sc, blink, pit)
   local count = tracker.sectorCount
   local groups = math.max(1, math.min(math.floor(S.sectorGroups + 0.5), count))
   local gap = math.max(1, 1.2 * sc)
@@ -97,24 +103,91 @@ local function drawSectors(x, y, w, h, sc)
         px = px + gap
       end
     end
-    D.rect(px, y, px + segW, y + h, D.color(sectorColor(i), S.opacity))
+    if pit then                       -- pit lights over the idle colour
+      D.rect(px, y, px + segW, y + h, D.color(S.colIdle, S.opacity))
+      local k = pitLights.sectorLevel(i, count, pit)
+      if k > 0.01 then D.rect(px, y, px + segW, y + h, D.color(pitLights.color(), S.opacity * k)) end
+    else
+      D.rect(px, y, px + segW, y + h, D.color(blink and LIMITER_BLUE or sectorColor(i), S.opacity))
+    end
     px = px + segW
   end
 end
 
+-- Number: the total delta.
 local function deltaColor()
   if not tracker.hasDelta then return S.colNeutral end
   return tracker.deltaSign < 0 and S.colGreen or S.colRed
 end
 
-local function drawLine(x, y, w, h)
+-- Line: by default whether you are gaining or losing right now in the current mini sector.
+local LIVE_FULL = 0.1          -- s gained or lost in a sector for full intensity
+local function lineColor()
+  if not tracker.hasDelta then return S.colNeutral end
+  if S.deltaLineMode == 2 then return deltaColor() end
+  return tracker.liveSign < 0 and S.colGreen or S.colRed
+end
+
+-- Split line (default): the middle is "same as the reference right now"; green grows to the right while you
+-- gain over the last 3 s, red grows to the left while you lose.
+local SPLIT_TICK = rgbm(0.95, 0.96, 0.97, 1)
+local function drawPitLine(x, y, w, h, t)
+  D.rect(x, y, x + w, y + h, D.color(S.colIdle, S.opacity))
+  local color = pitLights.color()
+  if S.pitStyle == 3 or S.pitStyle == 4 then          -- the whole line, or one half at a time
+    if S.pitStyle == 3 then
+      D.rect(x, y, x + w, y + h, D.color(color, S.opacity * pitLights.level(0.5, t)))
+    elseif pitLights.level(0.25, t) > 0.5 then
+      D.rect(x, y, x + w / 2, y + h, D.color(color, S.opacity))
+    else
+      D.rect(x + w / 2, y, x + w, y + h, D.color(color, S.opacity))
+    end
+    return
+  end
+  local sw = w / PIT_SLICES
+  for j = 1, PIT_SLICES do
+    local k = pitLights.level((j - 0.5) / PIT_SLICES, t)
+    if k > 0.01 then
+      local x1 = x + (j - 1) * sw
+      D.rect(x1, y, x1 + sw + 0.5, y + h, D.color(color, S.opacity * k))
+    end
+  end
+end
+
+local function drawSplit(x, y, w, h, blink)
+  if blink then
+    D.rect(x, y, x + w, y + h, D.color(LIMITER_BLUE, S.opacity))
+    return
+  end
+  D.rect(x, y, x + w, y + h, D.color(S.colIdle, S.opacity))
+  local cx = x + w / 2
+  if tracker.hasDelta then
+    local k = math.max(-1, math.min(1, tracker.nowDelta / math.max(0.01, S.splitFull)))
+    if k < 0 then
+      D.rect(cx, y, cx - k * w / 2, y + h, D.color(S.colGreen, S.opacity))
+    elseif k > 0 then
+      D.rect(cx - k * w / 2, y, cx, y + h, D.color(S.colRed, S.opacity))
+    end
+  end
+  local t = math.max(1, h * 0.18)
+  D.rect(cx - t / 2, y - h * 0.3, cx + t / 2, y + h * 1.3, D.color(SPLIT_TICK, S.opacity))
+end
+
+local function drawLine(x, y, w, h, blink, pit)
+  if pit then return drawPitLine(x, y, w, h, pit) end
+  if S.deltaLineMode ~= 2 then return drawSplit(x, y, w, h, blink) end
   local alpha = S.opacity
   if S.intensityByDelta and tracker.hasDelta then
-    local k = math.min(1, math.abs(tracker.delta) / math.max(0.05, S.intensityFullAt))
+    local k
+    if S.deltaLineMode == 2 then
+      k = math.min(1, math.abs(tracker.delta) / math.max(0.05, S.intensityFullAt))
+    else
+      k = math.min(1, math.abs(tracker.liveDelta) / LIVE_FULL)
+    end
     alpha = alpha * (0.22 + 0.78 * k)
   end
-  local col = deltaColor()
-  if limiterBlink() then col, alpha = LIMITER_BLUE, S.opacity end
+  local col = lineColor()
+  if blink then col, alpha = LIMITER_BLUE, S.opacity end
   D.rect(x, y, x + w, y + h, D.color(col, alpha))
 end
 
@@ -123,23 +196,27 @@ local function drawNumber(x, y, w, h, size)
   D.text(str, size, x, y, w, h, D.ALIGN_CENTER, D.color(deltaColor(), S.opacity))
 end
 
-local M = {}
 
-function M.draw()
+local function drawInner()
   local w, h = ui.windowWidth(), ui.windowHeight()
   local n, contentH = layoutRows()
   if n == 0 or w <= 0 or h <= 0 then return end
   local sc = math.min(w / BASE_W, h / contentH)
+  local blink = limiterBlink()
+  local pit = pitClock()
+  if S.deltaPanel then
+    local top = (h - contentH * sc) / 2
+    D.panel(0, math.max(0, top - 6 * sc), w, math.min(h, top + contentH * sc + 6 * sc), 6 * sc)
+  end
   local y = (h - contentH * sc) / 2
-  ui.pushDWriteFont(D.FONT)
   for i = 1, n do
     local row = rows[i]
     if i > 1 then y = y + rowSpacing(rows[i - 1], row) * sc end
     local rh = rowHeight(row) * sc
     if row == ROW_SECTORS then
-      drawSectors(0, y, w, rh, sc)
+      drawSectors(0, y, w, rh, sc, blink, pit)
     elseif row == ROW_LINE then
-      drawLine(0, y, w, rh)
+      drawLine(0, y, w, rh, blink, pit)
     else
       drawNumber(0, y, w, rh, S.numberSize * sc)
     end
@@ -148,7 +225,19 @@ function M.draw()
   if tracker.diag.error then
     D.text('MirrorDelta: chyba skriptu, viz Nastavení > Diagnostika', 12, 0, 0, w, 16, D.ALIGN_START, ERROR_COLOR)
   end
+end
+
+local M = {}
+
+function M.draw()
+  ui.pushDWriteFont(D.FONT)
+  local ok, err = pcall(drawInner)
   ui.popDWriteFont()
+  if not ok then
+    if not tracker.diag.error then tracker.diag.error = 'okno delty: ' .. tostring(err) end
+    -- a plain red bar, so a broken window is visible even when text drawing is what failed
+    D.rect(0, 0, ui.windowWidth(), 4, ERROR_COLOR)
+  end
 end
 
 return M

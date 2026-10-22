@@ -1,9 +1,10 @@
 -- Gear window: 12-segment RPM bar across the top (lights from both edges towards the
 -- centre), the gear on a rounded tile coloured by the revs, and the speed on a dark bar
--- under it. The RPM range comes from the car (rpmLimiter).
+-- under it. The RPM range ends at the car's shift point (src/car_data.lua: ai.ini optimal up-shift, else rpmLimiter).
 
 local config = require('src/config')
 local D = require('src/draw')
+local carData = require('src/car_data')
 local S = config.S
 
 
@@ -82,10 +83,11 @@ function M.draw()
   local ox = (w - BASE_W * sc) / 2           -- keep the drawing centred in the window
   local alpha = S.opacity
 
-  local limiter = car.rpmLimiter > 0 and car.rpmLimiter or 8000
-  local startRpm = limiter * S.gearRpmStart
-  local k = math.max(0, math.min(1, (car.rpm - startRpm) / math.max(1, limiter * 0.98 - startRpm)))
-  local atLimit = car.rpm >= limiter * 0.98
+  -- the bar is full and blinks at the car's shift point (optimal up-shift from its data, else the limiter)
+  local shift = carData.shiftRpm(car)
+  local startRpm = shift * S.gearRpmStart
+  local k = math.max(0, math.min(1, (car.rpm - startRpm) / math.max(1, shift - startRpm)))
+  local atLimit = car.rpm >= shift
   local blinkOn = atLimit and S.gearShiftFlash and math.floor(os.preciseClock() * 8) % 2 == 0
 
   ui.pushDWriteFont(D.FONT_GEAR)

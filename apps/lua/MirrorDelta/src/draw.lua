@@ -8,6 +8,7 @@ D.FONT = 'Bahnschrift;Weight=SemiBold;Stretch=SemiCondensed'
 -- Unbounded Bold ships with the app (fonts/, SIL OFL); the path is relative to the AC root,
 -- the same form official CSP code uses for its own fonts.
 D.FONT_GEAR = 'Unbounded:apps/lua/MirrorDelta/fonts;Weight=Bold'
+D.FONT_MONO = 'Consolas;Weight=Bold'
 
 D.ALIGN_START = ui.Alignment.Start
 D.ALIGN_CENTER = ui.Alignment.Center
@@ -16,7 +17,6 @@ D.ALIGN_END = ui.Alignment.End
 local p1, p2 = vec2(), vec2()
 local cursor, box = vec2(), vec2()
 local tint = rgbm()
-local shadow = rgbm(0, 0, 0, 0.6)
 
 -- Returns a shared colour: base with its alpha multiplied by alpha. Use it right away.
 function D.color(base, alpha)
@@ -25,17 +25,38 @@ function D.color(base, alpha)
   return tint
 end
 
+-- Matte translucent panel behind a widget: a tinted rectangle the game shows through, with a faint top edge.
+-- (CSP's ui.beginBlurring only blurs what the window draws itself, not the scene behind it.)
+local PANEL = rgbm(0.07, 0.08, 0.1, 0.4)
+local PANEL_EDGE = rgbm(1, 1, 1, 0.1)
+local pa, pb = vec2(), vec2()
+local S = require('src/config').S
+function D.panel(x1, y1, x2, y2, rounding, opacity)
+  local a = (opacity or 1) * S.opacity
+  PANEL.mult = S.panelOpacity * a
+  PANEL_EDGE.mult = 0.1 * a
+  rounding = rounding or 0
+  ui.drawRectFilled(pa:set(x1, y1), pb:set(x2, y2), PANEL, rounding)
+  ui.drawRectFilled(pa:set(x1 + rounding, y1), pb:set(x2 - rounding, y1 + 1), PANEL_EDGE, 0)
+end
+
 function D.rect(x1, y1, x2, y2, color, rounding)
   ui.drawRectFilled(p1:set(x1, y1), p2:set(x2, y2), color, rounding or 0)
 end
 
--- Draws str inside the box (x, y, w, h), vertically centred, with a soft drop shadow.
+-- Convex quad (corners in order), e.g. a slanted banner.
+local q = vec2()
+function D.quad(x1, y1, x2, y2, x3, y3, x4, y4, color)
+  ui.pathLineTo(q:set(x1, y1))
+  ui.pathLineTo(q:set(x2, y2))
+  ui.pathLineTo(q:set(x3, y3))
+  ui.pathLineTo(q:set(x4, y4))
+  ui.pathFillConvex(color)
+end
+
+-- Draws str inside the box (x, y, w, h), vertically centred. Plain text, no shadow behind it.
 function D.text(str, size, x, y, w, h, align, color)
   box:set(w, h)
-  local o = math.max(1, size * 0.05)
-  shadow.mult = 0.6 * color.mult
-  ui.setCursor(cursor:set(x + o, y + o))
-  ui.dwriteTextAligned(str, size, align, D.ALIGN_CENTER, box, false, shadow)
   ui.setCursor(cursor:set(x, y))
   ui.dwriteTextAligned(str, size, align, D.ALIGN_CENTER, box, false, color)
 end

@@ -2,14 +2,46 @@
 
 ## Project
 
-MirrorDelta is a Lua app for Assetto Corsa with Custom Shaders Patch (CSP). It has three windows,
+MirrorDelta is a Lua app for Assetto Corsa with Custom Shaders Patch (CSP). It has several windows,
 each with its own taskbar icon:
 
 - **delta** (`MirrorDelta`): mini sector line, delta line, delta in seconds. Sits above the mirror.
 - **timing** (`MirrorDelta Timing`): position, lap, current time, best lap.
-- **tyres** (`MirrorDelta Tyres`): tyre core temperature (big number) and tread zones (inner/middle/outer).
-- **gear** (`MirrorDelta Gear`): 12-segment RPM bar lighting from both edges to the centre (range from
-  `car.rpmLimiter`), gear on a rounded tile coloured by revs (white/yellow/red, blinking blue at the limiter),
+- **tyres** (`MirrorDelta Tyres`): tyre core temperature (big number) and tread zones (inner/middle/outer). Colours from
+  an optimal window per axle: `src/car_data.lua` reads tyres.ini `THERMAL_FRONT/REAR[_compoundIndex]` `PERFORMANCE_CURVE`
+  via `ac.INIConfig.carData` + `:tryGetLut` (sections as CSP's shared/sim/cars.lua), grip >= 99.5 % of the best; else
+  CSP's `tyreOptimumTemperature`, else `S.tyreOptimum`.
+- **notify** (`MirrorDelta Notifications`): short messages at the top (flags, fastest lap, positions, pits,
+  invalid lap, disconnects), three styles (pill, slanted strip, thin line).
+- **setup** (`MirrorDelta Setup`): one line at the top centre when a car setting changes (TC, TC2, ABS, brake bias,
+  engine brake, fuel map, turbo, MGU-K/H, limiters, auto shift/clutch; fields as in the official Unbound app, each
+  probed once under pcall) plus AC's non-penalty system messages (`src/setup_line.lua`).
+- **mirror** (`MirrorDelta Mirror`): AC's rear view via `ui.drawVirtualMirror` (ac_apps.lua, used by CSP's OBS view);
+  GT3-style radar markers on the `S.mirrorTargets` nearest cars behind (style, palette, line width, fill, gap label settings; nearest first, a marker overlapping a nearer one is skipped with `S.mirrorHideOverlap`) from a perspective projection (look/side/up, `S.mirrorFov`, 4:1 square pixels; camera at car.ini `[GRAPHICS] MIRROR_POSITION`
+  via `ac.INIConfig.carData`, else `car.driverEyesPosition`, through `car.transform:transformPointTo`, else origin + 0.6 m; the box is
+  the 8 projected corners of `aabbCenter`/`aabbSize` through the other car's transform, each probed under pcall; manual
+  `S.mirrorOffsetX/Y`), threat colours, time gap label on the nearest, edge arrows for cars
+  outside the crop, side bars for cars alongside; cars must also be behind by spline gap (`sim.trackLengthM`). Left/right from `wheels[0/1].position` vs `car.side`. The mirror texture is HDR (pre post-processing). `S.mirrorMode`
+  (click in the window cycles, hover shows version + mode): 1 gamma = `ui.drawVirtualMirror` into a float `ui.ExtraCanvas`, then
+  `ui.renderShader` with `pow(saturate(c * exposure), 0.4545)` (SDK example in ac_wfx_impl.lua); 2 YEBIS canvas with exposure 30
+  as CSP's OBS "Virtual mirror" view (obs_integration.lua; user reported no change with it); 3 `ui.beginTonemapping` like
+  `display.mirror()`; 4 raw; 5 own camera = `ac.GeometryShot(ac.findNodes('sceneRoot:yes'))` updated in `render.onSceneReady` as
+  CSP's OBS camera views (obs_integration.lua quality levels, `S.mirrorCamQuality`: 1 SimplifiedWithLights + SimplifiedYEBIS,
+  looked dark and unlit in game; 2 default Main shaders + 'area' shadows + full YEBIS; 3 'dedicated' shadows + grass), from the
+  markers' camera (`S.mirrorCamPos` 1 rear bumper = back of our aabb, end picked by transforming both ends, 0.5 m above its
+  bottom, 5 cm behind; 2 the mirror position) with vertical FOV from `S.mirrorFov` (4:1), `S.mirrorCamHeight` / `S.mirrorCamPitch` (camera basis camF/camU
+  shared with the projection), near plane past our own car, drawn mirrored (u reversed), so markers are exact (`M.exact`,
+  offsets off); 6 the same camera without YEBIS: 11 MIPs + `mipsUpdate`, the shader takes exposure from the last MIP
+  (average) then mode 1's gamma. Markers are not smoothed. Always cropped to the window's aspect via UVs or a clip rect, never stretched (`S.mirrorZoom`). Hiding AC's own
+  virtual mirror / flags: no verified API; app windows titled like a mirror or flag are hidden via `ac.accessAppWindow`.
+- **standings** (`MirrorDelta Standings`, `src/standings_window.lua`): bottom centre row replacing AC's F9 overlay leaderboard:
+  player and neighbours by `racePosition`, names (3 letters / surname / none), gap to me or to the car ahead. Race gap
+  modes: live (lapCount + splinePosition, `sim.trackLengthM`, player's speed) or a timing loop (`M.update(dt)` from
+  script.update records every car's crossing time of `S.standingsSectors` checkpoints, interpolated in the frame; gap =
+  difference at the last checkpoint both passed, every sector or only the line). Otherwise best lap difference.
+- **gear** (`MirrorDelta Gear`): 12-segment RPM bar lighting from both edges to the centre (range up to the shift point
+  from `src/car_data.lua`: ai.ini `[GEARS] UP` as CSP's RGBControl/led_colors use it, else `car.rpmLimiter`; also the delta
+  window's blue blink), gear on a rounded tile coloured by revs (white/yellow/red, blinking blue at the limiter),
   calm speed (changes only by whole steps) on a dark bar under it. Font: bundled Unbounded Bold.
 
 The user speaks Czech: talk to them in Czech, write code, comments and commit messages in English.
@@ -28,9 +60,13 @@ apps/lua/MirrorDelta/
   src/delta_window.lua    delta window
   src/timing_window.lua   timing window
   src/tyres_window.lua    tyres window (two styles)
-  src/damage_window.lua   damage window (car.damage[0..3] front/rear/left/right, car.engineLifeLeft 0..1000)
+  src/damage_window.lua   damage window: one view ("cross"): body bars top/bottom/sides, tyre + suspension square per corner,
+                          engine % in the middle, rectangles only
+                          (car.damage[0..3], wheels[i].tyreWear/isBlown, wheels[i].suspensionDamage under pcall)
   src/gear_window.lua     gear window (car.gear: -1 R, 0 N; car.rpm, car.rpmLimiter, car.speedKmh)
-  src/settings_window.lua tabs: Delta, Časy, Pneumatiky, Převody, Poškození, Barvy, Diagnostika
+  src/notify.lua          event detection (flags, other cars polled at 10 Hz) + fixed ring buffer of events
+  src/notify_window.lua   notification window (styles: pill, slanted strip via ui.pathLineTo/pathFillConvex, line)
+  src/settings_window.lua tabs: Delta, Časy, Pneumatiky, Převody, Poškození, Notifikace, Barvy, Diagnostika
 tests/                    mock CSP API + simulated laps, run with LuaJIT via lupa
 build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDelta/...
 ```
@@ -44,10 +80,64 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
 - The current lap is recorded on a grid of `GRID + 1` points (`u = k / GRID`, index `k + 1`),
   interpolated between frames. A finished clean lap waits up to 1.5 s for `ac.onLapCompleted`
   (validity, exact time), then becomes the session and/or all-time reference. The all-time one is saved.
-- Delta = `lapTimeMs - grid(u)`, smoothed (0.15 s) with ±20 ms colour hysteresis.
+- Delta = `lapTimeMs - grid(u)`, smoothed (0.15 s) with ±20 ms colour hysteresis. The delta line is split in the
+  middle (default): `T.nowDelta` = delta change over the last 3 s (20 Hz ring buffer in `updateTrend`); default
+  reference is the previous lap (`S.referenceKind = 3`, kind 5), strictly: no saved best, estimate, provisional or AC
+  delta in that mode (the delta only; mini sectors without a usable reference, i.e. the out lap, the first lap and the
+  stretch before the previous out lap's anchor, are coloured by AC's delta change, else by `anyRef()`: session best,
+  all-time best, estimate, provisional). The out lap's partial grid becomes the previous lap with an anchor (`prevLapAnchor`, first
+  recorded u); `ownDelta` compares an out-lap reference directly (its grid holds AC's raw out-lap timer, pit lane included, so the delta at the line equals the lap time difference), no delta before the anchor, sectors before it neutral. Keep `updateInner` under LuaJIT's
+  60-upvalue limit (move new logic into helper functions).
+- Pit lane (`car.isInPitlane`): `src/pit_lights.lua` gives a brightness 0..1 per place on the delta line and per mini
+  sector (`S.pitStyle`: 1 scanner, 2 waves from the centre, 3 breathing, 4 halves in turn with `S.pitSectorPattern`),
+  colour `S.pitColor` (blue default, orange, white, yellow); the timing window shows BOX in that colour (`S.pitBox`).
+  `src/car_leds.lua` runs a light over the car's own shift LEDs (`S.carLedsPit`, `S.carLedsStyle` scanner / every other,
+  `S.carLedsColor` orange): digital_instruments.ini `[LED_n] OBJECT_NAME` (power from EMISSIVE) found with
+  `ac.findNodes('carRoot:0'):findMeshes(name)`, else `{ actsAsLED:yes }` (CSP's show_important_wheels filter) split with
+  `:at(k)`; position = `:boundingSphere()` taken to world space every frame by multiplying the live
+  `:getTransformationRaw()` references up the node chain (kept from the pit entry; CSP's vr_rig_base getActualTransform).
+  Not the kept `getWorldTransformationRaw()` (stale, discs stayed behind) nor car.worldToLocal/car.transform (model is
+  offset from the physics body: discs above the LEDs); `S.carLedsOffset` cm nudge; ordered left to right;
+  drawn in `render.on('main.root.transparent')`: each LED mesh again with `render.mesh{ mesh = ref, transform = m }`
+  (as CSP's Radar draws brake light / tyre meshes; LOD A first), `M.drawMode` 1 = own matrix: T(-c)·S(1.08)·T(c) about the
+  mesh centre × the live node chain × 3 mm towards the camera (row-vector convention, `mat4x4.position:set`), so it covers
+  AC's LED without depth fighting; 2 = `'original'`; 3 = `render.circle` discs like CSP's Traffic virtual lights (each
+  way falls to the next on an error). OpaqueForced + LessEqual depth, shader colour x gWhiteRefPoint: lit in the pit
+  colour x `S.carLedsBrightness`, the rest dark, so AC's RPM lights are covered until the pit exit and the shape fits.
+  Third LED source: cockpit meshes `'{ (?LED?, ?RPM?, ?SHIFT?) & lod:A }'`. `M.test(s)` runs the lights off the pit lane
+  (settings button). `src/pit_car_lights.lua`: headlights (`S.pitHeadlights`) / hazards (`S.pitHazards`) blink at 0.4 s via
+  `ac.setHeadlights` / `ac.setTurningLights(ac.TurningLights.Hazards)` (Unbound), state restored at the pit exit.
+  Writing the LEDs' ksEmissive flickered (AC writes it by RPM every frame), so the material is never touched.
+  Meshes found once per session (`load`), the check at every pit entry (`evaluate`; at the session start another
+  camera / LOD may be active: `M.fits`, `M.reason`, `M.dropped`): off when the CSP car config
+  (`ac.INIConfig.carConfig(0).sections`) has `SCRIPTABLE_DISPLAY_*`; LED meshes dropped when `:isVisible()` is false
+  (unless all are hidden = inactive LOD), bounding radius > 6 cm or > 1.8 m from the eyes (car.transform x
+  driverEyesPosition); < 2 left = the car's LEDs are not used. Per car override `S.carLedsCars` "carId=1;carId=2"
+  (1 always the car's LEDs, all found, 2 never) from the settings. Virtual LED bar (`S.carLedsVirtual` 1 when the car's
+  LEDs do not fit, 2 always, 3 never; `S.carLedsVirtualCount/Width/Dist/Drop`): `render.circle` discs at
+  driverEyesPosition + (−x, −drop, +dist) through car.transform, DepthMode.Off, same pattern. Mesh geometry (centre,
+  radius) is read at the session start.
 - Mini sectors are boundaries at `j / N` in `u`; times are interpolated; purple needs a clean lap and an
   existing best; best sector lists are kept per sector count.
-- Out laps, laps that start or pass through the pit lane, and invalid laps are never references.
+- Deleted laps (cut on track, or AC's callback says invalid) flash red (`flashKind 5`), never become the flash best,
+  are listed in `deletedLaps` so `T.bestMs` ignores AC's best when it equals one; `T.lastLapMs/lastLapState` feed the
+  timing window's POSL column; `T.bestMs` then falls back to AC's previous best. `ac.onLapCompleted` gives
+  `(carIndex, lapTime, valid, cuts, ...)`; invalid with 0 cuts on a lap seen clean is not deleted. A cut is only a
+  change of `isLapValid` from true to false within the lap (`checkValidity`; AC keeps the out lap's false after the line).
+  Any deleted lap is undeleted when AC takes it as its best (`undeleteIfACBest`, also checked before deleting): AC does
+  not keep invalid laps as its best, so its best time is the final word. Diagnostika shows AC's raw best (`T.acBestMs`).
+  Each deletion is also announced as a notification with `diag.deletedReason` (the user cannot open Diagnostika). Diagnostika shows
+  `diag.lastDeleted` / `diag.lastCallback`. AC system messages are translated to Czech in `originals.lua` (`PHRASES`).
+- Out laps, laps that start or pass through the pit lane, and invalid laps are never references. A full lap that
+  cannot be a reference (started in the pit lane, cut) is a **provisional** reference until a valid one exists
+  (never saved). `activeRef()` order: chosen reference, the other one, provisional.
+- **Out lap (partial):** once the car is on track the lap is measured from there; line position = reference's,
+  else the measured one (saved as `line` in the data file), else spline 0. With a reference:
+  delta = (t - t0) - (ref(u) - ref(u0)) and sectors against it; without: sectors from AC's delta or neutral.
+  The sector containing u0 stays grey. The delta window shows no status text (only Diagnostika does).
+- A lap counts only if lapCount changed within 0.5 s of the timer restart (a later lapCount confirms it); a timer
+  restart in the pit lane or away from the known line is not a crossing. Without an own reference, mini sectors
+  are coloured by the change of AC's `performanceMeter` over the sector.
   Teleport (`ac.onCarJumped`), replay and session start reset the lap until the next line crossing.
 - The lap event is the **timer restart** (`lapTimeMs` drops). AC can change `lapCount` a frame before or
   after the timer; a lapCount change only counts on its own when the timer is already small, and a second
@@ -59,7 +149,8 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
 
 The delta did not start in the user's practice sessions although the simulated tests pass, so the
 tracker keeps `T.diag` (line crossings, timed laps, references, last reset reason, last rejected lap
-reason, jumps, session starts, first script error). `T.update` runs the logic under `pcall`; an error is
+reason, jumps, session starts, first script error, whether AC's delta exists). `T.status` explains in the
+delta window why there is no delta yet. `T.update` runs the logic under `pcall`; an error is
 stored and shown in the settings tab Diagnostika and as a red line in the delta window. Ask the user for a
 screenshot of that tab before guessing.
 
@@ -75,7 +166,17 @@ Poškození tab shows the live raw values for calibration.
   official apps (`app-csp-defaults`, `acc-lua-internal`). The car state struct is generated from C++ and is
   not in the public SDK; fields used here were confirmed from official apps, except the tyre temperature
   fields (`tyreCoreTemperature`, `tyreInside/Middle/OutsideTemperature`, `tyreOptimumTemperature`), which
-  are checked with `pcall` at runtime. If someone provides `extension/internal/lua-sdk` from a CSP install,
+  are checked with `pcall` at runtime. `car.performanceMeter` (AC's own delta in seconds, see
+  `acc-lua-examples/cars/dash_display_8100`) is the fallback delta (`S.deltaSource`), also read under `pcall`.
+  AC's damage displayer is hidden like the official Unbound app does it: `sim.damageDisplayerShown` +
+  `ac.trySimKeyPressCommand('Hide Damage')`. AC's overlay leaderboard (F9) is turned off with `ac.accessOverlayLeaderboardParams().displayMode = 0` (Unbound).
+  System messages: CSP `[HIDE] HIDE_SYSTEM_MESSAGES` written to `ac.getFolder(ac.FolderID.ExtCfgUser)/gui.ini` with
+  `ac.INIConfig.load` + `:setAndSave` (as ControllerTweaks writes CSP user configs; `applyLiveConfigEdit` is internal
+  only, but in versions up to 1.12.0 it also hid the track limits / penalty messages, so it is applied as well:
+  at start and again 3, 10 and 30 s later and after every session change, `originals.applyMessages`). Caught with `ac.onMessage(title, description, type)` (RGBControl): car setting messages
+  (`originals.isSettingMessage`) go to the setup line only if no own reading within 2 s, the rest to the notifications.
+  Notifications use `sim.raceFlagType` + `ac.FlagType` (Radar, RGBControl), `ac.getDriverName(i)`, `car.isConnected`,
+  `car.bestLapTimeMs` of any car and `ac.getSession(i).type == ac.SessionType.Race` (RGBControl). If someone provides `extension/internal/lua-sdk` from a CSP install,
   confirm them there.
 - Drawing uses `ui.drawRectFilled(p1, p2, color, rounding)` and `ui.dwriteTextAligned` after
   `ui.setCursor`. Rounded stripes are built by overlapping rects instead of corner flags.
