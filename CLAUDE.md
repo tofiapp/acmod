@@ -83,7 +83,9 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
 - Delta = `lapTimeMs - grid(u)`, smoothed (0.15 s) with ±20 ms colour hysteresis. The delta line is split in the
   middle (default): `T.nowDelta` = delta change over the last 3 s (20 Hz ring buffer in `updateTrend`); default
   reference is the previous lap (`S.referenceKind = 3`, kind 5), strictly: no saved best, estimate, provisional or AC
-  delta in that mode. The out lap's partial grid becomes the previous lap with an anchor (`prevLapAnchor`, first
+  delta in that mode (the delta only; mini sectors without a usable reference, i.e. the out lap, the first lap and the
+  stretch before the previous out lap's anchor, are coloured by AC's delta change, else by `anyRef()`: session best,
+  all-time best, estimate, provisional). The out lap's partial grid becomes the previous lap with an anchor (`prevLapAnchor`, first
   recorded u); `ownDelta` compares an out-lap reference directly (its grid holds AC's raw out-lap timer, pit lane included, so the delta at the line equals the lap time difference), no delta before the anchor, sectors before it neutral. Keep `updateInner` under LuaJIT's
   60-upvalue limit (move new logic into helper functions).
 - Pit lane (`car.isInPitlane`): `src/pit_lights.lua` gives a brightness 0..1 per place on the delta line and per mini
@@ -106,10 +108,15 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
   (settings button). `src/pit_car_lights.lua`: headlights (`S.pitHeadlights`) / hazards (`S.pitHazards`) blink at 0.4 s via
   `ac.setHeadlights` / `ac.setTurningLights(ac.TurningLights.Hazards)` (Unbound), state restored at the pit exit.
   Writing the LEDs' ksEmissive flickered (AC writes it by RPM every frame), so the material is never touched.
-  Per car check at session start (`M.fits`, `M.reason`, `M.dropped`): off when the CSP car config
-  (`ac.INIConfig.carConfig(0).sections`) has `SCRIPTABLE_DISPLAY_*`; LED meshes dropped when `:isVisible()` is false,
-  bounding radius > 6 cm or > 1.8 m from the eyes (car.transform x driverEyesPosition); < 2 left = off. Per car override
-  `S.carLedsCars` "carId=1;carId=2" (1 always on with all found LEDs, 2 always off) from the settings.
+  Meshes found once per session (`load`), the check at every pit entry (`evaluate`; at the session start another
+  camera / LOD may be active: `M.fits`, `M.reason`, `M.dropped`): off when the CSP car config
+  (`ac.INIConfig.carConfig(0).sections`) has `SCRIPTABLE_DISPLAY_*`; LED meshes dropped when `:isVisible()` is false
+  (unless all are hidden = inactive LOD), bounding radius > 6 cm or > 1.8 m from the eyes (car.transform x
+  driverEyesPosition); < 2 left = the car's LEDs are not used. Per car override `S.carLedsCars` "carId=1;carId=2"
+  (1 always the car's LEDs, all found, 2 never) from the settings. Virtual LED bar (`S.carLedsVirtual` 1 when the car's
+  LEDs do not fit, 2 always, 3 never; `S.carLedsVirtualCount/Width/Dist/Drop`): `render.circle` discs at
+  driverEyesPosition + (−x, −drop, +dist) through car.transform, DepthMode.Off, same pattern. Mesh geometry (centre,
+  radius) is read at the session start.
 - Mini sectors are boundaries at `j / N` in `u`; times are interpolated; purple needs a clean lap and an
   existing best; best sector lists are kept per sector count.
 - Deleted laps (cut on track, or AC's callback says invalid) flash red (`flashKind 5`), never become the flash best,

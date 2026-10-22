@@ -1350,11 +1350,14 @@ do
   frame(1)
 end
 
--- 33. Pit lane: a light runs across the car's own shift LEDs (digital_instruments.ini, else CSP's LED marks), drawn as
---     glowing discs over them in the 3D pass; the LEDs' own material is never written (AC drives it by RPM)
+-- 33. Pit lane cockpit lights: the car's shift LEDs (digital_instruments.ini, else CSP's LED marks, else by name),
+--     checked at the pit entry, drawn again in the 3D pass; the virtual LED bar when they do not fit
 do
   local carLeds = require('src/car_leds')
   local savedIni, savedSession = env.carIni, env.sim.currentSessionIndex
+  local function reload(k) env.sim.currentSessionIndex = savedSession + k; car.isInPitlane = false; frame(1) end
+  local function enterPit() car.isInPitlane = true; frame(1) end
+  local function leavePit() car.isInPitlane = false; frame(1) end
   env.carMeshes = { LED_A = true, LED_B = true, LED_C = true, LED_D = true, ABS_LIGHT = true }
   -- side points to +x (left): LED_A is the leftmost, D the rightmost; their RPM order is different on purpose
   env.meshPos = { LED_A = { 0.3, 1, 0.5 }, LED_B = { 0.1, 1, 0.5 }, LED_C = { -0.1, 1, 0.5 }, LED_D = { -0.3, 1, 0.5 },
@@ -1365,16 +1368,17 @@ do
     ['LED_2/OBJECT_NAME'] = 'LED_B', ['LED_2/RPM_SWITCH'] = 6500,
     ['LED_3/OBJECT_NAME'] = 'LED_D', ['LED_3/RPM_SWITCH'] = 7500,
   } }
-  env.sim.currentSessionIndex = savedSession + 7
   env.emissive = {}
-  car.isInPitlane = true
-  frame(1)
+  reload(7)
+  check(carLeds.found == 4 and carLeds.source == 'digital_instruments.ini' and not carLeds.fits,
+    'LED meshes found at the session start, the check waits for the pit entry: ' .. carLeds.found)
+  enterPit()
   local draw3D = env.renderCallbacks and env.renderCallbacks['main.root.transparent']
-  check(carLeds.count == 4 and carLeds.source == 'digital_instruments.ini' and draw3D ~= nil,
-    'shift LEDs from digital_instruments.ini, drawn in the 3D pass: ' .. carLeds.count .. ' ' .. carLeds.source)
-  -- main way: each LED mesh drawn again in its own shape, lit ones in colour, the others dark (covers AC's RPM lights)
+  check(carLeds.fits and carLeds.useMeshes and not carLeds.useVirtual and carLeds.count == 4 and draw3D ~= nil,
+    'pit entry: the LEDs fit, drawn in the 3D pass')
+  -- each LED mesh drawn again in its own shape, lit ones in colour, the others dark (covers AC's RPM lights)
   local function meshFrame()
-    env.meshDraws = {}
+    env.meshDraws, env.circles = {}, {}
     draw3D()
     local best, name, dark = -1, nil, 0
     for _, d in ipairs(env.meshDraws) do
@@ -1385,18 +1389,29 @@ do
   end
   env.clock = 1.4 * 215
   local m1, nm, dark1 = meshFrame()
-  -- own matrix: the car's node chain plus a few mm towards the camera (at y 1, z 0.2: the LEDs at z 0.5 move to -z)
   local d1 = env.meshDraws[1]
   check(not d1.original and d1.z and d1.z < 0.5 and d1.z > 0.49 and math.abs(d1.y - 1) < 0.01,
     string.format('LED redrawn with an own matrix, lifted towards the camera (z %.4f)', d1.z or 0))
   env.clock = 1.4 * 215.5
   local m2 = meshFrame()
   check(nm == 4 and dark1 >= 1 and m1 ~= m2 and ((m1 == 'LED_D' and m2 == 'LED_A') or (m1 == 'LED_A' and m2 == 'LED_D')),
-    string.format('LED meshes redrawn in shape: the light runs from one end (%s) to the other (%s), the rest dark (%d)',
-      tostring(m1), tostring(m2), dark1))
+    string.format('the light runs from one end (%s) to the other (%s), the rest dark (%d)', tostring(m1), tostring(m2), dark1))
   local lit = env.meshDraws[1]
   for _, d in ipairs(env.meshDraws) do if d.r > lit.r then lit = d end end
   check(lit.r > lit.g * 1.5 and lit.g > lit.b * 3 and lit.r < 5, 'lit LED orange, moderate')
+  check(next(env.emissive) == nil and #env.circles == 0, 'the LEDs\' own material is not touched, no virtual bar')
+  -- the LEDs follow the car and a moving node (steering wheel)
+  env.clock = 1.4 * 215
+  meshFrame()
+  local za = env.meshDraws[1].z
+  car.position.z = car.position.z + 10
+  meshFrame()
+  check(math.abs((env.meshDraws[1].z - za) - 10) < 0.05, 'lights move with the car')
+  car.position.z = car.position.z - 10
+  env.ledParentOffset = { x = 0, y = 0.2, z = 0 }
+  meshFrame()
+  check(math.abs(env.meshDraws[1].y - 1.2) < 0.05, 'live node matrices each frame: ' .. env.meshDraws[1].y)
+  env.ledParentOffset = nil
   -- fallbacks: the own matrix fails -> 'original' transform; render.mesh fails -> discs over the LEDs
   env.ownMatrixFails = true
   env.meshDraws = {}
@@ -1408,141 +1423,102 @@ do
   draw3D()
   env.meshFails = nil
   check(#env.circles > 0 and carLeds.drawMode == 3 and carLeds.meshError ~= nil, 'fallback to glowing discs')
-  local function brightestX()
-    env.circles = {}
-    draw3D()
-    local best, bx = -1, nil
-    for _, c in ipairs(env.circles) do if c.r > best then best, bx = c.r, c.x end end
-    return bx, #env.circles
-  end
-  env.clock = 1.4 * 215                -- scanner at one end (whole periods)
-  local x1 = brightestX()
-  env.clock = 1.4 * 215.5              -- half a period later: the other end
-  local x2, n2 = brightestX()
-  check(x1 and x2 and math.abs(x1 - x2) > 0.35 and n2 >= 1,
-    string.format('the light runs from side to side over the LEDs (%.2f -> %.2f)', x1 or 0, x2 or 0))
-  local c = env.circles[1]
-  check(c and c.r > c.g * 1.5 and c.g > c.b * 3, 'orange glow')
-  check(next(env.emissive) == nil, 'the LEDs\' own material is not touched (no fight with AC)')
+  -- every other LED in turn
+  carLeds.drawMode = 1
   config.set('carLedsStyle', 2)
   env.clock = 300.05
-  local _, nA = brightestX()
+  meshFrame()
   local litA = {}
-  for _, cc in ipairs(env.circles) do litA[#litA + 1] = cc.x end
+  for _, d in ipairs(env.meshDraws) do if d.r > 0.05 then litA[#litA + 1] = d.name end end
   env.clock = 300.35
-  local _, nB = brightestX()
-  check(nA == 2 and nB == 2 and math.abs(env.circles[1].x - litA[1]) > 0.1, 'every other LED in turn')
+  meshFrame()
+  local litB = {}
+  for _, d in ipairs(env.meshDraws) do if d.r > 0.05 then litB[#litB + 1] = d.name end end
+  check(#litA == 2 and #litB == 2 and litA[1] ~= litB[1], 'every other LED in turn')
   config.set('carLedsStyle', 1)
-  -- the lights stay on the car while it moves (the old version kept world positions and they stayed behind)
-  env.clock = 1.4 * 215
-  local xa = brightestX()
-  local za = env.circles[1].z
-  car.position.z = car.position.z + 10
-  local xb = brightestX()
-  local zb = env.circles[1].z
-  check(math.abs((zb - za) - 10) < 0.05 and math.abs(xa - xb) < 0.05, string.format('lights move with the car (%.2f -> %.2f)', za, zb))
-  car.position.z = car.position.z - 10
-  local c1 = env.circles[1]
-  check(c1.r < 5 and c1.r > c1.g * 1.5, string.format('moderate glow keeps the colour (%.2f, %.2f, %.2f)', c1.r, c1.g, c1.b))
-  car.isInPitlane = false
-  frame(1)
-  env.circles = {}
+  leavePit()
+  env.circles, env.meshDraws = {}, {}
   draw3D()
-  check(#env.circles == 0, 'on track: nothing drawn')
-  -- positions come from the node chain at the pit entry (a moved parent node moves the lights)
-  env.ledParentOffset = { x = 0, y = 0.5, z = 0 }
-  car.isInPitlane = true
-  frame(1)
-  brightestX()
-  check(math.abs(env.circles[1].y - 1.5) < 0.05, 'pit entry: positions from the node chain: ' .. env.circles[1].y)
-  env.ledParentOffset = { x = 0, y = 0.2, z = 0 }    -- a node moving later (steering wheel): the light follows it live
-  brightestX()
-  check(math.abs(env.circles[1].y - 1.2) < 0.05, 'live node matrices each frame: ' .. env.circles[1].y)
-  config.set('carLedsOffset', -10)
-  brightestX()
-  check(math.abs(env.circles[1].y - 1.1) < 0.05, 'manual nudge down 10 cm: ' .. env.circles[1].y)
-  config.set('carLedsOffset', 0)
-  env.ledParentOffset = nil
-  car.isInPitlane = false
-  frame(1)
-  -- no digital_instruments.ini: the meshes CSP marks as LEDs
+  check(#env.circles + #env.meshDraws == 0 and not carLeds.active, 'on track: nothing drawn')
+  -- no digital_instruments.ini: the meshes CSP marks as LEDs; nothing marked: cockpit meshes named like LEDs
   env.carIni = nil
-  env.sim.currentSessionIndex = savedSession + 8
-  car.isInPitlane = true
-  frame(1)
-  check(carLeds.count == 5 and carLeds.source == 'CSP (actsAsLED)' and carLeds.drawMode == 1,
-    'fallback to CSP LED marks, drawing way reset: ' .. carLeds.count)
-  -- nothing marked either: cockpit meshes named like LEDs
-  car.isInPitlane = false
-  frame(1)
+  reload(8)
+  check(carLeds.found == 5 and carLeds.source == 'CSP (actsAsLED)' and carLeds.drawMode == 1,
+    'fallback to CSP LED marks, drawing way reset: ' .. carLeds.found)
   env.carMeshes = { LED_A = false, LED_B = false, RPM_3 = false, DASH = false }
   env.meshPos.RPM_3 = { 0, 1, 0.5 }
   env.meshPos.DASH = { 0, 0.9, 0.5 }
-  env.sim.currentSessionIndex = savedSession + 9
-  frame(1)
-  check(carLeds.count == 3 and carLeds.source == 'podle názvu', 'last resort: meshes named like LEDs: ' .. carLeds.count .. ' ' .. carLeds.source)
+  reload(9)
+  check(carLeds.found == 3 and carLeds.source == 'podle názvu', 'last resort: meshes named like LEDs: ' .. carLeds.found)
   env.carMeshes = { LED_A = true, LED_B = true, LED_C = true, LED_D = true, ABS_LIGHT = true }
   env.meshPos.RPM_3, env.meshPos.DASH = nil, nil
-  env.sim.currentSessionIndex = savedSession + 8
-  car.isInPitlane = true
-  frame(1)
-  config.set('carLedsPit', false)
-  frame(1)
-  env.circles = {}
-  draw3D()
-  check(#env.circles == 0, 'turned off: nothing drawn')
-  config.set('carLedsPit', true)
-  car.isInPitlane = false
-  frame(1)
-  -- does it fit this car: automatic check, per-car override
-  car.isInPitlane = false
-  frame(1)
-  local function reload(k) env.sim.currentSessionIndex = savedSession + k; frame(1) end
+  -- the virtual bar: discs in front of the driver's eyes, left to right, when the car's LEDs do not fit
   env.carIni = { ['digital_instruments.ini'] = {
     ['LED_0/OBJECT_NAME'] = 'LED_A', ['LED_1/OBJECT_NAME'] = 'LED_B', ['LED_2/OBJECT_NAME'] = 'LED_C',
     ['LED_3/OBJECT_NAME'] = 'LED_D' } }
-  reload(20)
-  check(carLeds.fits and carLeds.count == 4, 'check: LEDs near the driver, visible and small fit: ' .. tostring(carLeds.reason))
   env.hiddenMeshes = { LED_A = true }
   env.meshRadius = { LED_B = 0.2 }
   env.meshPos.LED_C = { 0.1, 1, 4 }                  -- far from the driver
   reload(21)
+  enterPit()
   check(not carLeds.fits and carLeds.reason:find('nesedí') and carLeds.dropped:find('1 skrytých')
     and carLeds.dropped:find('1 moc velkých') and carLeds.dropped:find('1 mimo kokpit'),
     'check: hidden, oversized and far meshes dropped, too few left: ' .. carLeds.reason)
-  car.isInPitlane = true
-  frame(1)
+  env.clock = 1.4 * 215
   env.meshDraws, env.circles = {}, {}
   draw3D()
-  check(#env.meshDraws + #env.circles == 0 and not carLeds.active, 'not fitting: nothing drawn on this car')
+  local xs, ok = {}, #env.meshDraws == 0 and #env.circles == 10 and carLeds.useVirtual
+  for _, c in ipairs(env.circles) do
+    xs[#xs + 1] = c.x
+    if math.abs(c.y - 0.46) > 0.01 or math.abs(c.z - 0.55) > 0.01 then ok = false end
+  end
+  check(ok and math.abs(xs[1] - 0.14) < 0.01 and math.abs(xs[10] + 0.14) < 0.01,
+    string.format('virtual bar: 10 discs 55 cm ahead, 14 cm below the eyes, left to right (%d discs)', #env.circles))
+  local brightest, bx = -1, nil
+  for _, c in ipairs(env.circles) do if c.r > brightest then brightest, bx = c.r, c.x end end
+  env.clock = 1.4 * 215.5
+  env.circles = {}
+  draw3D()
+  local brightest2, bx2 = -1, nil
+  for _, c in ipairs(env.circles) do if c.r > brightest2 then brightest2, bx2 = c.r, c.x end end
+  check(bx and bx2 and math.abs(bx - bx2) > 0.2, 'the light runs along the virtual bar')
+  -- all LED meshes hidden at once = another LOD / camera, not a reason to drop them (geometry is read at the
+  -- session start, so a changed mesh needs a new session)
+  env.hiddenMeshes = { LED_A = true, LED_B = true, LED_C = true, LED_D = true }
+  env.meshRadius = nil
+  env.meshPos.LED_C = { -0.1, 1, 0.5 }
+  reload(22)
+  enterPit()
+  check(carLeds.fits and carLeds.count == 4, 'all hidden (inactive LOD): still the car\'s LEDs: ' .. carLeds.reason)
+  -- per car override and the virtual bar modes
+  env.hiddenMeshes = { LED_A = true }
+  env.meshRadius = { LED_B = 0.2, LED_C = 0.2 }
+  reload(24)
   carLeds.setCarChoice(1)
-  car.isInPitlane = false
-  frame(1)
-  car.isInPitlane = true
-  frame(1)
-  check(carLeds.active and carLeds.carChoice() == 1 and config.S.carLedsCars == 'test_car=1',
-    'always on for this car (remembered per car): ' .. config.S.carLedsCars)
+  enterPit()
+  check(carLeds.useMeshes and carLeds.count == 4 and config.S.carLedsCars == 'test_car=1',
+    'always the car\'s LEDs for this car (remembered), the check would say no: ' .. carLeds.reason)
+  leavePit()
   carLeds.setCarChoice(2)
-  car.isInPitlane = false
-  frame(1)
-  car.isInPitlane = true
-  frame(1)
-  check(not carLeds.active, 'always off for this car')
+  enterPit()
+  check(not carLeds.useMeshes and carLeds.useVirtual, 'never the car\'s LEDs for this car: the virtual bar')
   carLeds.setCarChoice(0)
   check(config.S.carLedsCars == '', 'automatic again: entry removed')
-  car.isInPitlane = false
   env.hiddenMeshes, env.meshRadius = nil, nil
-  env.meshPos.LED_C = { -0.1, 1, 0.5 }
+  reload(25)
+  config.set('carLedsVirtual', 2)
+  enterPit()
+  check(carLeds.useVirtual and not carLeds.useMeshes, 'virtual bar always: the car\'s LEDs left alone')
+  leavePit()
+  config.set('carLedsVirtual', 3)
   env.cspCarConfig = { SCRIPTABLE_DISPLAY_0 = {} }
-  reload(22)
-  check(not carLeds.fits and carLeds.reason:find('skriptem'), 'scripted dash in the CSP config: off by default')
+  enterPit()
+  check(not carLeds.fits and carLeds.reason:find('skriptem') and not carLeds.active, 'scripted dash, bar off: nothing')
   env.cspCarConfig = nil
+  config.set('carLedsVirtual', 1)
+  leavePit()
   -- try it now: the lights run for a while outside the pit lane
-  env.carIni = { ['digital_instruments.ini'] = {
-    ['LED_0/OBJECT_NAME'] = 'LED_A', ['LED_1/OBJECT_NAME'] = 'LED_B', ['LED_2/OBJECT_NAME'] = 'LED_C',
-    ['LED_3/OBJECT_NAME'] = 'LED_D' } }
-  reload(23)
-  car.isInPitlane = false
+  reload(26)
   carLeds.test(8)
   frame(1)
   env.meshDraws = {}
@@ -1598,6 +1574,58 @@ do
   config.set('pitHeadlights', true)
   car.isInPitlane = false
   frame(1)
+end
+
+-- 35. Previous lap mode: the mini sectors get their colour already on the out lap (AC's delta, else any known lap),
+--     the delta itself waits for the second lap
+do
+  car.performanceMeter = 0            -- (an earlier section ran without it: a fresh app probes it again)
+  env.callbacks.release()
+  tracker = loadApp()
+  config = require('src/config')
+  notify = require('src/notify')
+  config.set('referenceKind', 3)
+  config.set('deltaSource', 1)
+  env.callbacks.session(0, false)
+  car.bestLapTimeMs = 90000           -- AC has a best lap: its delta (performanceMeter) exists
+  car.lapTimeMs = 0
+  car.isInPitlane = true
+  car.splinePosition = LINE + 0.001
+  while car.splinePosition < 0.5 do frame(0.4) end
+  car.isInPitlane = false
+  local faster, anyDelta = 0, false
+  driveLaps(1, 1, function ()
+    car.performanceMeter = car.performanceMeter - 0.0005   -- getting faster than AC's best
+    if tracker.hasDelta then anyDelta = true end
+    local u = (car.splinePosition - LINE) % 1
+    if u > 0.95 and u < 0.97 then
+      faster = 0
+      for j = 7, 20 do if tracker.secState[j] == 2 then faster = faster + 1 end end
+    end
+  end)
+  check(not anyDelta and faster >= 10,
+    string.format('out lap in previous-lap mode: no delta, %d mini sectors green from AC\'s delta', faster))
+  -- without AC's delta: any lap we know (the saved best) colours the sectors
+  env.callbacks.session(0, false)
+  car.bestLapTimeMs = 0
+  car.performanceMeter = 0
+  car.lapTimeMs = 0
+  car.isInPitlane = true
+  car.splinePosition = LINE + 0.001
+  while car.splinePosition < 0.5 do frame(0.4) end
+  car.isInPitlane = false
+  local coloured = 0
+  anyDelta = false
+  driveLaps(1, 0.97, function ()
+    if tracker.hasDelta then anyDelta = true end
+    local u = (car.splinePosition - LINE) % 1
+    if u > 0.95 and u < 0.97 then
+      coloured = 0
+      for j = 7, 20 do if tracker.secState[j] == 2 or tracker.secState[j] == 3 or tracker.secState[j] == 1 then coloured = coloured + 1 end end
+    end
+  end)
+  check(not anyDelta and tracker.allTimeRefMs > 0 and coloured >= 10,
+    string.format('out lap without AC\'s delta: sectors against the saved lap (%d coloured), still no delta', coloured))
 end
 
 print(string.format('%d passed, %d failed', passed, failed))

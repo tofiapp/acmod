@@ -17,7 +17,7 @@ render = { AntialiasingMode = { None = 0, YEBIS = 104, SimplifiedYEBIS = 105 }, 
   setDepthMode = function () end,
   setBlendMode = function () end,
   setCullMode = function () end,
-  DepthMode = { Normal = 0, LessEqual = 3 },
+  DepthMode = { Normal = 0, LessEqual = 3, Off = 2 },
   BlendMode = { Opaque = 0, OpaqueForced = 27 },
   CullMode = { None = 0 },
   mesh = function (params)

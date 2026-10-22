@@ -277,6 +277,16 @@ end
 
 -- Lap recording
 
+-- Any lap we know, for the mini sectors when the chosen reference has nothing for this stretch (out lap, first lap,
+-- the part before the previous out lap's anchor): session best, all-time best, estimate, provisional.
+local function anyRef()
+  if T.sessionRefMs > 0 then return sessionRef end
+  if T.allTimeRefMs > 0 then return allTimeRef end
+  if T.estimateMs > 0 then return estimateRef end
+  if T.provisionalMs > 0 then return provisionalRef end
+  return nil
+end
+
 local function finishSector(j, ms)
   local state = 0
   if (T.flying or T.partial) and sectorsLive then
@@ -285,14 +295,19 @@ local function finishSector(j, ms)
     -- (on an out lap only when the line position is known, else the sector would be the wrong stretch)
     local counts = secValidNow and ms > 0 and (T.flying or partialLineKnown)
     local best = S.referenceKind == 1 and sessionBest[j] or allTimeBest[j]
-    local useAC = S.referenceKind ~= 3 and acNow and acSecStart and (not ref or kind == 3 or kind == 4)
     local n = T.sectorCount
+    local refUsable = ref ~= nil and (j - 1) / n >= anchor - 1e-9
+    -- "previous lap" mode keeps the delta strict, but the mini sectors still get a colour on the out lap and the
+    -- first lap: from AC's delta, else from any lap we know (the delta waits for the previous lap)
+    local useAC = acNow and acSecStart
+      and (not refUsable or (S.referenceKind ~= 3 and (kind == 3 or kind == 4)))
+    if not refUsable and not useAC then ref = anyRef(); refUsable = ref ~= nil end
     if counts and best > 0 and ms < best then
       state = 1
     elseif useAC then
       -- AC's delta (to its valid best lap) beats an estimate: colour by how it changed over the sector
       if math.abs(acNow - acSecStart) >= 0.001 then state = acNow < acSecStart and 2 or 3 else state = 4 end
-    elseif ref and (j - 1) / n >= anchor - 1e-9 then
+    elseif refUsable then
       local refSec = gridAt(ref, j / n) - gridAt(ref, (j - 1) / n)
       if ms < refSec then
         state = 2
