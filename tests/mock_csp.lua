@@ -22,10 +22,18 @@ render = { AntialiasingMode = { None = 0, YEBIS = 104, SimplifiedYEBIS = 105 }, 
   CullMode = { None = 0 },
   mesh = function (params)
     if M.meshFails then error('render.mesh not available') end
-    assert(params.transform == 'original' and params.shader and params.values.gColor, 'mesh draw parameters')
+    assert((params.transform == 'original' or type(params.transform) == 'table') and params.shader and params.values.gColor, 'mesh draw parameters')
+    if M.ownMatrixFails and type(params.transform) == 'table' then error('own matrix not supported') end
     M.meshDraws = M.meshDraws or {}
     local c = params.values.gColor
-    M.meshDraws[#M.meshDraws + 1] = { name = params.mesh[1], r = c.r, g = c.g, b = c.b }
+    local tr = params.transform
+    local d = { name = params.mesh[1], r = c.r, g = c.g, b = c.b, original = tr == 'original' }
+    if type(tr) == 'table' then
+      -- where the mesh centre ends up: centre + matrix translation (scale ignored)
+      local p = (M.meshPos or {})[params.mesh[1]] or { 0, 0, 0 }
+      d.x, d.y, d.z = p[1] + tr.tx, p[2] + tr.ty, p[3] + tr.tz
+    end
+    M.meshDraws[#M.meshDraws + 1] = d
   end,
   TextureFormat = { R16G16B16A16 = { Float = 10 }, R8G8B8A8 = { UNorm = 28 } } }
 
@@ -53,12 +61,21 @@ vec3 = setmetatable({}, { __call = function (_, x, y, z) return setmetatable({ x
 -- mat4x4 (translations only, enough for the node chain in the tests)
 function M.translation(x, y, z)
   local m = { tx = x, ty = y, tz = z }
+  m.position = setmetatable({}, { __index = function (_, k)
+    if k == 'set' then return function (_, px, py, pz) m.tx, m.ty, m.tz = px, py, pz end end
+    if k == 'x' then return m.tx elseif k == 'y' then return m.ty elseif k == 'z' then return m.tz end
+  end })
+  function m:mul(o) return M.translation(self.tx + o.tx, self.ty + o.ty, self.tz + o.tz) end
   function m:mulSelf(o) if o.live then o:live() end; self.tx, self.ty, self.tz = self.tx + o.tx, self.ty + o.ty, self.tz + o.tz; return self end
   function m:set(o) self.tx, self.ty, self.tz = o.tx, o.ty, o.tz; return self end
   function m:transformPointTo(dst, v) dst.x, dst.y, dst.z = v.x + self.tx, v.y + self.ty, v.z + self.tz; return dst end
   return m
 end
-mat4x4 = { identity = function () return M.translation(0, 0, 0) end }
+mat4x4 = {
+  identity = function () return M.translation(0, 0, 0) end,
+  translation = function (v) return M.translation(v.x, v.y, v.z) end,
+  scaling = function () return M.translation(0, 0, 0) end,   -- scale ignored in the tests
+}
 
 -- car.worldToLocal: the inverse of car.transform below
 function M.worldToLocalOf(car)
@@ -151,6 +168,7 @@ M.car.position, M.car.look, M.car.up = { x = 0, y = 0, z = 0 }, { x = 0, y = 0, 
 M.car.side, M.car.velocity = { x = 1, y = 0, z = 0 }, { x = 0, y = 0, z = 50 }
 M.car.transform = M.transformOf(M.car)
 M.car.worldToLocal = M.worldToLocalOf(M.car)
+M.car.headlightsActive, M.car.hazardLights = false, false
 M.car.driverEyesPosition = { x = 0, y = 0.6, z = 0 }   -- like the old fixed camera height
 M.car.aabbCenter, M.car.aabbSize = { x = 0, y = 0.5, z = -0.1 }, { x = 1.9, y = 1.2, z = 4.5 }   -- bottom at y -0.1
 M.sim = { cameraPosition = { x = 0, y = 1, z = 0.2 }, isReplayActive = false, isPaused = false, carsCount = 12, currentSessionIndex = 0, damageDisplayerShown = true, raceFlagType = 0 }
@@ -164,10 +182,24 @@ ac = {
     local function ref(list)
       local r = { filter = filter }
       for k = 1, #list do r[k] = list[k] end
+      -- filters: a plain name, '{ actsAsLED:yes }', or '{ (a, b, ?c?) & lod:A }' (? = wildcard, as CSP's filters)
       function r:findMeshes(f)
+        local patterns = {}
+        local inner = f:match('^{%s*%((.-)%)%s*&%s*lod:A%s*}$')
+        if inner then
+          for part in inner:gmatch('[^,]+') do
+            patterns[#patterns + 1] = '^' .. part:gsub('^%s+', ''):gsub('%s+$', ''):gsub('%p', '%%%0'):gsub('%%%?', '.*') .. '$'
+          end
+        else
+          patterns[1] = '^' .. f:gsub('%p', '%%%0') .. '$'
+        end
         local out = {}
         for name, led in pairs(M.carMeshes or {}) do
-          if name == f or (f == '{ actsAsLED:yes }' and led) then out[#out + 1] = name end
+          local hit = f == '{ actsAsLED:yes }' and led
+          if not hit then
+            for _, pat in ipairs(patterns) do if name:match(pat) then hit = true end end
+          end
+          if hit then out[#out + 1] = name end
         end
         table.sort(out)
         return ref(out)
@@ -264,6 +296,9 @@ ac = {
   },
   getFolder = function () return M.folder end,
   getCarID = function () return 'test_car' end,
+  setHeadlights = function (on) M.car.headlightsActive = on == true; M.calls.headlights = (M.calls.headlights or 0) + 1 end,
+  setTurningLights = function (mode) M.car.hazardLights = mode == 3; M.calls.hazards = (M.calls.hazards or 0) + 1 end,
+  TurningLights = { None = 0, Left = 1, Right = 2, Hazards = 3 },
   getTrackFullID = function (sep) return 'test_track' .. sep .. 'gp' end,
   getSim = function () return M.sim end,
   getCar = function (i) if (i or 0) == 0 then return M.car end; return M.cars[i] end,

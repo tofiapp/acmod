@@ -96,10 +96,15 @@ build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDel
   `:getTransformationRaw()` references up the node chain (kept from the pit entry; CSP's vr_rig_base getActualTransform).
   Not the kept `getWorldTransformationRaw()` (stale, discs stayed behind) nor car.worldToLocal/car.transform (model is
   offset from the physics body: discs above the LEDs); `S.carLedsOffset` cm nudge; ordered left to right;
-  drawn in `render.on('main.root.transparent')`: each LED mesh again with `render.mesh{ mesh = ref, transform = 'original' }`
-  (as CSP's Radar draws brake light / tyre meshes; LOD A first), OpaqueForced + LessEqual depth, shader colour x
-  gWhiteRefPoint: lit in the pit colour x `S.carLedsBrightness`, the rest dark, so AC's RPM lights are covered until the
-  pit exit and the shape fits; fallback `render.circle` discs like CSP's Traffic virtual lights.
+  drawn in `render.on('main.root.transparent')`: each LED mesh again with `render.mesh{ mesh = ref, transform = m }`
+  (as CSP's Radar draws brake light / tyre meshes; LOD A first), `M.drawMode` 1 = own matrix: T(-c)·S(1.08)·T(c) about the
+  mesh centre × the live node chain × 3 mm towards the camera (row-vector convention, `mat4x4.position:set`), so it covers
+  AC's LED without depth fighting; 2 = `'original'`; 3 = `render.circle` discs like CSP's Traffic virtual lights (each
+  way falls to the next on an error). OpaqueForced + LessEqual depth, shader colour x gWhiteRefPoint: lit in the pit
+  colour x `S.carLedsBrightness`, the rest dark, so AC's RPM lights are covered until the pit exit and the shape fits.
+  Third LED source: cockpit meshes `'{ (?LED?, ?RPM?, ?SHIFT?) & lod:A }'`. `M.test(s)` runs the lights off the pit lane
+  (settings button). `src/pit_car_lights.lua`: headlights (`S.pitHeadlights`) / hazards (`S.pitHazards`) blink at 0.4 s via
+  `ac.setHeadlights` / `ac.setTurningLights(ac.TurningLights.Hazards)` (Unbound), state restored at the pit exit.
   Writing the LEDs' ksEmissive flickered (AC writes it by RPM every frame), so the material is never touched.
   Per car check at session start (`M.fits`, `M.reason`, `M.dropped`): off when the CSP car config
   (`ac.INIConfig.carConfig(0).sections`) has `SCRIPTABLE_DISPLAY_*`; LED meshes dropped when `:isVisible()` is false,

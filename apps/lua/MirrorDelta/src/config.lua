@@ -40,6 +40,8 @@ local defaults = {
   carLedsBrightness = 2,      -- glow strength (x the white point); much more turns the colour white
   carLedsOffset = 0,          -- cm: manual nudge of the glow up (+) or down (-)
   carLedsCars = '',           -- per car override of the automatic check: "carId=1;carId=2" (1 always on, 2 off)
+  pitHeadlights = true,       -- in the pit lane the headlights blink
+  pitHazards = false,         -- ... and the hazard lights
   pitSectorPattern = 1,       -- halves style: 1 every other mini sector, 2 the half under the lit half of the line
   pitBox = true,              -- in the pit lane the timing window shows BOX instead of the lap time
   standingsCount = 7,         -- standings window: cars shown (the player in the middle)
@@ -149,7 +151,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.25.0' }
+local M = { S = S, defaults = defaults, VERSION = '1.26.0' }
 
 function M.set(key, value)
   S[key] = value

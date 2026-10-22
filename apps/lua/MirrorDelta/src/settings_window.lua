@@ -12,6 +12,7 @@ local pitLights = require('src/pit_lights')
 local mirror = require('src/mirror_window')
 local carData = require('src/car_data')
 local carLeds = require('src/car_leds')
+local pitCarLights = require('src/pit_car_lights')
 local D = require('src/draw')
 local S = config.S
 
@@ -118,6 +119,9 @@ local function tabDelta()
     else
       ui.textWrapped('Toto auto: nesedí, ' .. (carLeds.reason ~= '' and carLeds.reason or 'zatím nezjištěno') .. '.')
     end
+    local modes = { 'vlastní matice', 'původní poloha', 'tečky' }
+    ui.textWrapped('Kreslení: ' .. (modes[carLeds.drawMode] or '?')
+      .. (carLeds.meshError and (' (předchozí způsob selhal: ' .. carLeds.meshError .. ')') or '') .. '.')
     local choice = carLeds.carChoice()
     ui.text('Pro toto auto')
     ui.setNextItemWidth(ui.availableSpaceX())
@@ -127,6 +131,12 @@ local function tabDelta()
         if ui.selectable(names[i], choice == i - 1) then carLeds.setCarChoice(i - 1) end
       end
     end)
+  end
+  checkbox('pitHeadlights', 'V boxech blikat předními světly')
+  checkbox('pitHazards', 'V boxech blikat výstražnými světly')
+  if ui.button(carLeds.testing and 'Zkouška běží…' or 'Vyzkoušet teď (8 s, i mimo boxy)') then
+    carLeds.test(8)
+    pitCarLights.test(8)
   end
   checkbox('intensityByDelta', 'Intenzita barvy podle velikosti delty')
   if S.intensityByDelta then

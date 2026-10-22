@@ -1385,6 +1385,10 @@ do
   end
   env.clock = 1.4 * 215
   local m1, nm, dark1 = meshFrame()
+  -- own matrix: the car's node chain plus a few mm towards the camera (at y 1, z 0.2: the LEDs at z 0.5 move to -z)
+  local d1 = env.meshDraws[1]
+  check(not d1.original and d1.z and d1.z < 0.5 and d1.z > 0.49 and math.abs(d1.y - 1) < 0.01,
+    string.format('LED redrawn with an own matrix, lifted towards the camera (z %.4f)', d1.z or 0))
   env.clock = 1.4 * 215.5
   local m2 = meshFrame()
   check(nm == 4 and dark1 >= 1 and m1 ~= m2 and ((m1 == 'LED_D' and m2 == 'LED_A') or (m1 == 'LED_A' and m2 == 'LED_D')),
@@ -1393,12 +1397,17 @@ do
   local lit = env.meshDraws[1]
   for _, d in ipairs(env.meshDraws) do if d.r > lit.r then lit = d end end
   check(lit.r > lit.g * 1.5 and lit.g > lit.b * 3 and lit.r < 5, 'lit LED orange, moderate')
-  -- fallback when render.mesh cannot draw scene meshes: discs over the LEDs
+  -- fallbacks: the own matrix fails -> 'original' transform; render.mesh fails -> discs over the LEDs
+  env.ownMatrixFails = true
+  env.meshDraws = {}
+  draw3D()
+  env.ownMatrixFails = nil
+  check(carLeds.drawMode == 2 and #env.meshDraws == 4 and env.meshDraws[1].original, 'fallback to the original transform')
   env.meshFails = true
   env.circles = {}
   draw3D()
   env.meshFails = nil
-  check(#env.circles > 0 and carLeds.meshError ~= nil, 'fallback to glowing discs')
+  check(#env.circles > 0 and carLeds.drawMode == 3 and carLeds.meshError ~= nil, 'fallback to glowing discs')
   local function brightestX()
     env.circles = {}
     draw3D()
@@ -1461,7 +1470,22 @@ do
   env.sim.currentSessionIndex = savedSession + 8
   car.isInPitlane = true
   frame(1)
-  check(carLeds.count == 5 and carLeds.source == 'CSP (actsAsLED)', 'fallback to CSP LED marks: ' .. carLeds.count)
+  check(carLeds.count == 5 and carLeds.source == 'CSP (actsAsLED)' and carLeds.drawMode == 1,
+    'fallback to CSP LED marks, drawing way reset: ' .. carLeds.count)
+  -- nothing marked either: cockpit meshes named like LEDs
+  car.isInPitlane = false
+  frame(1)
+  env.carMeshes = { LED_A = false, LED_B = false, RPM_3 = false, DASH = false }
+  env.meshPos.RPM_3 = { 0, 1, 0.5 }
+  env.meshPos.DASH = { 0, 0.9, 0.5 }
+  env.sim.currentSessionIndex = savedSession + 9
+  frame(1)
+  check(carLeds.count == 3 and carLeds.source == 'podle názvu', 'last resort: meshes named like LEDs: ' .. carLeds.count .. ' ' .. carLeds.source)
+  env.carMeshes = { LED_A = true, LED_B = true, LED_C = true, LED_D = true, ABS_LIGHT = true }
+  env.meshPos.RPM_3, env.meshPos.DASH = nil, nil
+  env.sim.currentSessionIndex = savedSession + 8
+  car.isInPitlane = true
+  frame(1)
   config.set('carLedsPit', false)
   frame(1)
   env.circles = {}
@@ -1513,8 +1537,66 @@ do
   reload(22)
   check(not carLeds.fits and carLeds.reason:find('skriptem'), 'scripted dash in the CSP config: off by default')
   env.cspCarConfig = nil
+  -- try it now: the lights run for a while outside the pit lane
+  env.carIni = { ['digital_instruments.ini'] = {
+    ['LED_0/OBJECT_NAME'] = 'LED_A', ['LED_1/OBJECT_NAME'] = 'LED_B', ['LED_2/OBJECT_NAME'] = 'LED_C',
+    ['LED_3/OBJECT_NAME'] = 'LED_D' } }
+  reload(23)
+  car.isInPitlane = false
+  carLeds.test(8)
+  frame(1)
+  env.meshDraws = {}
+  draw3D()
+  check(carLeds.active and carLeds.testing and #env.meshDraws == 4, 'test button: lights on track for a while')
+  env.clock = env.clock + 9
+  frame(1)
+  check(not carLeds.active, 'test over')
   env.carIni, env.carMeshes, env.meshPos = savedIni, nil, nil
   env.sim.currentSessionIndex = savedSession
+  frame(1)
+end
+
+-- 34. Pit lane: headlights (and hazards as an option) blink, the previous state comes back at the exit
+do
+  local lights = require('src/pit_car_lights')
+  car.headlightsActive, car.hazardLights = true, false
+  env.calls.headlights, env.calls.hazards = 0, 0
+  car.isInPitlane = true
+  local states = {}
+  for t = 0, 1.6, 0.1 do
+    env.clock = 500 + t
+    frame(1)
+    states[#states + 1] = car.headlightsActive
+  end
+  local changes = 0
+  for i = 2, #states do if states[i] ~= states[i - 1] then changes = changes + 1 end end
+  check(lights.active and changes >= 3 and env.calls.hazards == 0,
+    string.format('headlights blink in the pit lane (%d changes), hazards left alone', changes))
+  car.isInPitlane = false
+  env.clock = 502
+  frame(1)
+  check(not lights.active and car.headlightsActive == true, 'pit exit: headlights back on as before')
+  config.set('pitHazards', true)
+  car.isInPitlane = true
+  env.clock = 503
+  frame(1)
+  env.clock = 503.45
+  frame(1)
+  check(env.calls.hazards >= 1, 'hazards blink when chosen')
+  car.isInPitlane = false
+  frame(1)
+  check(car.hazardLights == false, 'hazards back off at the exit')
+  config.set('pitHazards', false)
+  config.set('pitHeadlights', false)
+  car.headlightsActive = false
+  local before = env.calls.headlights
+  car.isInPitlane = true
+  frame(1)
+  env.clock = env.clock + 0.45
+  frame(1)
+  check(env.calls.headlights == before, 'turned off: headlights left alone')
+  config.set('pitHeadlights', true)
+  car.isInPitlane = false
   frame(1)
 end
 

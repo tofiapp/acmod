@@ -2,14 +2,17 @@
 -- LEDs from side to side (or every other LED blinks in turn), in the pit colour.
 -- The LEDs' materials are not changed: AC keeps driving them by RPM (writing their ksEmissive as well made them flicker,
 -- the two fought every frame). Instead they are drawn again on top in the main 3D pass (render.on('main.root.transparent')).
--- LEDs: digital_instruments.ini [LED_n] OBJECT_NAME (ac.INIConfig.carData), meshes found under
--- ac.findNodes('carRoot:0') with :findMeshes(name); without that file the meshes CSP marks as LEDs ('{ actsAsLED:yes }',
--- CSP's show_important_wheels filter). Position: the mesh's :boundingSphere() in its parent's space, taken to world space
--- every frame by multiplying the live local matrices up the node chain (:getTransformationRaw() references, kept from
--- the pit entry; CSP's vr_rig_base getActualTransform does the same). Earlier tries: the cached world matrix was stale
--- (the lights stayed behind), and going through car.worldToLocal / car.transform put them above the LEDs (the model
--- is offset from the physics body). Following the model's own nodes also follows a turning steering wheel.
--- Drawing: the LED meshes themselves in our colour (render.mesh), see drawMeshes; discs only as a fallback.
+-- LEDs: 1. digital_instruments.ini [LED_n] OBJECT_NAME (ac.INIConfig.carData), meshes found under
+-- ac.findNodes('carRoot:0') with :findMeshes(name); 2. the meshes CSP marks as LEDs ('{ actsAsLED:yes }', CSP's
+-- show_important_wheels filter); 3. cockpit meshes named like LEDs ('?LED?', '?RPM?', '?SHIFT?'), the size and
+-- distance check below sorts out the rest. Position: the mesh's :boundingSphere() in its parent's space, taken to world
+-- space every frame by multiplying the live local matrices up the node chain (:getTransformationRaw() references, kept
+-- from the pit entry; CSP's vr_rig_base getActualTransform does the same). Earlier tries: the cached world matrix was
+-- stale (the lights stayed behind), and going through car.worldToLocal / car.transform put them above the LEDs (the
+-- model is offset from the physics body). Following the model's own nodes also follows a turning steering wheel.
+-- Drawing (drawMeshes): every LED mesh again with render.mesh, with an own matrix = the same node chain, the mesh
+-- scaled up a little around its centre and moved a few mm towards the camera, so it covers AC's own LED without
+-- depth fighting; 'original' transform as the first fallback, glowing discs as the last.
 -- Cars whose dash is a CSP script or a screen texture have no such meshes. Everything under pcall; no per-frame allocation.
 
 local config = require('src/config')
@@ -24,18 +27,25 @@ local worldPos, toCam = vec3(), vec3()
 local fill, edge = rgbm(0, 0, 0, 1), rgbm(0, 0, 0, 0)
 local callbackSet = false
 
+local GROW = 1.08              -- the redrawn LED is this much bigger than the mesh, so it covers it fully
 local function addMesh(ref)
   local centre, radius = ref:boundingSphere(1, vec3())
   if not centre or not radius or radius <= 0 then return end
-  leds[#leds + 1] = { ref = ref, centre = centre, radius = radius, pos = vec3(), side = 0 }
+  -- scale about the mesh centre (in its own space): v * T(-c) * S * T(c)
+  local grow = mat4x4.translation(vec3(-centre.x, -centre.y, -centre.z))
+    :mul(mat4x4.scaling(vec3(GROW, GROW, GROW))):mul(mat4x4.translation(centre))
+  leds[#leds + 1] = { ref = ref, centre = centre, radius = radius, pos = vec3(), side = 0, grow = grow }
 end
 
--- The live local matrices from the LED's parent node up to the scene root (references to the nodes' own matrices).
+-- The live local matrices from the LED mesh (when it has one) and its nodes up to the scene root (references to the
+-- nodes' own matrices).
+local function matrixOf(n) return n:getTransformationRaw() end
 local function chainOf(ref)
   local list = {}
-  local n = ref:getParent()
+  local n = ref
   while n and #n > 0 and #list < 32 do
-    list[#list + 1] = n:getTransformationRaw()
+    local ok, m = pcall(matrixOf, n)
+    if ok and m then list[#list + 1] = m end
     n = n:getParent()
   end
   return list
@@ -84,6 +94,14 @@ local function fromCspMarks(root)
   if not all then return end
   for k = 1, #all do addMesh(all:at(k)) end
   if #leds > 0 then M.source = 'CSP (actsAsLED)' end
+end
+
+-- Last resort: cockpit meshes named like shift LEDs (the size / distance check drops what is not one).
+local function fromNames(root)
+  local all = root:findMeshes('{ (?LED?, ?RPM?, ?SHIFT?) & lod:A }')
+  if not all then return end
+  for k = 1, #all do addMesh(all:at(k)) end
+  if #leds > 0 then M.source = 'podle názvu' end
 end
 
 -- Left to right across the car (for the running light): car space x.
@@ -166,6 +184,7 @@ local function load(car)
   if not root then return end
   pcall(fromInstruments, root)
   if #leds == 0 then pcall(fromCspMarks, root) end
+  if #leds == 0 then pcall(fromNames, root) end
   M.found = #leds
   allLeds, checked = leds, {}
   if #leds == 0 then
@@ -229,7 +248,10 @@ local MESH = {
   ]],
 }
 local OFF_R, OFF_G, OFF_B = 0.025, 0.025, 0.03   -- an unlit LED
-local meshFailed = false
+
+local LIFT = 0.003             -- m towards the camera
+local lift = mat4x4.identity()
+M.drawMode = 1                 -- 1 own matrix, 2 'original' transform, 3 discs
 
 local function drawMeshes(c, n, t)
   render.setBlendMode(render.BlendMode.OpaqueForced)
@@ -237,6 +259,7 @@ local function drawMeshes(c, n, t)
   render.setCullMode(render.CullMode.None)
   local col = MESH.values.gColor
   local br = S.carLedsBrightness
+  local cam = ac.getSim().cameraPosition
   for k = 1, n do
     local led = leds[k]
     local b = level(k, n, t)
@@ -244,6 +267,20 @@ local function drawMeshes(c, n, t)
     col.g = OFF_G + (c.g * br - OFF_G) * b
     col.b = OFF_B + (c.b * br - OFF_B) * b
     MESH.mesh = led.ref
+    if M.drawMode == 1 then
+      -- own matrix: grown about its centre, the car's node chain, then a few mm towards the camera (world space)
+      acc:set(led.grow)
+      local chain = led.chain
+      for i = 1, #chain do acc:mulSelf(chain[i]) end
+      acc:transformPointTo(worldPos, led.centre)
+      toCam:set(cam.x - worldPos.x, cam.y - worldPos.y, cam.z - worldPos.z)
+      local len = math.max(1e-4, math.sqrt(toCam.x * toCam.x + toCam.y * toCam.y + toCam.z * toCam.z))
+      lift.position:set(toCam.x / len * LIFT, toCam.y / len * LIFT, toCam.z / len * LIFT)
+      acc:mulSelf(lift)
+      MESH.transform = acc
+    else
+      MESH.transform = 'original'
+    end
     render.mesh(MESH)
   end
 end
@@ -278,11 +315,11 @@ local function draw()
   if not M.active then return end
   local c = pitLights.colorAt(S.carLedsColor)
   local n, t = #leds, os.preciseClock()
-  if not meshFailed then
+  while M.drawMode <= 2 do
     local ok, err = pcall(drawMeshes, c, n, t)
     if ok then return end
-    meshFailed = true
     M.meshError = tostring(err)
+    M.drawMode = M.drawMode + 1                    -- next way; 3 = discs
   end
   drawDiscs(c, n, t)
 end
@@ -297,14 +334,21 @@ local function safeDraw()
   end
 end
 
+-- Try it now (settings button): the lights run for a few seconds wherever the car is.
+local testUntil = -1
+function M.test(seconds) testUntil = os.preciseClock() + (seconds or 8) end
+
 local function step()
   local car, sim = ac.getCar(0), ac.getSim()
   if not car or not sim then return end
   if sim.currentSessionIndex ~= session then
     session = sim.currentSessionIndex
+    M.drawMode = 1
     load(car)
   end
-  local active = S.carLedsPit and car.isInPitlane and M.enabledForCar()
+  local testing = os.preciseClock() < testUntil
+  M.testing = testing
+  local active = S.carLedsPit and (car.isInPitlane or testing) and M.enabledForCar()
   if active and not M.active then                 -- pit entry: which LEDs, where they are now, left to right
     leds = M.carChoice() == 1 and allLeds or checked
     local ok = #leds > 0 and pcall(locate, car)

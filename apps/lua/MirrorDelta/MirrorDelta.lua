@@ -4,6 +4,7 @@
 local tracker = require('src/tracker')
 local carData = require('src/car_data')
 local carLeds = require('src/car_leds')
+local pitCarLights = require('src/pit_car_lights')
 local deltaWindow = require('src/delta_window')
 local timingWindow = require('src/timing_window')
 local tyresWindow = require('src/tyres_window')
@@ -50,6 +51,7 @@ function script.update(dt)
   ok, err = pcall(setupLine.update)
   if not ok and not tracker.diag.error then tracker.diag.error = 'nastavení auta: ' .. tostring(err) end
   carLeds.update()                -- runs under its own pcall, switches itself off on an error
+  pitCarLights.update()           -- the same
   ok, err = pcall(carData.update)
   if not ok and not tracker.diag.error then tracker.diag.error = 'data auta: ' .. tostring(err) end
   ok, err = pcall(layout.update)
