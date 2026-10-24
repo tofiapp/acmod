@@ -58,9 +58,22 @@ for i = 1, #M.BUILTIN do BUILTIN_BY_ID[M.BUILTIN[i].id] = M.BUILTIN[i] end
 
 -- ---------------------------------------------------------------- sanitising
 
+-- Cuts s to at most max bytes without splitting a UTF-8 character.
+local function cutUtf8(s, max)
+  if #s <= max then return s end
+  local cut = max
+  while cut > 0 do
+    local b = s:byte(cut + 1)
+    if not b or b < 0x80 or b >= 0xC0 then break end
+    cut = cut - 1
+  end
+  return s:sub(1, cut)
+end
+M.cutUtf8 = cutUtf8
+
 local function str(v, max)
   if type(v) ~= 'string' then return nil end
-  return #v > max and v:sub(1, max) or v
+  return cutUtf8(v, max)
 end
 
 local function num(v, lo, hi)
@@ -311,6 +324,11 @@ function M.setScenario(presetId, scId, field, value)
   if not e then e = {}; p.scenarios[scId] = e end
   if field == 'look' then value = M.sanitiseLook(value) end
   if field == 'when' then value = conditions.sanitise(value) end
+  if field == 'name' then value = str(value, 40) or 'Vlastní podmínka' end
+  if field == 'to' then value = TARGET_OK[value] and value or nil end
+  if field == 'param' then value = num(value, -1e6, 1e6) end
+  if field == 'prio' then value = num(value, 1, 999) end
+  if field == 'on' then value = value == true end
   e[field] = value
   M.save()
   return id
@@ -362,10 +380,17 @@ function M.removeScenario(presetId, scId)
   return id
 end
 
+-- Renames a user preset; returns false and a Czech reason when the name is empty or taken.
 function M.rename(id, name)
   local p = M.get(id)
-  if not p or p.builtin or type(name) ~= 'string' or name == '' then return false end
-  p.name = name:sub(1, 40)
+  if not p or p.builtin then return false, 'Vestavěný preset nejde přejmenovat.' end
+  if type(name) ~= 'string' then return false, 'Zadejte jméno.' end
+  name = cutUtf8((name:gsub('^%s+', ''):gsub('%s+$', '')), 40)
+  if name == '' then return false, 'Zadejte jméno.' end
+  for _, o in ipairs(M.all()) do
+    if o.id ~= id and o.name == name then return false, 'Preset s tímto názvem už existuje, zvolte jiný.' end
+  end
+  p.name = name
   M.save()
   return true
 end

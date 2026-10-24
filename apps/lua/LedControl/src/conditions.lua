@@ -36,14 +36,27 @@ M.BY_ID = BY_ID
 local OP_INDEX = {}
 for i = 1, #M.OPS do OP_INDEX[M.OPS[i]] = i end
 
--- Sanitised copy of stored rows (unknown quantities and operators dropped, at most 8 rows).
+local function holds(op, x, v)
+  if op == '<' then return x < v elseif op == '<=' then return x <= v
+  elseif op == '>' then return x > v elseif op == '>=' then return x >= v
+  elseif op == '=' then return math.abs(x - v) < 0.5 end
+  return math.abs(x - v) >= 0.5
+end
+
+-- Sanitised copy of stored rows (unknown quantities and operators dropped, at most 8 rows). Rows of yes / no
+-- quantities become "= 1" or "= 0" with the meaning eval gives them, so describe() and the UI agree.
 function M.sanitise(rows)
   local out = {}
   if type(rows) ~= 'table' then return out end
   for i = 1, math.min(#rows, 8) do
     local r = rows[i]
     if type(r) == 'table' and BY_ID[r.q] and OP_INDEX[r.op] and tonumber(r.v) then
-      out[#out + 1] = { q = r.q, op = r.op, v = tonumber(r.v) }
+      local v = tonumber(r.v)
+      if BY_ID[r.q].bool then
+        out[#out + 1] = { q = r.q, op = '=', v = holds(r.op, 1, v) and 1 or 0 }
+      else
+        out[#out + 1] = { q = r.q, op = r.op, v = v }
+      end
     end
   end
   return out

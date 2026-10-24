@@ -9,6 +9,7 @@ local presets = require('src/presets')
 local store = require('src/store')
 local hotkeys = require('src/hotkeys')
 local diag = require('src/diag')
+local lights = require('src/lights')
 
 local S = config.S
 local M = {}
@@ -111,6 +112,7 @@ local function restoreDefaults()
   for k in pairs(config.defaults) do
     if k ~= 'hiddenGuard' then config.reset(k) end
   end
+  pcall(lights.resetScenarios)
   takeover.invalidate()
   runtime.restart('defaults')
 end
@@ -137,7 +139,8 @@ local function danger()
   elseif ui.button('Obnovit výchozí nastavení##defaults') then
     confirmDefaults = now + CONFIRM_TIME
   end
-  ui.textColored('Smazání odstraní vaše presety a nastavení všech aut. Obnovení vrátí jas, metodu a výchozí preset.', GREY)
+  ui.textColored('Smazání odstraní vaše presety a nastavení všech aut. Obnovení vrátí jas, metodu, výchozí preset a'
+    .. ' scénáře světel.', GREY)
 end
 
 function M.draw()

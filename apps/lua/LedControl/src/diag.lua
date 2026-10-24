@@ -4,6 +4,7 @@ local config = require('src/config')
 local runtime = require('src/runtime')
 local takeover = require('src/takeover')
 local safety = require('src/safety')
+local lights = require('src/lights')
 
 local S = config.S
 local M = { VERSION = '0.1.0' }
@@ -80,6 +81,10 @@ function M.text()
     st.copies, st.instances, st.writes, st.reShows, st.copyWrites, st.fights, takeover.fightMode and ' (zapisuji každý snímek)' or '')
   add('Materiály (C): před %d, po %d, rozděleno %s | chyby kreslení (B) %d | uzdraveno meshů %d', st.materialsBefore,
     st.materialsAfter, tostring(st.split), st.drawErrors, runtime.healed)
+  local okL, lines = pcall(lights.diagLines)
+  if okL and type(lines) == 'table' then
+    for i = 1, #lines do add('%s', tostring(lines[i])) end
+  end
   if info then
     add('ai.ini [GEARS] UP: %s | CSP config: %d sekcí', tostring(info.shiftUp), info.cspSections)
     for i = 1, #info.leds do

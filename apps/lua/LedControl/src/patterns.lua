@@ -23,6 +23,8 @@ M.USES = {
   fill = { zones = true, c2 = true, dir = true }, frames = { frames = true }, rainbow = { hz = true }, off = {}, original = {},
 }
 
+M.DEFAULT_ZONES = { 0, '#00FF00', 0.4, '#FF0000', 0.75, '#0050FF' }
+
 local KIND_INDEX = {}
 for i = 1, #M.KINDS do KIND_INDEX[M.KINDS[i]] = i end
 M.KIND_INDEX = KIND_INDEX
@@ -51,7 +53,7 @@ function M.compile(look)
   cl.fps = num(look.fps, 4, 0.2, 30)
   -- fill zones: { start, colour, start, colour, ... } with starts 0..1 ascending
   cl.zu, cl.zc = {}, {}
-  local z = type(look.zones) == 'table' and look.zones or { 0, '#00FF00', 0.4, '#FF0000', 0.75, '#0050FF' }
+  local z = type(look.zones) == 'table' and look.zones or M.DEFAULT_ZONES
   for i = 1, #z - 1, 2 do
     local u = num(z[i], nil, 0, 1)
     local col = color.parse(z[i + 1], nil)

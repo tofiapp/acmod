@@ -120,8 +120,11 @@ end
 function M.removeScenario(scId) return follow(presets.removeScenario(M.presetId, scId)) end
 function M.setBase(base) return follow(presets.setBase(M.presetId, base)) end
 
--- Button Test: the scenario shows for 5 s even when its condition does not hold.
+local compileIfNeeded
+
+-- Button Test: the scenario shows for 5 s even when its condition does not hold (also right after an edit).
 function M.testScenario(id, seconds)
+  if M.layout and M.state == 'run' and S.testMode == M.NORMAL then compileIfNeeded() end
   if M.compiled then engine.test(M.compiled, id, seconds or 5, ST.t) end
 end
 
@@ -186,11 +189,20 @@ local function fillTest(t, mode)
   end
 end
 
-local function compileIfNeeded()
+function compileIfNeeded()
   local v = presets.version
   if M.compiled and M.compiledVersion == v then return end
+  local old = M.compiled
   M.compiled = engine.compile(M.preset(), M.layout, ST)
   M.compiledVersion = v
+  -- a running Test survives an edit made meanwhile
+  if old then
+    for i = 1, #M.compiled.scen do
+      local sc = M.compiled.scen[i]
+      local o = engine.find(old, sc.id)
+      if o and o.forceUntil > ST.t then sc.forceUntil, sc.since = o.forceUntil, o.since end
+    end
+  end
   bump()
 end
 

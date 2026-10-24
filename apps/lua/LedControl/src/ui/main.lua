@@ -37,9 +37,11 @@ local TABS = {
   { 'Nastavení', 'src/ui/tab_settings' },
 }
 local loaded, loadErrors, drawers = {}, {}, {}
+local drawnTab = 0
 
 local function tabDrawer(i)
   return function ()
+    drawnTab = i
     local mod = loaded[i]
     if mod == nil then
       local ok, res = pcall(require, TABS[i][2])
@@ -52,10 +54,18 @@ local function tabDrawer(i)
 end
 for i = 1, #TABS do drawers[i] = tabDrawer(i) end
 
+-- header combo labels carry the preset id, so two presets with one name never share an ImGui id
+local presetLabels, labelsVersion = {}, -1
 local function presetItems()
   local all = presets.all()
+  if labelsVersion ~= presets.version then
+    presetLabels, labelsVersion = {}, presets.version
+  end
   for i = 1, #all do
-    if ui.selectable(all[i].name, all[i].id == runtime.presetId) then runtime.setPreset(all[i].id) end
+    local p = all[i]
+    local label = presetLabels[p.id]
+    if not label then label = p.name .. '##hdrPreset:' .. p.id; presetLabels[p.id] = label end
+    if ui.selectable(label, p.id == runtime.presetId) then runtime.setPreset(p.id) end
   end
 end
 
@@ -84,7 +94,13 @@ local function draw()
     end
   end
   if safety.uiError then ui.textColored(safety.uiError, RED) end
+  drawnTab = 0
   ui.tabBar('tabs', tabs)
+  -- a tab that was hidden this frame saves its pending edit (slider / colour picker still open)
+  for i = 1, #TABS do
+    local mod = loaded[i]
+    if mod and mod.flush and drawnTab ~= i then mod.flush() end
+  end
 end
 
 function M.draw()
