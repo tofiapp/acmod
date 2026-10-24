@@ -114,13 +114,21 @@ extension/lua/joypad-assist/KeyDrive/
   src/traction.lua             throttle traction limiter: load-weighted ndSlip of the driven wheels (AC's combined
                                slip, 1 = tyre peak; fallback = wheel speed slip ratio), predicted 0.15 s ahead from its
                                rate; multiplier k on the ramped throttle (K_UP 2, K_DOWN 6), floor 20 % -> 50 % (160 km/h)
-  src/brake.lua                brake lock limiter: highest grounded wheel ndSlip (predicted 0.04 s), multiplier k on the
-                               ramped brake (K_UP 4, K_DOWN 15, floor 0.15), remembers the level where slip crossed the
-                               target and starts the next application there; off below 10 km/h; car ABS on -> left to it
+  src/brake.lua                brake lock limiter on LONGITUDINAL slip only: max -slipRatio / peakRatio over grounded wheels
+                               (peakRatio learned from straight-running wheels: |slipRatio| / ndSlip, default 0.13),
+                               predicted 0.04 s; multiplier k on the ramped brake (K_UP 4, K_DOWN 15, floor 0.15);
+                               remembers the level where the lock value crossed the target; off below 10 km/h; car ABS
+                               on -> left to it. (v0.4 used combined ndSlip: steering into a corner took the brake away.)
+  src/steering.lua             grip window in road wheel degrees: delta from wheels[0..1].look, betaF / betaR from
+                               wheels[i].velocity (car.look/side, sign of side voted against the output); window
+                               betaF +- alphaPeak * target only reduces the request; countersteer = wheels along betaF
+                               when |betaR| > alphaPeak and betaF, betaR share the sign. Learns degPerUnit and
+                               alphaPeak (|slipAngle| / ndSlip at slipRatio ~ 0). Off below 20 km/h, fades in to 40.
+  src/curve.lua                "x:y x:y" piecewise linear curve (STEER_SPEED_CURVE; spaces, not commas: CSP INI lists)
   src/recorder.lua             render thread: 60 s ring buffer at 40 Hz (keys, outputs, car, 4 wheels, body slip,
                                collisions, event flags) -> keydrive-log.csv every 10 s, keydrive-incident-N.csv 3 s
                                after SPIN/CRASH/OFF. Ask the user for these files instead of guessing.
-  src/shared.lua               ac.connect layout 'KeyDrive.Live.v5' (same layout on every side)
+  src/shared.lua               ac.connect layout 'KeyDrive.Live.v6' (same layout on every side)
 tests/keydrive/                own mock + tests: python tests/keydrive/run_tests.py
 build-keydrive.sh / .ps1       dist/KeyDrive-<version>.zip (extension/... + apps/lua/KeyDriveConfig/...)
 ```
@@ -139,4 +147,10 @@ Status: phase 3, second attempt (v0.3.0). History of user feedback:
 - v0.4: phase 4 brake (ramp 400/800 %/s, MAX_BRAKE, trail-brake release by |steer|, lock limiter). Brake model in
   tests: no locked wheels, 20 % shorter stop.
 Analysis helpers for the CSV logs are quick Python scripts (csv module); group samples by key_brake phases.
-Next: user test of v0.4, then phase 5 (steering, incl. limiting front ndSlip against understeer).
+- incident 4 (v0.4): no locks in straight braking (49 % -> 0 %), but the brake limiter cut the brake to 13 % when
+  steering into corners (combined ndSlip), the car arrived too fast, fronts at 10-35 deg slip (peak 7.2), spin + crash.
+  Logs: slipAngle has the opposite sign of the steering; front peak 7.2 deg; ndSlip = |slipRatio| / 0.13 straight.
+- v0.5: brake on longitudinal slip, phase 5 steering (rate curve, grip window, countersteer). Single-track model in
+  tests: fronts held at 0.99 of peak, +15 % lateral force; countersteer recovers a slide. A countersteer to the window
+  edge (first attempt) pushed the nose further into the spin.
+Next: user test of v0.5, then phase 6 (modes, tyre temperature).

@@ -7,7 +7,8 @@
 --                                  so the moment is kept even if the driver keeps going
 -- Event flags (column `events`): WSPIN driven wheels over the slip target by 30 %, SLIDE body slip angle > 10 deg,
 -- SPIN > 30 deg, CRASH collision, OFF two or more wheels off the track, TC traction limiter reducing the throttle,
--- LOCK a wheel over 1.5x the brake slip target while braking, ABS brake limiter reducing the brake.
+-- LOCK a wheel over 1.5x the brake slip target while braking, ABS brake limiter reducing the brake,
+-- STEER grip window limiting the steering, CS countersteer assist active, UNDER front slip angle > 1.3x the peak.
 
 local M = {}
 
@@ -20,8 +21,10 @@ local INCIDENT_FILES = 5
 local INCIDENT_COOLDOWN = 10 -- s after an incident file before the next incident can start
 
 local EV_WSPIN, EV_SLIDE, EV_SPIN, EV_CRASH, EV_OFF, EV_TC, EV_LOCK, EV_ABS = 1, 2, 4, 8, 16, 32, 64, 128
+local EV_STEER, EV_CS, EV_UNDER = 256, 512, 1024
 local EVENT_NAMES = { { EV_WSPIN, 'WSPIN' }, { EV_SLIDE, 'SLIDE' }, { EV_SPIN, 'SPIN' }, { EV_CRASH, 'CRASH' },
-  { EV_OFF, 'OFF' }, { EV_TC, 'TC' }, { EV_LOCK, 'LOCK' }, { EV_ABS, 'ABS' } }
+  { EV_OFF, 'OFF' }, { EV_TC, 'TC' }, { EV_LOCK, 'LOCK' }, { EV_ABS, 'ABS' }, { EV_STEER, 'STEER' }, { EV_CS, 'CS' },
+  { EV_UNDER, 'UNDER' } }
 
 -- name, format; values are filled in `sample` in this order
 local COLUMNS = {
@@ -32,7 +35,10 @@ local COLUMNS = {
   { 'brake_out', '%.3f' }, { 'car_brake', '%.3f' },
   { 'brake_request', '%.3f' }, { 'brake_k', '%.3f' }, { 'brake_slip', '%.3f' }, { 'brake_memory', '%.3f' },
   { 'brake_state', '%d' },
+  { 'brake_peak_ratio', '%.3f' },
   { 'steer_out', '%.3f' }, { 'steer_deg', '%.1f' },
+  { 'steer_request', '%.3f' }, { 'steer_lo', '%.3f' }, { 'steer_hi', '%.3f' }, { 'front_alpha', '%.2f' },
+  { 'alpha_peak', '%.2f' }, { 'beta_f', '%.2f' }, { 'deg_per_unit', '%.2f' }, { 'steer_state', '%d' },
   { 'speed_kmh', '%.1f' }, { 'gear', '%d' }, { 'rpm', '%.0f' },
   { 'lat_g', '%.2f' }, { 'lon_g', '%.2f' }, { 'yaw_rate', '%.3f' }, { 'body_slip_deg', '%.1f' },
   { 'nd_fl', '%.2f' }, { 'nd_fr', '%.2f' }, { 'nd_rl', '%.2f' }, { 'nd_rr', '%.2f' },
@@ -101,6 +107,9 @@ local function sample(live, c)
   if live.tcState == 4 then flags = flags + EV_TC end
   if live.brakeRequest > 0.05 and live.brakeSlip > live.brakeTargetSlip * 1.5 then flags = flags + EV_LOCK end
   if live.brakeState == 4 then flags = flags + EV_ABS end
+  if live.steerState == 3 then flags = flags + EV_STEER end
+  if live.steerState == 4 then flags = flags + EV_CS end
+  if c.speedKmh > 30 and math.abs(live.frontAlpha) > 1.3 * live.alphaPeak then flags = flags + EV_UNDER end
 
   local v = buf
   v[1][head] = time
@@ -111,13 +120,17 @@ local function sample(live, c)
   v[14][head] = live.outBrake; v[15][head] = c.brake
   v[16][head] = live.brakeRequest; v[17][head] = live.brakeK; v[18][head] = live.brakeSlip
   v[19][head] = live.brakeMemory; v[20][head] = live.brakeState
-  v[21][head] = live.outSteer; v[22][head] = c.steer
-  v[23][head] = c.speedKmh; v[24][head] = c.gear; v[25][head] = c.rpm
-  v[26][head] = live.gx; v[27][head] = c.acceleration.z; v[28][head] = c.localAngularVelocity.y; v[29][head] = bodySlip
-  v[30][head] = w0.ndSlip; v[31][head] = w1.ndSlip; v[32][head] = w2.ndSlip; v[33][head] = w3.ndSlip
-  v[34][head] = w0.slipRatio; v[35][head] = w1.slipRatio; v[36][head] = w2.slipRatio; v[37][head] = w3.slipRatio
-  v[38][head] = w0.slipAngle; v[39][head] = w1.slipAngle; v[40][head] = w2.slipAngle; v[41][head] = w3.slipAngle
-  v[42][head] = c.collisionDepth; v[43][head] = out
+  v[21][head] = live.brakePeakRatio
+  v[22][head] = live.outSteer; v[23][head] = c.steer
+  v[24][head] = live.steerRequest; v[25][head] = live.steerLo; v[26][head] = live.steerHi
+  v[27][head] = live.frontAlpha; v[28][head] = live.alphaPeak; v[29][head] = live.betaF
+  v[30][head] = live.degPerUnit; v[31][head] = live.steerState
+  v[32][head] = c.speedKmh; v[33][head] = c.gear; v[34][head] = c.rpm
+  v[35][head] = live.gx; v[36][head] = c.acceleration.z; v[37][head] = c.localAngularVelocity.y; v[38][head] = bodySlip
+  v[39][head] = w0.ndSlip; v[40][head] = w1.ndSlip; v[41][head] = w2.ndSlip; v[42][head] = w3.ndSlip
+  v[43][head] = w0.slipRatio; v[44][head] = w1.slipRatio; v[45][head] = w2.slipRatio; v[46][head] = w3.slipRatio
+  v[47][head] = w0.slipAngle; v[48][head] = w1.slipAngle; v[49][head] = w2.slipAngle; v[50][head] = w3.slipAngle
+  v[51][head] = c.collisionDepth; v[52][head] = out
   v[EVENTS_COL][head] = flags
   return flags
 end

@@ -1,7 +1,7 @@
 -- KeyDrive: Gamepad FX script turning on/off keyboard inputs into smooth, grip-aware pedal and steering inputs.
 -- Runs in the physics thread (script.update every physics step, dt ~ 0.003 s).
 -- Throttle: ramp, manual cap, corner cap, traction limiter. Brake: ramp, manual cap, trail-brake release, lock
--- limiter. Steering is still a simple placeholder so the car is drivable.
+-- limiter on longitudinal slip. Steering: speed-dependent rate, grip window for the front tyres, countersteer.
 
 if car.isAIControlled then return end
 
@@ -10,6 +10,8 @@ local keys = require('src/keys')
 local shared = require('src/shared')
 local traction = require('src/traction')
 local brakeLimiter = require('src/brake')
+local steering = require('src/steering')
+local curve = require('src/curve')
 
 local function loadSettings()
   local defaults = {
@@ -27,6 +29,12 @@ local function loadSettings()
     BRAKE_TARGET_SLIP = 100,
     BRAKE_USE_GAME_ABS = true,
     TRAIL_BRAKE_RELEASE = 40,
+    STEER_SPEED_CURVE = '0:250 60:160 120:100 200:70',
+    STEER_RETURN_SPEED = 150,
+    STEER_BOTH_KEYS = 0,
+    STEER_LIMIT_STRENGTH = 100,
+    STEER_TARGET = 100,
+    COUNTERSTEER_ASSIST = 50,
     SHOW_DIAGNOSTICS = true,
     RECORD_LOG = true,
   }
@@ -54,10 +62,13 @@ local P = {
   brakeTargetSlip = math.clamp(S.BRAKE_TARGET_SLIP / 100, 0.3, 3),
   brakeUseGameAbs = flag(S.BRAKE_USE_GAME_ABS), -- car's ABS switched on: leave the regulation to it
   trailBrakeRelease = math.clamp(S.TRAIL_BRAKE_RELEASE / 100, 0, 1),
+  steerCurve = curve.parse(S.STEER_SPEED_CURVE, '0:250 60:160 120:100 200:70'), -- km/h -> % of full lock per s
+  steerReturn = math.clamp(S.STEER_RETURN_SPEED / 100, 0.2, 5),
+  steerBothReturn = S.STEER_BOTH_KEYS == 1 or S.STEER_BOTH_KEYS == true, -- false: hold the angle
+  steerLimitStrength = math.clamp(S.STEER_LIMIT_STRENGTH / 100, 0, 1),
+  steerTarget = math.clamp(S.STEER_TARGET / 100, 0.5, 2),
+  countersteerAssist = math.clamp(S.COUNTERSTEER_ASSIST / 100, 0, 1),
 }
-
--- Placeholder until phase 5.
-local STEER_OUT, STEER_BACK = 2.5, 5           -- per second at standstill, scaled down with speed
 
 local CORNER_G_FULL = 1.5    -- lateral g at which the corner cap reduction is complete
 local CORNER_TAU = 0.15      -- s, smoothing of the corner factor
@@ -72,6 +83,7 @@ live.brakeTargetSlip = P.brakeTargetSlip
 local gasRequest = 0  -- ramped key throttle (the "foot" before limits)
 local gas, brake, steer = 0, 0, 0
 local brakeRequest = 0 -- ramped key brake before limits
+local steerRequest = 0 -- ramped key steering before the grip window
 local corner = 0      -- smoothed 0..1 corner load factor
 local trail = 0       -- smoothed |steer| for the trail-brake release
 local lastWritten, leakTime = 0, 0
@@ -86,12 +98,14 @@ keys.read()
 publishBinds()
 traction.configure(car)
 brakeLimiter.configure(car)
+steering.configure(car, ac.getJoypadState())
 
 local function reset()
-  gasRequest, gas, brakeRequest, brake, steer, corner, trail = 0, 0, 0, 0, 0, 0, 0
+  gasRequest, gas, brakeRequest, brake, steerRequest, steer, corner, trail = 0, 0, 0, 0, 0, 0, 0, 0
   lastWritten, leakTime = 0, 0
   traction.configure(car)
   brakeLimiter.configure(car)
+  steering.reset()
 end
 
 ac.onCarJumped(car.index, reset)
@@ -148,6 +162,22 @@ local function brakeInput(dt, kBrake)
   return out
 end
 
+local function steerInput(dt, kLeft, kRight)
+  local target
+  if kLeft and kRight then
+    target = P.steerBothReturn and 0 or steerRequest -- both keys: hold the angle, or return smoothly
+  else
+    target = (kRight and 1 or 0) - (kLeft and 1 or 0)
+  end
+  local rate = curve.eval(P.steerCurve, math.abs(car.speedKmh)) / 100
+  steerRequest = ramp.stepSigned(steerRequest, target, rate, rate * P.steerReturn, dt)
+  if car.gear < 0 or car.localVelocity.z < 0 then
+    steering.reset()
+    return steerRequest -- reversing: plain keys
+  end
+  return steering.update(dt, car, steerRequest, steer, P.steerTarget, P.steerLimitStrength, P.countersteerAssist)
+end
+
 function script.update(dt)
   if car.isAIControlled then return end
   if dt <= 0 then return end
@@ -164,14 +194,7 @@ function script.update(dt)
   gas = throttle(dt, kGas, state)
   brake = brakeInput(dt, kBrake)
 
-  local steerTarget
-  if kLeft and kRight then
-    steerTarget = steer -- both keys: hold the current angle
-  else
-    steerTarget = (kRight and 1 or 0) - (kLeft and 1 or 0)
-  end
-  local speedK = 1 / (1 + math.abs(car.speedKmh) / 80)
-  steer = ramp.stepSigned(steer, steerTarget, STEER_OUT * speedK, STEER_BACK * speedK, dt)
+  steer = steerInput(dt, kLeft, kRight)
 
   state.gas = gas
   state.brake = brake
@@ -204,6 +227,15 @@ function script.update(dt)
   live.brakeSlip = brakeLimiter.slip
   live.brakeMemory = brakeLimiter.memory
   live.brakeState = brakeState
+  live.steerRequest = steerRequest
+  live.steerLo, live.steerHi = steering.lo, steering.hi
+  live.frontAlpha = steering.alpha
+  live.alphaPeak = steering.alphaPeak
+  live.betaF = steering.betaF
+  live.degPerUnit = steering.degPerUnit
+  live.steerState = not steering.available and 0 or steering.fade == 0 and 1 or steering.countering and 4
+    or steering.limiting and 3 or 2
+  live.brakePeakRatio = brakeLimiter.peakRatio
   live.leak = leakTime > 0.3
   live.physicsHz = hz
 end

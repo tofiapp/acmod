@@ -9,7 +9,7 @@ local carState = ac.getCar(__carIndex)
 recorder.init(__dirname)
 ac.onRelease(recorder.save)
 
-local W, H = 520, 298
+local W, H = 540, 316
 local P = {
   origin = vec2(24, 0),
   a = vec2(),
@@ -31,10 +31,11 @@ local C = {
 
 local TC_TEXT = { [0] = 'bez dat o kolech', 'vypnutá', 'kola ve vzduchu', 'připravena', 'OMEZUJE' }
 local BRAKE_TEXT = { [0] = 'bez dat o kolech', 'hlídání vypnuto', 'reguluje ABS auta', 'připravena', 'POVOLUJE' }
+local STEER_TEXT = { [0] = 'bez dat o kolech', 'nízká rychlost', 'volné', 'OMEZUJE', 'PROTIPOHYB' }
 
 local lastAlive, staleTime = -1, 0
 local textTimer = 0
-local lines = { '', '', '', '', '', '', '' }
+local lines = { '', '', '', '', '', '', '', '' }
 
 local function gearText(g)
   return g == -1 and 'R' or g == 0 and 'N' or tostring(g)
@@ -64,9 +65,11 @@ function script.update(dt)
     lines[5] = string.format('Klávesy (VK): plyn %d  brzda %d  vlevo %d  vpravo %d  řazení %d%s / %d%s',
       live.bindGas, live.bindBrake, live.bindLeft, live.bindRight,
       live.bindGearUp, math.floor(m / 16) % 2 == 1 and '*' or '', live.bindGearDown, math.floor(m / 32) % 2 == 1 and '*' or '')
-    lines[7] = string.format('Brzda: %s  prokluz %.0f %% vrcholu (cíl %.0f %%)  brzda ×%.2f  paměť %.0f %%',
-      BRAKE_TEXT[live.brakeState] or '?', live.brakeSlip * 100, live.brakeTargetSlip * 100, live.brakeK,
+    lines[7] = string.format('Brzda: %s  podélný prokluz %.0f %% vrcholu (vrchol %.0f %%)  brzda ×%.2f  paměť %.0f %%',
+      BRAKE_TEXT[live.brakeState] or '?', live.brakeSlip * 100, live.brakePeakRatio * 100, live.brakeK,
       live.brakeMemory * 100)
+    lines[8] = string.format('Řízení: %s  skluz předních %.1f° (vrchol %.1f°)  kola %.1f°/jednotku',
+      STEER_TEXT[live.steerState] or '?', live.frontAlpha, live.alphaPeak, live.degPerUnit)
     lines[6] = live.leak and 'POZOR: auto jede s větším plynem, než KeyDrive posílá (AC přimíchává klávesnici)' or ''
   end
 end
@@ -140,22 +143,28 @@ function script.drawUI()
   local e = mid + math.clamp(live.outSteer, -1, 1) * BAR_W * 0.5
   P.a:set(math.min(mid, e), o.y + 100); P.b:set(math.max(mid, e), o.y + 100 + BAR_H)
   ui.drawRectFilled(P.a, P.b, C.out, 2)
+  if live.steerState >= 2 then
+    marker(mid + math.clamp(live.steerLo, -1, 1) * BAR_W * 0.5, o.y + 100, C.cap, 1)
+    marker(mid + math.clamp(live.steerHi, -1, 1) * BAR_W * 0.5, o.y + 100, C.cap, 1)
+  end
+  marker(mid + math.clamp(live.steerRequest, -1, 1) * BAR_W * 0.5, o.y + 100, C.request, 1)
 
   label(o.x + 10, o.y + 124, lines[1])
   label(o.x + 10, o.y + 142, lines[2], live.tcState == 4 and C.warn or nil)
   label(o.x + 10, o.y + 160, lines[7], live.brakeState == 4 and C.warn or nil)
-  label(o.x + 10, o.y + 178, lines[3])
-  label(o.x + 10, o.y + 196, lines[4])
-  label(o.x + 10, o.y + 214, lines[5])
-  if live.leak then label(o.x + 10, o.y + 232, lines[6], C.bad) end
-  label(o.x + 10, o.y + 254, 'oranžová = posláno, modrá = klávesa, šedá = strop, bílá = auto')
+  label(o.x + 10, o.y + 178, lines[8], live.steerState >= 3 and C.warn or nil)
+  label(o.x + 10, o.y + 196, lines[3])
+  label(o.x + 10, o.y + 214, lines[4])
+  label(o.x + 10, o.y + 232, lines[5])
+  if live.leak then label(o.x + 10, o.y + 250, lines[6], C.bad) end
+  label(o.x + 10, o.y + 272, 'oranžová = posláno, modrá = klávesa, šedá = strop, bílá = auto')
   if live.recordLog then
     if recorder.error then
-      label(o.x + 10, o.y + 272, 'záznam nefunguje: ' .. recorder.error, C.bad)
+      label(o.x + 10, o.y + 290, 'záznam nefunguje: ' .. recorder.error, C.bad)
     elseif recorder.lastIncident ~= '' then
-      label(o.x + 10, o.y + 272, 'záznam běží, poslední incident: ' .. recorder.lastIncident, C.warn)
+      label(o.x + 10, o.y + 290, 'záznam běží, poslední incident: ' .. recorder.lastIncident, C.warn)
     else
-      label(o.x + 10, o.y + 272, 'záznam běží: keydrive-log.csv ve složce skriptu (posledních 60 s)')
+      label(o.x + 10, o.y + 290, 'záznam běží: keydrive-log.csv ve složce skriptu (posledních 60 s)')
     end
   end
   ui.popFont()
