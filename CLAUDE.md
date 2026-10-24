@@ -111,11 +111,15 @@ extension/lua/joypad-assist/KeyDrive/
   src/keys.lua                 AC keyboard binds from cfg/controls.ini ([KEYBOARD] GAS/BRAKE/LEFT/RIGHT, [GEARUP]/[GEARDN]/
                                [HANDBRAKE] KEY; CM writes hex "0x53"), ac.isKeyDown. In gamepad mode AC does not
                                forward keyboard gear keys (user report), so assist.lua sets state.gearUp/gearDown/handbrake
-  src/shared.lua               ac.connect layout 'KeyDrive.Live.v2' (same layout on every side)
+  src/traction.lua             throttle traction limiter (own slip from angularSpeed * tyreRadius vs localVelocity.z,
+                               floor V0 = 5 m/s, yaw term |yawRate| * halfTrack; PI-style limit, anti-windup)
+  src/shared.lua               ac.connect layout 'KeyDrive.Live.v3' (same layout on every side)
 tests/keydrive/                own mock + tests: python tests/keydrive/run_tests.py
 build-keydrive.sh / .ps1       dist/KeyDrive-<version>.zip (extension/... + apps/lua/KeyDriveConfig/...)
 ```
 
-Status: phase 2 (PoC: throttle ramp; brake and steering are placeholders). Open questions for the in-game test:
-does the script run with no physical gamepad, and does AC leak raw keyboard gas into the joypad state
-(the PoC overlay shows the incoming joypad values and the final `car.gas`).
+Status: phase 3 (throttle complete: ramp -> manual cap reduced by lateral g / steering -> traction limit; brake
+and steering are placeholders). User feedback on the PoC: in gamepad mode the plain ramp spun the wheels all the time
+(AC's keyboard mode had its own hidden throttle help), and AC did not apply the keyboard gear keys (fixed by
+forwarding [GEARUP]/[GEARDN]). The overlay shows slip vs target, the limit, and a leak warning when `car.gas` is
+higher than what KeyDrive wrote. tests/keydrive section 11 runs a launch model (wheel inertia + tyre curve).

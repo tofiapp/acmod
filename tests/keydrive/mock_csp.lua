@@ -33,10 +33,17 @@ function M.reset()
   M.settings = {}
   M.connected = {}
   M.callbacks = { jumped = {}, controls = {} }
-  M.joypad = { gas = 0, brake = 0, steer = 0, clutch = 1, handbrake = 0, steerStickX = 0 }
+  M.joypad = { gas = 0, brake = 0, steer = 0, clutch = 1, handbrake = 0, steerStickX = 0, gForces = vec() }
+  local wheels = {}
+  for i = 0, 3 do
+    wheels[i] = {
+      angularSpeed = 0, tyreRadius = 0.32, load = 3000,
+      position = vec(i % 2 == 0 and 0.78 or -0.78, 0.3, i < 2 and 1.3 or -1.3),
+    }
+  end
   M.car = {
     index = 0, isAIControlled = false, physicsAvailable = true, speedKmh = 0, gas = 0, brake = 0,
-    localVelocity = vec(), gear = 1,
+    localVelocity = vec(), localAngularVelocity = vec(), gear = 1, rpm = 900, tractionType = 0, wheels = wheels,
   }
   M.renderModules = {}
   M.calls = {}
@@ -101,6 +108,7 @@ function M.install(core)
     drawRectFilled = function () count('drawRectFilled') end,
     setCursor = function () end,
     text = function () count('text') end,
+    textColored = function () count('text') end,
     pushFont = function () end,
     popFont = function () end,
   }

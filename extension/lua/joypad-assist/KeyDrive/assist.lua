@@ -1,18 +1,24 @@
 -- KeyDrive: Gamepad FX script turning on/off keyboard inputs into smooth, grip-aware pedal and steering inputs.
--- Runs in the physics thread (script.update every physics step, dt ~ 0.003 s). Phase 2: proof of concept,
--- only the throttle is shaped properly; brake and steering are simple placeholders so the car is drivable.
+-- Runs in the physics thread (script.update every physics step, dt ~ 0.003 s).
+-- Phase 3: complete throttle (ramp, manual cap, corner cap, traction limiter). Brake and steering are still simple
+-- placeholders so the car is drivable.
 
 if car.isAIControlled then return end
 
 local ramp = require('src/ramp')
 local keys = require('src/keys')
 local shared = require('src/shared')
+local traction = require('src/traction')
 
 local function loadSettings()
   local defaults = {
-    THROTTLE_RISE_RATE = 150,
+    THROTTLE_RISE_RATE = 120,
     THROTTLE_FALL_RATE = 400,
     MAX_THROTTLE = 100,
+    TRACTION = true,
+    TARGET_SLIP = 10,
+    TRACTION_RESPONSE = 100,
+    CORNER_THROTTLE_REDUCTION = 25,
     SHOW_DIAGNOSTICS = true,
   }
   local ok, s = pcall(function ()
@@ -21,19 +27,34 @@ local function loadSettings()
   return ok and s or defaults
 end
 
+local function flag(v) return v ~= false and v ~= 0 end
+
 local S = loadSettings()
-local throttleRise = math.max(S.THROTTLE_RISE_RATE, 1) / 100
-local throttleFall = math.max(S.THROTTLE_FALL_RATE, 1) / 100
-local maxThrottle = math.clamp(S.MAX_THROTTLE / 100, 0, 1)
+local P = {
+  throttleRise = math.max(S.THROTTLE_RISE_RATE, 1) / 100,
+  throttleFall = math.max(S.THROTTLE_FALL_RATE, 1) / 100,
+  maxThrottle = math.clamp(S.MAX_THROTTLE / 100, 0, 1),
+  traction = flag(S.TRACTION),
+  targetSlip = math.clamp(S.TARGET_SLIP / 100, 0.01, 1),
+  tractionResponse = math.clamp(S.TRACTION_RESPONSE / 100, 0.1, 5),
+  cornerThrottleReduction = math.clamp(S.CORNER_THROTTLE_REDUCTION / 100, 0, 1),
+}
 
 -- Placeholders until phases 4 and 5.
 local BRAKE_RISE, BRAKE_FALL = 6, 10           -- per second
 local STEER_OUT, STEER_BACK = 2.5, 5           -- per second at standstill, scaled down with speed
 
-local live = shared.connect()
-live.showDiagnostics = S.SHOW_DIAGNOSTICS ~= false and S.SHOW_DIAGNOSTICS ~= 0
+local CORNER_G_FULL = 1.5    -- lateral g at which the corner cap reduction is complete
+local CORNER_TAU = 0.15      -- s, smoothing of the corner factor
 
+local live = shared.connect()
+live.showDiagnostics = flag(S.SHOW_DIAGNOSTICS)
+live.targetSlip = P.targetSlip
+
+local gasRequest = 0  -- ramped key throttle (the "foot" before limits)
 local gas, brake, steer = 0, 0, 0
+local corner = 0      -- smoothed 0..1 corner load factor
+local lastWritten, leakTime = 0, 0
 local hz = 0
 
 local function publishBinds()
@@ -43,9 +64,12 @@ end
 
 keys.read()
 publishBinds()
+traction.configure(car)
 
 local function reset()
-  gas, brake, steer = 0, 0, 0
+  gasRequest, gas, brake, steer, corner = 0, 0, 0, 0, 0
+  lastWritten, leakTime = 0, 0
+  traction.configure(car)
 end
 
 ac.onCarJumped(car.index, reset)
@@ -56,6 +80,28 @@ end)
 
 pcall(ac.loadRenderThreadModule, 'module_render')
 
+local function throttle(dt, kGas, state)
+  -- Corner cap: lateral g or steering, whichever is larger.
+  local g = math.abs(state.gForces.x) / CORNER_G_FULL
+  local st = math.abs(steer)
+  local c = g > st and g or st
+  if c > 1 then c = 1 end
+  corner = corner + (c - corner) * math.min(1, dt / CORNER_TAU)
+  local cap = P.maxThrottle * (1 - P.cornerThrottleReduction * corner)
+
+  gasRequest = ramp.step(gasRequest, kGas and cap or 0, P.throttleRise, P.throttleFall, dt)
+
+  -- Traction only when driving forwards in a forward gear; reverse, neutral and standing in reverse never use it.
+  local forward = car.gear > 0 and car.localVelocity.z > -1
+  if P.traction and forward then
+    live.cap = cap
+    return traction.update(dt, car, gasRequest, P.targetSlip, P.tractionResponse)
+  end
+  traction.reset()
+  live.cap = cap
+  return gasRequest
+end
+
 function script.update(dt)
   if car.isAIControlled then return end
   if dt <= 0 then return end
@@ -64,9 +110,12 @@ function script.update(dt)
   local state = ac.getJoypadState()
   local inGas, inBrake, inSteer = state.gas, state.brake, state.steer
 
+  -- Leak check: the car should run exactly the throttle written in the previous step.
+  if car.gas > lastWritten + 0.1 then leakTime = leakTime + dt else leakTime = 0 end
+
   local kGas, kBrake, kLeft, kRight = keys.gasDown(), keys.brakeDown(), keys.leftDown(), keys.rightDown()
 
-  gas = ramp.step(gas, kGas and maxThrottle or 0, throttleRise, throttleFall, dt)
+  gas = throttle(dt, kGas, state)
   brake = ramp.step(brake, kBrake and 1 or 0, BRAKE_RISE, BRAKE_FALL, dt)
 
   local steerTarget
@@ -81,6 +130,7 @@ function script.update(dt)
   state.gas = gas
   state.brake = brake
   state.steer = steer
+  lastWritten = gas
 
   -- Buttons AC does not forward from the keyboard in gamepad mode. Held state, AC detects the press itself.
   local kUp, kDown = keys.gearUpDown(), keys.gearDownDown()
@@ -96,5 +146,11 @@ function script.update(dt)
     + (kUp and 16 or 0) + (kDown and 32 or 0)
   live.inGas, live.inBrake, live.inSteer = inGas, inBrake, inSteer
   live.outGas, live.outBrake, live.outSteer = gas, brake, steer
+  live.gasRequest = gasRequest
+  live.slip = traction.slip
+  live.tcLimit = traction.limit
+  live.tcState = not traction.available and 0 or not P.traction and 1 or traction.airborne and 2
+    or traction.active and 4 or 3
+  live.leak = leakTime > 0.3
   live.physicsHz = hz
 end
