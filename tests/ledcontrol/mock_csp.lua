@@ -1,0 +1,435 @@
+-- Minimal stand-in for the CSP Lua API, enough to run LedControl outside the game.
+-- Scene: nodes with live translation matrices, meshes with materials (shared on purpose), visibility, LOD and
+-- CSP flags; an AC LED driver that rewrites the LEDs' ksEmissive by RPM every frame (to prove the takeover wins).
+
+local M = { frameNo = 0, clock = 0, storage = {}, callbacks = {}, renderCallbacks = {}, draws = {}, ini = {}, cspConfig = {},
+  carId = 'test_car', ui = { texts = {} }, acLeds = {}, acWrites = 'mesh' }
+
+-- ---------------------------------------------------------------- maths
+
+local vec2mt = {}
+vec2mt.__index = vec2mt
+function vec2mt:set(x, y) self.x, self.y = x, y; return self end
+vec2 = setmetatable({}, { __call = function (_, x, y) return setmetatable({ x = x or 0, y = y or 0 }, vec2mt) end })
+
+local vec3mt = {}
+vec3mt.__index = vec3mt
+function vec3mt:set(x, y, z)
+  if type(x) == 'table' then self.x, self.y, self.z = x.x, x.y, x.z else self.x, self.y, self.z = x, y, z end
+  return self
+end
+vec3 = setmetatable({}, { __call = function (_, x, y, z) return setmetatable({ x = x or 0, y = y or 0, z = z or 0 }, vec3mt) end })
+
+local rgbmt = {}
+rgbmt.__index = rgbmt
+function rgbmt:set(r, g, b)
+  if type(r) == 'table' then self.r, self.g, self.b = r.r, r.g, r.b else self.r, self.g, self.b = r, g, b end
+  return self
+end
+rgb = setmetatable({}, { __call = function (_, r, g, b) return setmetatable({ r = r or 0, g = g or 0, b = b or 0 }, rgbmt) end })
+
+local rgbmmt = {}
+rgbmmt.__index = rgbmmt
+function rgbmmt:set(c) self.r, self.g, self.b, self.mult = c.r, c.g, c.b, c.mult; return self end
+rgbm = setmetatable({}, { __call = function (_, r, g, b, m)
+  return setmetatable({ r = r or 0, g = g or 0, b = b or 0, mult = m or 0 }, rgbmmt) end })
+
+-- mat4x4: translations only (scale ignored), enough for the node chain
+local matmt = {}
+matmt.__index = matmt
+local function newMat(x, y, z)
+  local m = setmetatable({ tx = x or 0, ty = y or 0, tz = z or 0 }, matmt)
+  m.position = { set = function (_, px, py, pz) m.tx, m.ty, m.tz = px, py, pz end }
+  return m
+end
+function matmt:mul(o) return newMat(self.tx + o.tx, self.ty + o.ty, self.tz + o.tz) end
+function matmt:mulSelf(o) self.tx, self.ty, self.tz = self.tx + o.tx, self.ty + o.ty, self.tz + o.tz; return self end
+function matmt:set(o) self.tx, self.ty, self.tz = o.tx, o.ty, o.tz; return self end
+function matmt:transformPointTo(dst, v) dst.x, dst.y, dst.z = v.x + self.tx, v.y + self.ty, v.z + self.tz; return dst end
+mat4x4 = {
+  identity = function () return newMat(0, 0, 0) end,
+  translation = function (v) return newMat(v.x, v.y, v.z) end,
+  scaling = function () return newMat(0, 0, 0) end,
+}
+M.newMat = newMat
+
+-- ---------------------------------------------------------------- scene
+
+local refmt = {}
+refmt.__index = refmt
+local function ref(list)
+  local r = setmetatable({}, refmt)
+  for i = 1, #(list or {}) do r[i] = list[i] end
+  return r
+end
+M.ref = ref
+
+local materialCounter = 0
+function M.material(name, r, g, b)
+  materialCounter = materialCounter + 1
+  return { name = name or ('mat' .. materialCounter), id = materialCounter, ksEmissive = { r = r or 0, g = g or 0, b = b or 0 } }
+end
+
+function M.node(name, parent, x, y, z)
+  local n = { kind = 'node', name = name, parent = parent, children = {}, matrix = newMat(x, y, z), active = true }
+  if parent then parent.children[#parent.children + 1] = n end
+  return n
+end
+
+function M.mesh(name, parent, opts)
+  opts = opts or {}
+  local c = opts.centre or { 0, 0, 0 }
+  local m = { kind = 'mesh', name = name, parent = parent, material = opts.material or M.material(), visible = opts.visible ~= false,
+    centre = { x = c[1], y = c[2], z = c[3] }, radius = opts.radius or 0.004, lod = opts.lod or 'A',
+    actsAsLED = opts.actsAsLED or false, shadows = false, transparent = false, created = false }
+  parent.children[#parent.children + 1] = m
+  return m
+end
+
+local function escape(p)
+  return (p:gsub('[%^%$%(%)%%%.%[%]%*%+%-]', '%%%0'))
+end
+local function namePattern(p)
+  return '^' .. (escape(p):gsub('%?', '.*')) .. '$'
+end
+
+local function compile(filter)
+  filter = filter:gsub('^%s+', ''):gsub('%s+$', '')
+  if filter:sub(1, 1) ~= '{' then
+    local pat = namePattern(filter)
+    return function (m) return m.name:match(pat) ~= nil end
+  end
+  local body = filter:sub(2, -2)
+  local tests = {}
+  for term in body:gmatch('[^&]+') do
+    term = term:gsub('^%s+', ''):gsub('%s+$', '')
+    if term == 'actsAsLED:yes' then tests[#tests + 1] = function (m) return m.actsAsLED end
+    elseif term:match('^lod:') then
+      local l = term:sub(5)
+      tests[#tests + 1] = function (m) return m.lod == l end
+    elseif term:sub(1, 1) == '(' then
+      local pats = {}
+      for p in term:sub(2, -2):gmatch('[^,]+') do pats[#pats + 1] = namePattern((p:gsub('^%s+', ''):gsub('%s+$', ''))) end
+      tests[#tests + 1] = function (m)
+        for i = 1, #pats do if m.name:match(pats[i]) then return true end end
+        return false
+      end
+    else
+      local pat = namePattern(term)
+      tests[#tests + 1] = function (m) return m.name:match(pat) ~= nil end
+    end
+  end
+  return function (m)
+    for i = 1, #tests do if not tests[i](m) then return false end end
+    return true
+  end
+end
+
+local function walk(obj, fn)
+  if obj.kind == 'mesh' then fn(obj) return end
+  for i = 1, #obj.children do walk(obj.children[i], fn) end
+end
+
+function refmt:findMeshes(filter)
+  local test = compile(filter)
+  local out, seen = {}, {}
+  for i = 1, #self do
+    walk(self[i], function (m)
+      if not seen[m] and not m.disposed and test(m) then seen[m] = true; out[#out + 1] = m end
+    end)
+  end
+  return ref(out)
+end
+function refmt:at(i, out)
+  out = out or ref()
+  for k = #out, 1, -1 do out[k] = nil end
+  out[1] = self[i]
+  return out
+end
+function refmt:name(i) local o = self[i or 1]; return o and o.name or '' end
+function refmt:materialName(i) local o = self[i or 1]; return o and o.material and o.material.name or '' end
+function refmt:getParent()
+  local out, seen = {}, {}
+  for i = 1, #self do
+    local p = self[i].parent
+    if p and not seen[p] then seen[p] = true; out[#out + 1] = p end
+  end
+  return ref(out)
+end
+function refmt:getTransformationRaw()
+  local o = self[1]
+  if not o then return nil end
+  if o.kind ~= 'node' then error('not a node') end
+  return o.matrix
+end
+function refmt:boundingSphere(i, out)
+  local o = self[i or 1]
+  if not o or o.kind ~= 'mesh' then return nil, nil end
+  out = out or vec3()
+  out.x, out.y, out.z = o.centre.x, o.centre.y, o.centre.z
+  return out, o.radius
+end
+function refmt:setVisible(v)
+  for i = 1, #self do if self[i].kind == 'mesh' then self[i].visible = v == true end end
+  return self
+end
+function refmt:isVisible(i) local o = self[i or 1]; return o ~= nil and o.kind == 'mesh' and o.visible and not o.disposed end
+function refmt:isActive(i) local o = self[i or 1]; return o ~= nil and o.active ~= false end
+function refmt:isCastingShadows(i) local o = self[i or 1]; return o ~= nil and o.shadows end
+function refmt:isTransparent(i) local o = self[i or 1]; return o ~= nil and o.transparent end
+function refmt:setShadows(v) for i = 1, #self do self[i].shadows = v end return self end
+function refmt:setTransparent(v) for i = 1, #self do self[i].transparent = v end return self end
+function refmt:getVertices() if self[1] and self[1].kind == 'mesh' then return { source = self[1] } end return nil end
+function refmt:getIndices() if self[1] and self[1].kind == 'mesh' then return { source = self[1] } end return nil end
+function refmt:createMesh(name, materialName, v, ix, keepAlive, moveData)
+  if M.createMeshFails then return nil end
+  local parent = self[1]
+  local s = v.source
+  local m = M.mesh(name, parent, { centre = { s.centre.x, s.centre.y, s.centre.z }, radius = s.radius, lod = s.lod })
+  m.created, m.keepAlive, m.copyOf = true, keepAlive == true, s
+  return ref({ m })
+end
+function refmt:assignMaterialFrom(other, index)
+  local src = other[index or 1]
+  for i = 1, #self do self[i].material = src.material end
+  return self
+end
+local function allMeshes()
+  local list = {}
+  walk(M.root, function (m) if not m.disposed then list[#list + 1] = m end end)
+  return list
+end
+function refmt:ensureUniqueMaterials()
+  local inSet = {}
+  for i = 1, #self do inSet[self[i]] = true end
+  local usedOutside = {}
+  for _, m in ipairs(allMeshes()) do if not inSet[m] then usedOutside[m.material] = true end end
+  local clones = {}
+  for i = 1, #self do
+    local m = self[i]
+    if usedOutside[m.material] then
+      local c = clones[m.material]
+      if not c then
+        local e = m.material.ksEmissive
+        c = M.material(m.material.name, e.r, e.g, e.b)
+        clones[m.material] = c
+      end
+      m.material = c
+    end
+  end
+  return self
+end
+function refmt:setMaterialProperty(prop, value)
+  if M.failSetMaterial then error('setMaterialProperty failed (test)') end
+  for i = 1, #self do
+    local mat = self[i].material
+    local t = mat[prop]
+    if not t then t = {}; mat[prop] = t end
+    t.r, t.g, t.b = value.r or value.x, value.g or value.y, value.b or value.z
+  end
+  M.materialWrites = (M.materialWrites or 0) + 1
+  return self
+end
+function refmt:getMaterialPropertyValue(index, prop)
+  if type(index) == 'string' then index, prop = 1, index end
+  local o = self[index or 1]
+  local t = o and o.material[prop]
+  if not t then return nil end
+  return vec3(t.r, t.g, t.b)
+end
+function refmt:getMaterialsCount()
+  local seen, n = {}, 0
+  for i = 1, #self do
+    local m = self[i].material
+    if m and not seen[m] then seen[m] = true; n = n + 1 end
+  end
+  return n
+end
+function refmt:countMatches(other)
+  local inSelf = {}
+  for i = 1, #self do inSelf[self[i]] = true end
+  local n = 0
+  for i = 1, #other do if inSelf[other[i]] then n = n + 1 end end
+  return n
+end
+function refmt:append(other) for i = 1, #other do self[#self + 1] = other[i] end return self end
+function refmt:dispose()
+  for i = 1, #self do
+    local o = self[i]
+    o.disposed = true
+    local p = o.parent
+    if p then for k = #p.children, 1, -1 do if p.children[k] == o then table.remove(p.children, k) end end end
+  end
+  for i = #self, 1, -1 do self[i] = nil end
+end
+
+-- What the driver sees for an original LED mesh: its own emissive when visible, a visible copy's emissive, or a
+-- redrawn colour on top. Returns r, g, b, plus 'double' when the original and a copy are both visible.
+function M.seen(mesh)
+  local d = M.draws[mesh]
+  if d and d.frame == M.frameNo then return d.r, d.g, d.b, 'drawn' end
+  local shown, r, g, b = 0, 0, 0, 0
+  if mesh.visible and not mesh.disposed then
+    shown = 1
+    r, g, b = mesh.material.ksEmissive.r, mesh.material.ksEmissive.g, mesh.material.ksEmissive.b
+  end
+  for _, c in ipairs(mesh.parent.children) do
+    if c.copyOf == mesh and c.visible and not c.disposed then
+      shown = shown + 1
+      r, g, b = c.material.ksEmissive.r, c.material.ksEmissive.g, c.material.ksEmissive.b
+    end
+  end
+  return r, g, b, shown == 2 and 'double' or (shown == 0 and 'none' or 'ok')
+end
+
+-- AC's digital instruments: every frame, LED k gets its colour when rpm >= its threshold, else black.
+-- acWrites = 'mesh': into the mesh's current material; 'material': into the material it had at load.
+function M.acStep()
+  local rpm = M.car.rpm
+  for i = 1, #M.acLeds do
+    local a = M.acLeds[i]
+    local lit = rpm >= a.rpm
+    for k = 1, #a.meshes do
+      local mesh = a.meshes[k]
+      local e = (M.acWrites == 'mesh' and mesh.material or a.materials[k]).ksEmissive
+      e.r, e.g, e.b = lit and a.r or 0, lit and a.g or 0, lit and a.b or 0
+    end
+  end
+end
+
+-- CSP reloading the script: meshes created without keepAlive are removed, everything else stays as it is.
+function M.reloadScene()
+  walk(M.root, function (m) if m.created and not m.keepAlive then m.disposed = true end end)
+end
+
+-- ---------------------------------------------------------------- render
+
+render = {
+  BlendMode = { OpaqueForced = 27 }, DepthMode = { LessEqual = 3 }, CullMode = { None = 0 },
+  setBlendMode = function () end, setDepthMode = function () end, setCullMode = function () end,
+  on = function (name, cb) M.renderCallbacks[name] = cb end,
+  mesh = function (p)
+    if M.meshFails then error('render.mesh failed (test)') end
+    local o = p.mesh[1]
+    local d = M.draws[o]
+    if not d then d = {}; M.draws[o] = d end
+    d.r, d.g, d.b, d.frame = p.values.gColor.r, p.values.gColor.g, p.values.gColor.b, M.frameNo
+    M.drawCount = (M.drawCount or 0) + 1
+  end,
+}
+
+-- ---------------------------------------------------------------- ac
+
+local function iniObject(sections)
+  local o = { sections = sections }
+  function o:get(section, key, default)
+    local s = self.sections[section]
+    local v = s and s[key]
+    if v == nil then return default end
+    if type(default) == 'number' then return tonumber(v[1]) or default end
+    if default == nil then return v end
+    return v[1]
+  end
+  return o
+end
+
+ac = {
+  FolderID = { ScriptConfig = 1 },
+  getCar = function (i) if i == 0 then return M.car end return nil end,
+  getSim = function () return M.sim end,
+  getCarID = function () return M.carId end,
+  findNodes = function (f)
+    if f == 'carRoot:0' and M.root then return ref({ M.root }) end
+    return ref({})
+  end,
+  emptySceneReference = function () return ref({}) end,
+  INIConfig = {
+    carData = function (_, file)
+      if M.iniFails then error('ini failed (test)') end
+      return iniObject(M.ini[file] or {})
+    end,
+    carConfig = function () return iniObject(M.cspConfig) end,
+  },
+  storage = function (defaults, prefix)
+    return setmetatable({}, {
+      __index = function (_, k)
+        local v = M.storage[prefix .. k]
+        if v == nil then return defaults[k] end
+        return v
+      end,
+      __newindex = function (_, k, v) M.storage[prefix .. k] = v end,
+    })
+  end,
+  getFolder = function () return M.folder end,
+  onRelease = function (cb) M.callbacks.release = cb end,
+  onSessionStart = function (cb) M.callbacks.session = cb end,
+  setClipboardText = function (t) M.clipboard = t end,
+  ControlButton = function (id)
+    return { id = id, pressed = function () local p = M.hotkeyPressed; M.hotkeyPressed = false; return p end,
+      control = function () M.hotkeyControlDrawn = true end }
+  end,
+}
+
+-- ---------------------------------------------------------------- files
+
+function io.fileExists(p) local f = io.open(p, 'r'); if f then f:close(); return true end return false end
+function io.load(p) local f = io.open(p, 'r'); if not f then return nil end local s = f:read('*a'); f:close(); return s end
+function io.save(p, s) local f = io.open(p, 'w'); if not f then return false end f:write(s); f:close(); return true end
+function io.createDir() return true end
+function io.deleteFile(p) os.remove(p) end
+
+local function ser(v, out)
+  local t = type(v)
+  if t == 'number' then out[#out + 1] = string.format('%.17g', v)
+  elseif t == 'string' then out[#out + 1] = string.format('%q', v)
+  elseif t == 'boolean' then out[#out + 1] = tostring(v)
+  elseif t == 'table' then
+    out[#out + 1] = '{'
+    for k, x in pairs(v) do
+      out[#out + 1] = '['; ser(k, out); out[#out + 1] = ']='; ser(x, out); out[#out + 1] = ','
+    end
+    out[#out + 1] = '}'
+  else out[#out + 1] = 'nil' end
+end
+stringify = setmetatable({
+  parse = function (s)
+    local f = assert(loadstring('return ' .. s))
+    setfenv(f, {})
+    return f()
+  end,
+}, { __call = function (_, v) local out = {}; ser(v, out); return table.concat(out) end })
+
+-- ---------------------------------------------------------------- ui
+
+local U = M.ui
+local function rec(s) if U.record then U.texts[#U.texts + 1] = s end end
+ui = {
+  ColorPickerFlags = { PickerHueBar = 1 },
+  checkbox = function (label) U.last = label; rec(label); return U.click == label end,
+  button = function (label) U.last = label; rec(label); return U.click == label end,
+  radioButton = function (label) U.last = label; rec(label); return U.click == label end,
+  slider = function (label, v)
+    U.last = label
+    if U.slide and U.slide[label] then return U.slide[label], true end
+    return v, false
+  end,
+  colorButton = function (label, c)
+    U.last = label
+    U.cells = (U.cells or 0) + 1
+    local p = U.pick and U.pick[label]
+    if p then c.r, c.g, c.b = p[1], p[2], p[3]; return true end
+    return false
+  end,
+  itemHovered = function () return U.hover ~= nil and U.last == U.hover end,
+  setTooltip = function (t) rec(t) end,
+  text = function (t) rec(t) end,
+  textWrapped = function (t) rec(t) end,
+  textColored = function (t) rec(t) end,
+  sameLine = function () end,
+  separator = function () end,
+  availableSpaceX = function () return 500 end,
+  tabBar = function (_, fn) fn() end,
+  tabItem = function (label, fn) if label == (U.tab or 'Diody') then fn() end end,
+}
+
+return M

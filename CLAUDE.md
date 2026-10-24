@@ -68,7 +68,7 @@ apps/lua/MirrorDelta/
   src/notify_window.lua   notification window (styles: pill, slanted strip via ui.pathLineTo/pathFillConvex, line)
   src/settings_window.lua tabs: Delta, Časy, Pneumatiky, Převody, Poškození, Notifikace, Barvy, Diagnostika
 tests/                    mock CSP API + simulated laps, run with LuaJIT via lupa
-build.sh / build.ps1      dist/MirrorDelta-<version>.zip with apps/lua/MirrorDelta/...
+build.sh / build.ps1      one ZIP per app: dist/<App>-<version>.zip with apps/lua/<App>/... (no argument = both)
 ```
 
 ## How the tracker works
@@ -187,8 +187,9 @@ Poškození tab shows the live raw values for calibration.
 ## Commands
 
 ```bash
-pip install lupa && python tests/run_tests.py   # syntax check of all Lua files + simulated laps
-./build.sh                                      # or build.ps1 on Windows
+pip install lupa && python tests/run_tests.py   # MirrorDelta: syntax check of all Lua files + simulated laps
+python tests/ledcontrol/run_tests.py            # LedControl: own mock (scene, shared materials, AC LED writer)
+./build.sh [MirrorDelta|LedControl]             # or build.ps1 on Windows; no argument builds both
 ```
 
 ## Defaults the user chose
@@ -197,3 +198,16 @@ Delta layout B (sectors top, line middle, number bottom), 24 sectors in 3 groups
 number 30 px, opacity 100 %, intensity off. Timing side by side, best lap purple frame, lap flash on.
 Tyres style 1 (big core numbers + zone bar); style 2 = core number + tyre + three zone numbers.
 Gear: rounded style, speed on a dark bar as wide as the gear tile, speed step 3 km/h, font Unbounded.
+
+## LedControl (second, separate app)
+
+`apps/lua/LedControl/` takes over the LEDs of the player's steering wheel / dash. It shares no code with MirrorDelta
+(do not touch MirrorDelta for it). Research: `docs/ledcontrol-research.md`, plan and data model:
+`docs/ledcontrol-plan.md`. Phase 3 (proof of concept) is in: detection (`src/detect.lua`: digital_instruments.ini
+`[LED_n] OBJECT_NAME` + CSP `[EMISSIVE_*] INPUT = RPM`, else `{ actsAsLED:yes }`, else `?LED?/?RPM?/?SHIFT?` in LOD A;
+every mesh of a name is an instance; order by the bounding sphere centre through the live node chain on car.side, groups
+by single-linkage clusters), takeover (`src/takeover.lua`, the only module that changes the scene: 1 shadow copy via
+`createMesh` + `assignMaterialFrom` + `ensureUniqueMaterials`, original hidden; 2 redraw with `render.mesh`; 3 direct
+`ksEmissive` with re-assert in `script.frameBegin` when AC writes back; fallback 1 -> 2 -> 3), self-heal marker
+`hiddenGuard` in ac.storage, error boundary `src/safety.lua`, tab Diody with test patterns and "Kopírovat diagnostiku".
+Same rules as MirrorDelta: no per-frame allocation (test section 8), no invented CSP API.
