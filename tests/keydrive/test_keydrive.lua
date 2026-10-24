@@ -115,7 +115,36 @@ do
   mock.keys[87] = true
   run(s, 0.2, 0.003)
   check('rebound gas key', mock.joypad.gas > 0.25, mock.joypad.gas)
-  check('binds published', mock.connected['KeyDrive.Live.v1'].bindGas == 87)
+  check('binds published', mock.connected['KeyDrive.Live.v2'].bindGas == 87)
+end
+
+-- 7b. Gear and handbrake keys from their own sections, hex values as Content Manager writes them.
+do
+  mock.reset()
+  mock.controls.GEARUP = { KEY = '0x53' }   -- S
+  mock.controls.GEARDN = { KEY = '0x46' }   -- F
+  mock.controls.HANDBRAKE = { KEY = '0x20' }
+  mock.controls.KEYBOARD.GAS = '0x57'       -- W as hex string
+  local s = mock.load(CORE, 'assist.lua')
+  mock.joypad.gearUp, mock.joypad.gearDown = false, false
+  s.update(0.003)
+  check('no gear press without keys', mock.joypad.gearUp == false and mock.joypad.gearDown == false)
+  mock.keys[0x53] = true
+  s.update(0.003)
+  check('gear up key forwarded', mock.joypad.gearUp == true)
+  mock.keys[0x53] = nil
+  mock.joypad.gearUp = false -- AC refills the state every step
+  mock.keys[0x46] = true
+  s.update(0.003)
+  check('gear down key forwarded', mock.joypad.gearDown == true and mock.joypad.gearUp == false)
+  mock.keys[0x20] = true
+  s.update(0.003)
+  check('handbrake key forwarded', mock.joypad.handbrake == 1)
+  mock.keys[0x57] = true
+  run(s, 0.1, 0.003)
+  check('hex GAS bind', mock.joypad.gas > 0.1, mock.joypad.gas)
+  local live = mock.connected['KeyDrive.Live.v2']
+  check('gear binds published', live.bindGearUp == 0x53 and live.bindGearDown == 0x46)
 end
 
 -- 8. AI-controlled car: the script does nothing.
@@ -132,13 +161,13 @@ do
   mock.keys[VK_UP] = true
   mock.joypad.gas = 1 -- pretend AC sent raw keyboard gas
   s.update(0.003)
-  local live = mock.connected['KeyDrive.Live.v1']
+  local live = mock.connected['KeyDrive.Live.v2']
   check('incoming value published', live.inGas == 1, live.inGas)
   check('key mask', live.keyMask == 1, live.keyMask)
   check('render module requested', mock.renderModules[1] == 'module_render')
   local core = CORE
   local r = mock.load(core, 'module_render.lua')
-  mock.connected['KeyDrive.Live.v1'] = live
+  mock.connected['KeyDrive.Live.v2'] = live
   r.update(0.016)
   r.drawUI()
   check('render module draws', (mock.calls.drawRectFilled or 0) > 5 and (mock.calls.text or 0) >= 6)

@@ -8,7 +8,7 @@ local carState = ac.getCar(__carIndex)
 
 local P = {
   origin = vec2(24, 0),
-  size = vec2(430, 216),
+  size = vec2(430, 236),
   a = vec2(),
   b = vec2(),
   cursor = vec2(),
@@ -25,7 +25,7 @@ local C = {
 
 local lastAlive, staleTime = -1, 0
 local textTimer = 0
-local lines = { '', '', '', '' }
+local lines = { '', '', '', '', '' }
 
 function script.update(dt)
   ac.setDrawUIActive(live.showDiagnostics)
@@ -43,7 +43,11 @@ function script.update(dt)
       live.inGas * 100, live.inBrake * 100, live.inSteer * 100)
     lines[3] = string.format('Klávesy (VK): plyn %d  brzda %d  vlevo %d  vpravo %d',
       live.bindGas, live.bindBrake, live.bindLeft, live.bindRight)
-    lines[4] = string.format('Auto (fyzika): plyn %.0f %%  brzda %.0f %%', carState.gas * 100, carState.brake * 100)
+    local m = live.keyMask
+    lines[4] = string.format('Auto (fyzika): plyn %.0f %%  brzda %.0f %%  rychlost %s',
+      carState.gas * 100, carState.brake * 100, carState.gear == -1 and 'R' or carState.gear == 0 and 'N' or tostring(carState.gear))
+    lines[5] = string.format('Řazení (VK): nahoru %d%s  dolů %d%s', live.bindGearUp,
+      math.floor(m / 16) % 2 == 1 and ' [stisk]' or '', live.bindGearDown, math.floor(m / 32) % 2 == 1 and ' [stisk]' or '')
   end
 end
 
@@ -94,6 +98,7 @@ function script.drawUI()
   label(o.x + 10, o.y + 124, lines[2])
   label(o.x + 10, o.y + 144, lines[3])
   label(o.x + 10, o.y + 164, lines[4])
-  label(o.x + 10, o.y + 188, 'modrá = klávesa, oranžová = KeyDrive, bílá = auto')
+  label(o.x + 10, o.y + 184, lines[5])
+  label(o.x + 10, o.y + 208, 'modrá = klávesa, oranžová = KeyDrive, bílá = auto')
   ui.popFont()
 end

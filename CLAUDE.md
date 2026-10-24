@@ -108,8 +108,10 @@ extension/lua/joypad-assist/KeyDrive/
   assist.lua                   physics thread: reads keys, writes ac.getJoypadState().gas/brake/steer
   module_render.lua            render thread (ac.loadRenderThreadModule): diagnostic overlay via script.drawUI
   src/ramp.lua                 rate limiters in units/s (dt based)
-  src/keys.lua                 AC keyboard binds from cfg/controls.ini [KEYBOARD], ac.isKeyDown
-  src/shared.lua               ac.connect layout 'KeyDrive.Live.v1' (same layout on every side)
+  src/keys.lua                 AC keyboard binds from cfg/controls.ini ([KEYBOARD] GAS/BRAKE/LEFT/RIGHT, [GEARUP]/[GEARDN]/
+                               [HANDBRAKE] KEY; CM writes hex "0x53"), ac.isKeyDown. In gamepad mode AC does not
+                               forward keyboard gear keys (user report), so assist.lua sets state.gearUp/gearDown/handbrake
+  src/shared.lua               ac.connect layout 'KeyDrive.Live.v2' (same layout on every side)
 tests/keydrive/                own mock + tests: python tests/keydrive/run_tests.py
 build-keydrive.sh / .ps1       dist/KeyDrive-<version>.zip (extension/... + apps/lua/KeyDriveConfig/...)
 ```

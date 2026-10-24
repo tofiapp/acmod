@@ -38,6 +38,7 @@ local hz = 0
 
 local function publishBinds()
   live.bindGas, live.bindBrake, live.bindLeft, live.bindRight = keys.gas, keys.brake, keys.left, keys.right
+  live.bindGearUp, live.bindGearDown = keys.gearUp, keys.gearDown
 end
 
 keys.read()
@@ -81,11 +82,18 @@ function script.update(dt)
   state.brake = brake
   state.steer = steer
 
+  -- Buttons AC does not forward from the keyboard in gamepad mode. Held state, AC detects the press itself.
+  local kUp, kDown = keys.gearUpDown(), keys.gearDownDown()
+  if kUp then state.gearUp = true end
+  if kDown then state.gearDown = true end
+  if keys.handbrakeDown() then state.handbrake = 1 end
+
   -- Diagnostics
   hz = hz + (1 / dt - hz) * math.min(1, dt * 2)
   local a = live.alive + 1
   live.alive = a > 1000000 and 0 or a
   live.keyMask = (kGas and 1 or 0) + (kBrake and 2 or 0) + (kLeft and 4 or 0) + (kRight and 8 or 0)
+    + (kUp and 16 or 0) + (kDown and 32 or 0)
   live.inGas, live.inBrake, live.inSteer = inGas, inBrake, inSteer
   live.outGas, live.outBrake, live.outSteer = gas, brake, steer
   live.physicsHz = hz
