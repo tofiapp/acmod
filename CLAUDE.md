@@ -2,6 +2,10 @@
 
 ## Project
 
+This repository holds two separate Lua apps for Assetto Corsa with Custom Shaders Patch (CSP) that share no code:
+**MirrorDelta** (everything below up to the LedControl section) and **LedControl** (section at the end). Each has its
+own tests and its own ZIP (`build.sh [MirrorDelta|LedControl]`). Do not change one app for the other.
+
 MirrorDelta is a Lua app for Assetto Corsa with Custom Shaders Patch (CSP). It has several windows,
 each with its own taskbar icon:
 
@@ -201,13 +205,59 @@ Gear: rounded style, speed on a dark bar as wide as the gear tile, speed step 3 
 
 ## LedControl (second, separate app)
 
-`apps/lua/LedControl/` takes over the LEDs of the player's steering wheel / dash. It shares no code with MirrorDelta
-(do not touch MirrorDelta for it). Research: `docs/ledcontrol-research.md`, plan and data model:
-`docs/ledcontrol-plan.md`. Phase 3 (proof of concept) is in: detection (`src/detect.lua`: digital_instruments.ini
-`[LED_n] OBJECT_NAME` + CSP `[EMISSIVE_*] INPUT = RPM`, else `{ actsAsLED:yes }`, else `?LED?/?RPM?/?SHIFT?` in LOD A;
-every mesh of a name is an instance; order by the bounding sphere centre through the live node chain on car.side, groups
-by single-linkage clusters), takeover (`src/takeover.lua`, the only module that changes the scene: 1 shadow copy via
-`createMesh` + `assignMaterialFrom` + `ensureUniqueMaterials`, original hidden; 2 redraw with `render.mesh`; 3 direct
-`ksEmissive` with re-assert in `script.frameBegin` when AC writes back; fallback 1 -> 2 -> 3), self-heal marker
-`hiddenGuard` in ac.storage, error boundary `src/safety.lua`, tab Diody with test patterns and "Kopírovat diagnostiku".
-Same rules as MirrorDelta: no per-frame allocation (test section 8), no invented CSP API.
+`apps/lua/LedControl/` takes over the LEDs of the player's steering wheel / dash (and, tab Světla, the car's lights).
+Research: `docs/ledcontrol-research.md`, plan and data model: `docs/ledcontrol-plan.md`. One window (`LedControl`,
+`FUNCTION_MAIN = windowMain`), `LAZY = NONE`, `[SIM_CALLBACKS] FRAME_BEGIN = frameBegin`. User-facing docs: Czech
+`apps/lua/LedControl/README.md`.
+
+```
+apps/lua/LedControl/
+  LedControl.lua          entry: script.update / frameBegin / windowMain under the error boundary, ac.onRelease,
+                          ac.onSessionStart, render.on('main.root.transparent'), hotkey handlers
+  src/config.lua          ac.storage 'lc_' -> plain S (master, method, intensity, testMode, defaultPreset, hiddenGuard)
+  src/store.lua           ScriptConfig files car_<carId>.lon (method, preset, map, lights) and presets.lon, sanitised
+  src/safety.lua          error boundary: first error -> restorers (runtime.halt) + message; UI errors kept apart
+  src/car_info.lua        once per car: digital_instruments [LED_n] dump (RPM_SWITCH), CSP [EMISSIVE_*] INPUT=RPM,
+                          generator '@' lines, ai.ini [GEARS] UP, car.ini FUEL_LIGHT_MIN_LITERS
+  src/car_state.lua       ST, scalars per frame; optional car/sim fields probed once under pcall
+  src/detect.lua          layout: sources digital_instruments + csp_rpm, else actsAsLED, else ?LED?/?RPM?/?SHIFT?
+                          (LOD A); every mesh of a name = instance; checks radius <= 6 cm, <= 1.8 m from the eyes,
+                          visible; order = bounding sphere centre through the live node chain on car.side (left sign
+                          from wheels[0]-wheels[1]); groups = single-linkage clusters (threshold 2.5 x median spacing,
+                          >= 1.5 cm), main = biggest, Levé / Pravé / Další řada; manual map overrides; listMeshes()
+  src/takeover.lua        the only module that changes LED meshes: 1 shadow copy (createMesh of getVertices /
+                          getIndices in the original's parent, assignMaterialFrom + ensureUniqueMaterials, original
+                          hidden), 2 redraw (render.mesh, grow 8 % x live chain x 3 mm lift), 3 direct ksEmissive
+                          (materials split only when shared, re-assert in frameBegin when AC writes back); fallback
+                          1 -> 2 -> 3; change-only set(i, packed); guard every 0.5 s (re-shows, AC writes); self-heal
+                          marker hiddenGuard written before hiding, cleared only by the run that wrote it
+  src/color.lua           packed 0xRRGGBB, ORIGINAL = -1 (car's own logic), OFF = 0, hsv, mix, parse '#RRGGBB'
+  src/patterns.lua        compiled looks: solid, blink, alternate, pulse, run, fill (left/right/edges/centre, zones,
+                          car thresholds), frames ('.' transparent, '0' off, '1'..'9' palette; nearest-centre rescale),
+                          rainbow, off, original; UNSET = transparent (falls through)
+  src/conditions.lua      custom condition quantities / operators, compile, eval (no allocation), Czech describe
+  src/scenarios.lua       catalogue (order = default priority) with test / value / avail / param / hold
+  src/presets.lua         built-ins F1 styl, GT3 styl, Minimální (relative); user presets sparse ('from' built-in),
+                          copy-on-write editing, move, custom scenarios, export "LEDCONTROL-PRESET 1 " + JSON, import
+                          via JSON.parse + sanitise
+  src/engine.lua          compile(preset, layout, ST) -> per group candidate lists; step(): scenario tests once with
+                          hold / Test timers, per group highest priority active scenario paints, UNSET falls through,
+                          rest = preset base ('off' / 'original')
+  src/runtime.lua         states wait -> run | off | noleds | failed; restart on session, car change, method, map;
+                          per frame car_state.fill -> engine.step or a test pattern -> takeover.set (hover blink only
+                          on the car, never in fb); preset per car; lights.update while the master switch is on
+  src/lights.lua          lights of the car (tab Světla), see that file
+  src/hotkeys.lua         ac.ControlButton master / next preset / flash, polled in script.update
+  src/diag.lua            "Kopírovat diagnostiku" text
+  src/ui/main.lua         header (master, status, preset combo, errors) + tabs loaded lazily under pcall
+  src/ui/tab_leds.lua     Diody (+ led_map.lua: manual order, groups, mesh picker), tab_scenarios.lua, tab_editor.lua,
+                          tab_lights.lua, tab_settings.lua
+tests/ledcontrol/         mock_csp.lua (scene graph, shared materials, AC LED writer, JSON, ui), helpers.lua (test
+                          cars: formula 15+3+3 with HR/LR/LOD B instances, GT3 10 LEDs one material, actsAsLED, names,
+                          empty), test_*.lua each in its own LuaJIT runtime
+```
+
+Rules as for MirrorDelta: no per-frame allocation (every test file ends with an allocation check: window open, its
+tab drawn, < 4 KB over 300 frames), no invented CSP API (evidence in docs/ledcontrol-plan.md section 12; calls only seen
+in internal code are probed under pcall), UI Czech, code English. Lua pitfalls already hit here: `ipairs` stops at the
+first nil (presets.effective), `a and nil or b` is always b.
