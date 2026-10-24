@@ -7,6 +7,7 @@ local takeover = require('src/takeover')
 local color = require('src/color')
 local detect = require('src/detect')
 local diag = require('src/diag')
+local ledMap = require('src/ui/led_map')
 
 local S = config.S
 local M = {}
@@ -133,11 +134,12 @@ local function draw()
   for i = 1, #warningLines do ui.textColored(warningLines[i], ORANGE) end
   if #lay.leds == 0 then
     ui.textWrapped('Na tomto autě jsem nenašel žádné diody (digital_instruments.ini, CSP config, označení actsAsLED ani'
-      .. ' jména meshů). Ruční výběr meshů přijde v další fázi. Pošlete mi prosím diagnostiku.')
+      .. ' jména meshů). Vyberte je ručně ze seznamu meshů kokpitu tlačítkem níže.')
   else
     modeRow()
     preview()
   end
+  ledMap.draw()
   if ui.button('Znovu najít diody') then runtime.restart('redetect') end
   ui.sameLine()
   if ui.button('Kopírovat diagnostiku') then

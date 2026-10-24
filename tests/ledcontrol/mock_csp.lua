@@ -525,6 +525,19 @@ ui = {
   ColorPickerFlags = { PickerHueBar = 1 },
   ComboFlags = { None = 0 },
   setNextItemWidth = function () end,
+  header = function (t) rec(t) end,
+  inputText = function (label, text)
+    U.last = label
+    local v = U.type and U.type[label]
+    if v ~= nil then U.type[label] = nil return v, true, false end
+    return text, false, false
+  end,
+  childWindow = function (id, size, border, flags, content)
+    if content == nil then flags, content = content, flags end
+    if content == nil then border, content = content, border end
+    if content then content() end
+  end,
+  getClipboardText = function () return M.clipboard or '' end,
   selectable = function (label) U.last = label; rec(label); return U.click == label end,
   combo = function (label, preview, flags, content)
     U.last = label
