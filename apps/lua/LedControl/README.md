@@ -1,0 +1,104 @@
+# LedControl
+
+Lua aplikace pro Assetto Corsa s Custom Shaders Patch (CSP). Převezme diody na volantu a palubní desce vašeho auta
+a řídí je sama: kdy svítí, jakou barvou a jak blikají podle situace (pit limiter, vlajky, řazení, DRS, ABS/TC,
+palivo, poškození, start, stání). V kartě Světla umí ovládat i další světla auta.
+
+Změny diod jsou **jen vizuální a jen na vašem autě**. Ostatní jezdci online je nevidí. Výjimkou jsou skutečná světla
+auta v kartě Světla (dálková, výstražná, přepínače jako dešťové světlo): ta jsou opravdový stav auta a ostatní je vidí.
+
+## Instalace
+
+1. Vezměte `LedControl-<verze>.zip` (vytvoří ho `./build.sh LedControl` nebo `build.ps1 LedControl`).
+2. Přetáhněte ZIP do Content Manageru a potvrďte instalaci. Ručně: složka `apps/lua/LedControl` do složky hry.
+3. Ve hře otevřete aplikaci **LedControl** z lišty aplikací. Logika běží i se zavřeným oknem.
+
+Potřebujete CSP 0.2.0 nebo novější (manifest `REQUIRED_VERSION = 2651`).
+
+## Okno
+
+Nahoře je **hlavní vypínač** (vypnutí vrátí autu jeho vlastní diody i světla), stav, počet diod a **preset pro toto
+auto**. Pod tím jsou karty:
+
+| Karta | Co v ní je |
+| --- | --- |
+| **Diody** | Způsob převzetí (A/B/C), jas, náhled diod ve skutečném pořadí po skupinách, co teď svítí, testy, ruční pořadí a výběr diod, diagnostika |
+| **Scénáře** | Seznam situací presetu: zapnutí, priorita, cíl (skupina diod), vzor, barvy, rychlost blikání, Test, vlastní podmínky |
+| **Editor** | Vlastní presety a ruční animace: mřížka s tolika políčky, kolik má auto diod, snímky a jejich rychlost |
+| **Světla** | Světla, která auto má, a jejich scénáře (dešťové světlo, výstražná světla, dálková, brzdová světla, podsvícení) |
+| **Nastavení** | Jas, výchozí způsob a preset, klávesy, export/import presetů přes schránku, smazání dat, výchozí nastavení |
+
+## Jak to funguje
+
+### Hledání diod
+
+Aplikace diody najde sama, v tomto pořadí:
+
+1. `digital_instruments.ini` auta, sekce `[LED_n]` (`OBJECT_NAME`, `RPM_SWITCH`), i z `data.acd`;
+2. CSP konfigurace auta, sekce `[EMISSIVE_…]` s `INPUT = RPM`;
+3. meshe, které CSP označuje jako diody (`actsAsLED`);
+4. meshe kokpitu se jménem obsahujícím LED, RPM nebo SHIFT.
+
+Diody seřadí zleva doprava podle skutečné polohy na volantu a rozdělí do skupin (řada otáček, levé a pravé boční
+diody, další řady). Když pořadí nesedí nebo auto diody nemá, v kartě Diody je **Upravit pořadí a skupiny diod** nebo
+**Vybrat diody ručně** (seznam malých meshů v kokpitu s hledáním). Najetím myší na diodu v náhledu dioda na autě bliká.
+
+### Způsob převzetí
+
+AC zapisuje barvu svých diod každý snímek. Aby se aplikace s AC „nepřetahovala“, má tři způsoby:
+
+- **A – stínová kopie** (doporučená): každá dioda dostane kopii s vlastním materiálem, původní se schová. Kopie se
+  pohybuje s volantem i při přepnutí kamery.
+- **B – překreslení**: dioda se znovu vykreslí přes tu původní.
+- **C – přímý zápis**: zapisuje přímo do materiálu diody. Když AC barvu přepisuje, aplikace ji vrací před každým
+  vykreslením.
+
+Když jeden způsob na autě nefunguje, aplikace sama přepne na další a napíše proč. Volba se pamatuje pro každé auto.
+Po pádu nebo restartu skriptu se schované diody samy vrátí.
+
+### Scénáře a priorita
+
+Každá skupina diod ukazuje nejvýš postavený aktivní scénář, který na ni míří. Části bez barvy (průhledné) propustí
+scénář pod ním. Když nic neplatí, ukáže skupina **základ presetu**: zhasnuto, nebo diody podle auta.
+
+Vestavěné scénáře (pořadí = výchozí priorita): pit limiter, pit lane bez limiteru, vlajky (modrá, žlutá, černá,
+penalizace, bílá, šachovnice; červenou AC zatím nehlásí), omezovač otáček, ideální bod řazení (z `ai.ini`), řadicí
+světla podle otáček (plnění zleva doprava nebo od krajů ke středu, prahy relativní nebo z auta), DRS k dispozici a
+otevřené, zásah ABS a TC, málo paliva, poškození, odpočet startu a zelená, stání nebo vypnutý motor a **vlastní
+podmínky** (veličina, porovnání, hodnota, víc řádků musí platit zároveň).
+
+Vzory: svítí, bliká, střídá liché a sudé, pulzuje, běžící světlo, plní se (zleva, zprava, od krajů, od středu),
+duha, vlastní snímky. Rychlost se zadává v Hz.
+
+### Presety
+
+- **F1 styl**: řada se plní zleva zelená – červená – modrá, v bodě řazení vše modře, omezovač bliká.
+- **GT3 styl**: plnění od krajů ke středu zelená – žlutá – červená, bod řazení bliká červeně.
+- **Minimální**: otáčky ukazuje auto samo, přidá jen pit limiter a modrou a žlutou vlajku.
+
+Vestavěné presety jsou relativní, fungují na libovolném počtu diod. Když vestavěný preset upravíte, vytvoří se jeho
+kopie a auto začne používat ji. Preset se pamatuje pro každé auto. Ruční animace z Editoru jsou vázané na počet
+diod: na autě s jiným počtem se přepočítají, nebo (když přepočet vypnete) se scénář vypne s upozorněním.
+
+Sdílení: **Nastavení → Kopírovat aktuální preset do schránky** dá jeden řádek textu začínající `LEDCONTROL-PRESET 1`.
+**Vložit preset ze schránky** ho načte jako nový preset.
+
+### Klávesy
+
+V Nastavení lze přiřadit klávesu nebo tlačítko volantu: hlavní vypínač, další preset, problik dálkovými světly.
+Fungují i se zavřeným oknem.
+
+## Když něco nefunguje
+
+V kartě Diody je **Kopírovat diagnostiku** (také v Nastavení). Text obsahuje nalezené diody a jejich polohu,
+odmítnuté kandidáty s důvodem, sekce `[LED_n]` z auta, stav převzetí a scénářů. Pošlete ho autorovi.
+
+Uložená data jsou ve složce `Documents/Assetto Corsa/cfg/extension/state/lua/app/LedControl` (CSP `ScriptConfig`): `car_<auto>.lon`
+(způsob, preset, ruční pořadí diod, světla) a `presets.lon` (vaše presety).
+
+## Vývoj
+
+```bash
+pip install lupa && python tests/ledcontrol/run_tests.py   # testy LedControl (vlastní simulace CSP)
+./build.sh LedControl                                        # dist/LedControl-<verze>.zip
+```

@@ -59,7 +59,8 @@ function M.compile(preset, layout, ST)
     for k = 1, grp.n do grp.buf[k] = UNSET end
     for i = 1, #C.scen do
       local sc = C.scen[i]
-      if sc.on and targetsGroup(sc.to, g, hasRole) then
+      -- switched-off scenarios stay candidates so their Test button still shows them
+      if targetsGroup(sc.to, g, hasRole) then
         grp.cands[#grp.cands + 1] = sc
         if sc.cl.p == 'frames' then
           local f = patterns.framesFor(sc.cl, gi, grp.n, sc.entry.look and sc.entry.look.rescale ~= false)

@@ -117,6 +117,18 @@ end
 check(yellow, 'Test: yellow flag shows without a flag')
 frame(300)
 check(not lit(nameColour('FLAG_L1')), 'Test: stops after 5 s')
+rt.editScenario('flagWhite', 'on', false)
+rt = app.runtime
+frame(2)
+rt.testScenario('flagWhite')
+frame(3)
+check(nameColour('FLAG_L1') > 20, 'Test: works for a switched-off scenario too')
+env.sim.raceFlagType = 14
+frame(400)
+check(not lit(nameColour('FLAG_L1')), 'switched-off scenario stays dark when its condition holds')
+env.sim.raceFlagType = 0
+rt.setPreset('builtin:f1')
+frame(2)
 
 -- ABS hold timer
 car.absInAction = true
