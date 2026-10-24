@@ -44,7 +44,7 @@ function M.reset()
   M.car = {
     index = 0, isAIControlled = false, physicsAvailable = true, speedKmh = 0, gas = 0, brake = 0,
     localVelocity = vec(), localAngularVelocity = vec(), gear = 1, rpm = 900, tractionType = 0, wheels = wheels,
-    acceleration = vec(), collisionDepth = 0, wheelsOutside = 0, steer = 0,
+    acceleration = vec(), collisionDepth = 0, wheelsOutside = 0, steer = 0, absMode = 0,
   }
   M.saved = {}
   M.renderModules = {}

@@ -5,7 +5,7 @@ local M = {}
 
 function M.connect()
   return ac.connect({
-    ac.StructItem.key('KeyDrive.Live.v4'),
+    ac.StructItem.key('KeyDrive.Live.v5'),
     alive = ac.StructItem.int32(),      -- physics update counter, wraps at 1e6
     keyMask = ac.StructItem.int32(),    -- bit 0 gas, 1 brake, 2 left, 3 right, 4 gear up, 5 gear down
     inGas = ac.StructItem.double(),     -- joypad state as it arrived, before KeyDrive
@@ -22,6 +22,13 @@ function M.connect()
     targetSlip = ac.StructItem.double(),
     tcLimit = ac.StructItem.double(),   -- traction multiplier on the requested throttle
     gx = ac.StructItem.double(),        -- lateral g
+    brakeRequest = ac.StructItem.double(), -- ramped key brake before limits
+    brakeCap = ac.StructItem.double(),  -- manual brake cap reduced by the trail-brake release
+    brakeK = ac.StructItem.double(),    -- lock limiter multiplier
+    brakeSlip = ac.StructItem.double(), -- highest wheel ndSlip (filtered) while braking
+    brakeMemory = ac.StructItem.double(), -- remembered brake level where the wheels last reached the target
+    brakeTargetSlip = ac.StructItem.double(),
+    brakeState = ac.StructItem.int32(), -- 0 no wheel data, 1 off, 2 car's ABS, 3 ready, 4 limiting
     recordLog = ac.StructItem.boolean(),
     tcState = ac.StructItem.int32(),    -- 0 no wheel data, 1 off, 2 wheels in the air, 3 ready, 4 limiting
     leak = ac.StructItem.boolean(),     -- the car runs more throttle than KeyDrive wrote (AC mixes in the keyboard)

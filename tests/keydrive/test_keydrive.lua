@@ -92,7 +92,7 @@ do
   local s = fresh()
   mock.keys[VK_DOWN] = true
   run(s, 0.1, 0.003)
-  check('brake rises', mock.joypad.brake > 0.5 and mock.joypad.brake < 0.7, mock.joypad.brake)
+  check('brake rises', mock.joypad.brake > 0.35 and mock.joypad.brake < 0.45, mock.joypad.brake)
   mock.keys[VK_DOWN] = nil
   mock.keys[VK_LEFT] = true
   run(s, 0.2, 0.003)
@@ -115,7 +115,7 @@ do
   mock.keys[87] = true
   run(s, 0.2, 0.003)
   check('rebound gas key', mock.joypad.gas > 0.2, mock.joypad.gas)
-  check('binds published', mock.connected['KeyDrive.Live.v4'].bindGas == 87)
+  check('binds published', mock.connected['KeyDrive.Live.v5'].bindGas == 87)
 end
 
 -- 7b. Gear and handbrake keys from their own sections, hex values as Content Manager writes them.
@@ -143,7 +143,7 @@ do
   mock.keys[0x57] = true
   run(s, 0.1, 0.003)
   check('hex GAS bind', mock.joypad.gas > 0.1, mock.joypad.gas)
-  local live = mock.connected['KeyDrive.Live.v4']
+  local live = mock.connected['KeyDrive.Live.v5']
   check('gear binds published', live.bindGearUp == 0x53 and live.bindGearDown == 0x46)
 end
 
@@ -161,13 +161,13 @@ do
   mock.keys[VK_UP] = true
   mock.joypad.gas = 1 -- pretend AC sent raw keyboard gas
   s.update(0.003)
-  local live = mock.connected['KeyDrive.Live.v4']
+  local live = mock.connected['KeyDrive.Live.v5']
   check('incoming value published', live.inGas == 1, live.inGas)
   check('key mask', live.keyMask == 1, live.keyMask)
   check('render module requested', mock.renderModules[1] == 'module_render')
   local core = CORE
   local r = mock.load(core, 'module_render.lua')
-  mock.connected['KeyDrive.Live.v4'] = live
+  mock.connected['KeyDrive.Live.v5'] = live
   r.update(0.016)
   r.drawUI()
   check('render module draws', (mock.calls.drawRectFilled or 0) > 5 and (mock.calls.text or 0) >= 6)
@@ -269,7 +269,7 @@ do
   mock.keys[VK_UP] = true
   run(s, 0.5, 0.003)
   check('reverse: no traction limit', near(mock.joypad.gas, 0.6, 0.01), mock.joypad.gas)
-  check('reverse: traction state ready/off', mock.connected['KeyDrive.Live.v4'].tcState ~= 4)
+  check('reverse: traction state ready/off', mock.connected['KeyDrive.Live.v5'].tcState ~= 4)
 
   s = fresh()
   for i = 0, 3 do mock.car.wheels[i].tyreRadius = 0 end
@@ -277,14 +277,14 @@ do
   mock.keys[VK_UP] = true
   run(s, 0.5, 0.003)
   check('no wheel data: plain ramp', near(mock.joypad.gas, 0.6, 0.01), mock.joypad.gas)
-  check('no wheel data: state 0', mock.connected['KeyDrive.Live.v4'].tcState == 0)
+  check('no wheel data: state 0', mock.connected['KeyDrive.Live.v5'].tcState == 0)
 
   s = fresh()
   mock.keys[VK_UP] = true
   run(s, 0.3, 0.003)
   for i = 2, 3 do mock.car.wheels[i].load = 0; mock.car.wheels[i].angularSpeed = 200 end
   run(s, 0.2, 0.003)
-  check('airborne: state 2', mock.connected['KeyDrive.Live.v4'].tcState == 2)
+  check('airborne: state 2', mock.connected['KeyDrive.Live.v5'].tcState == 2)
   check('airborne: throttle not cut', mock.joypad.gas > 0.4, mock.joypad.gas)
 
   s = fresh()
@@ -297,11 +297,11 @@ do
   mock.keys[VK_UP] = true
   s.update(0.003)
   for _ = 1, 200 do mock.car.gas = 1; s.update(0.003) end
-  check('leak detected', mock.connected['KeyDrive.Live.v4'].leak == true)
+  check('leak detected', mock.connected['KeyDrive.Live.v5'].leak == true)
   s = fresh()
   mock.keys[VK_UP] = true
   for _ = 1, 200 do s.update(0.003); mock.car.gas = mock.joypad.gas end
-  check('no false leak', mock.connected['KeyDrive.Live.v4'].leak == false)
+  check('no false leak', mock.connected['KeyDrive.Live.v5'].leak == false)
 end
 
 -- 13. Fast corner: 200 km/h, rear axle already at the limit sideways (ndSlip from cornering, wheels turning at road
@@ -369,6 +369,97 @@ do
   mock.keys[VK_UP] = true
   local ok = pcall(function () for _ = 1, 30 do s.update(1 / 60); r.update(1 / 60); r.drawUI() end end)
   check('missing field: overlay keeps running', ok)
+end
+
+-- 15. Brake: straight-line stop from 150 km/h with brakes strong enough to lock every wheel.
+local function stop(dt, settings, seconds, abs)
+  local s = fresh(settings)
+  local c = mock.car
+  c.absMode = abs or 0
+  local m, r, J, mu = 1300, 0.32, 1.0, 1.2
+  local N = { [0] = 4000, 4000, 2500, 2500 }
+  local maxTorque = { [0] = 3000, 3000, 1600, 1600 } -- Nm per wheel at full brake (locks easily)
+  local v = 150 / 3.6
+  local w = {}
+  for i = 0, 3 do w[i] = v / r end
+  c.gear = 3
+  local slips, t, dist, locked = {}, 0, 0, 0
+  mock.keys[VK_DOWN] = true
+  while v > 40 / 3.6 and t < seconds do
+    c.localVelocity.z = v
+    c.speedKmh = v * 3.6
+    s.update(dt)
+    local b = mock.joypad.brake
+    c.brake = b
+    local sub = 20
+    local h = dt / sub
+    for _ = 1, sub do
+      local Ftot = 0
+      for i = 0, 3 do
+        local sr = (w[i] * r - v) / math.max(v, 3)
+        local F = mu * N[i] * math.sin(1.6 * math.atan(9 * sr))
+        Ftot = Ftot + F
+        local tb = maxTorque[i] * b
+        w[i] = w[i] + (-F * r - tb) / J * h
+        if w[i] < 0 then w[i] = 0 end
+      end
+      v = v + Ftot / m * h
+      dist = dist + v * h
+    end
+    for i = 0, 3 do
+      c.wheels[i].angularSpeed = w[i]
+      c.wheels[i].ndSlip = math.abs((w[i] * r - v) / math.max(v, 3)) / 0.166
+    end
+    t = t + dt
+    local nd = math.max(c.wheels[0].ndSlip, c.wheels[2].ndSlip)
+    if t > 0.4 then
+      slips[#slips + 1] = nd
+      if nd > 2 then locked = locked + 1 end
+    end
+  end
+  mock.keys[VK_DOWN] = nil
+  local sum = 0
+  for _, x in ipairs(slips) do sum = sum + x end
+  return { t = t, dist = dist, slipMean = sum / math.max(1, #slips), lockedShare = locked / math.max(1, #slips),
+    memory = mock.connected['KeyDrive.Live.v5'].brakeMemory, state = mock.connected['KeyDrive.Live.v5'].brakeState }
+end
+
+do
+  local raw = stop(0.003, { BRAKE_LIMITER = 0 }, 10)
+  local lim = stop(0.003, nil, 10)
+  if os.getenv('KD_VERBOSE') then
+    for _, x in ipairs({ raw, lim }) do
+      print(string.format('stop t %.2f dist %.1f slip %.2f locked %.2f memory %.2f', x.t, x.dist, x.slipMean, x.lockedShare, x.memory))
+    end
+  end
+  check('model: raw brake locks the wheels', raw.lockedShare > 0.8, raw.lockedShare)
+  check('brake limiter: no locked wheels', lim.lockedShare < 0.02, lim.lockedShare)
+  check('brake limiter: slip near the tyre peak', lim.slipMean > 0.7 and lim.slipMean < 1.15, lim.slipMean)
+  check('brake limiter: shorter stop', lim.dist < raw.dist * 0.92, string.format('%.1f vs %.1f', lim.dist, raw.dist))
+  check('brake limiter: remembers the lock point', lim.memory < 0.95, lim.memory)
+  local other = stop(1 / 250, nil, 10)
+  check('brake limiter independent of physics rate', math.abs(other.dist - lim.dist) / lim.dist < 0.03,
+    string.format('%.1f vs %.1f', other.dist, lim.dist))
+  local abs = stop(0.003, nil, 10, 1)
+  check('car ABS on: KeyDrive leaves it alone', abs.state == 2 and abs.lockedShare > 0.8, abs.state)
+end
+
+-- 16. Brake ramp, cap and trail-brake release.
+do
+  local s = fresh({ BRAKE_LIMITER = 0 })
+  mock.keys[VK_DOWN] = true
+  run(s, 0.1, 0.003)
+  check('brake rises at 400 %/s', near(mock.joypad.brake, 0.4, 0.015), mock.joypad.brake)
+  run(s, 1, 0.003)
+  check('full brake', near(mock.joypad.brake, 1), mock.joypad.brake)
+  mock.keys[VK_LEFT] = true
+  run(s, 3, 0.003)
+  local withSteer = mock.joypad.brake
+  check('trail braking releases with steering', withSteer < 0.85 and withSteer > 0.4, withSteer)
+  mock.keys[VK_LEFT] = nil
+  mock.keys[VK_DOWN] = nil
+  run(s, 0.2, 0.003)
+  check('brake released', mock.joypad.brake == 0, mock.joypad.brake)
 end
 
 print(string.format('KeyDrive: %d passed, %d failed', passed, failed))

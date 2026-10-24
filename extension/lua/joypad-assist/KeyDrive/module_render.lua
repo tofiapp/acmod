@@ -9,7 +9,7 @@ local carState = ac.getCar(__carIndex)
 recorder.init(__dirname)
 ac.onRelease(recorder.save)
 
-local W, H = 520, 280
+local W, H = 520, 298
 local P = {
   origin = vec2(24, 0),
   a = vec2(),
@@ -30,10 +30,11 @@ local C = {
 }
 
 local TC_TEXT = { [0] = 'bez dat o kolech', 'vypnutá', 'kola ve vzduchu', 'připravena', 'OMEZUJE' }
+local BRAKE_TEXT = { [0] = 'bez dat o kolech', 'hlídání vypnuto', 'reguluje ABS auta', 'připravena', 'POVOLUJE' }
 
 local lastAlive, staleTime = -1, 0
 local textTimer = 0
-local lines = { '', '', '', '', '', '' }
+local lines = { '', '', '', '', '', '', '' }
 
 local function gearText(g)
   return g == -1 and 'R' or g == 0 and 'N' or tostring(g)
@@ -63,6 +64,9 @@ function script.update(dt)
     lines[5] = string.format('Klávesy (VK): plyn %d  brzda %d  vlevo %d  vpravo %d  řazení %d%s / %d%s',
       live.bindGas, live.bindBrake, live.bindLeft, live.bindRight,
       live.bindGearUp, math.floor(m / 16) % 2 == 1 and '*' or '', live.bindGearDown, math.floor(m / 32) % 2 == 1 and '*' or '')
+    lines[7] = string.format('Brzda: %s  prokluz %.0f %% vrcholu (cíl %.0f %%)  brzda ×%.2f  paměť %.0f %%',
+      BRAKE_TEXT[live.brakeState] or '?', live.brakeSlip * 100, live.brakeTargetSlip * 100, live.brakeK,
+      live.brakeMemory * 100)
     lines[6] = live.leak and 'POZOR: auto jede s větším plynem, než KeyDrive posílá (AC přimíchává klávesnici)' or ''
   end
 end
@@ -123,6 +127,8 @@ function script.drawUI()
   label(o.x + 10, o.y + 76, 'Brzda')
   keyDot(o.y + 78, math.floor(mask / 2) % 2 == 1)
   x0 = bar01(o.y + 78, live.outBrake, C.out)
+  marker(x0 + BAR_W * math.clamp(live.brakeCap, 0, 1), o.y + 78, C.cap, 1)
+  marker(x0 + BAR_W * math.clamp(live.brakeRequest, 0, 1), o.y + 78, C.request, 1)
   marker(x0 + BAR_W * math.clamp(carState.brake, 0, 1), o.y + 78, C.car, 1)
 
   label(o.x + 10, o.y + 98, 'Řízení')
@@ -137,18 +143,19 @@ function script.drawUI()
 
   label(o.x + 10, o.y + 124, lines[1])
   label(o.x + 10, o.y + 142, lines[2], live.tcState == 4 and C.warn or nil)
-  label(o.x + 10, o.y + 160, lines[3])
-  label(o.x + 10, o.y + 178, lines[4])
-  label(o.x + 10, o.y + 196, lines[5])
-  if live.leak then label(o.x + 10, o.y + 214, lines[6], C.bad) end
-  label(o.x + 10, o.y + 236, 'plyn: oranžová = posláno, modrá = klávesa, šedá = strop, bílá = auto')
+  label(o.x + 10, o.y + 160, lines[7], live.brakeState == 4 and C.warn or nil)
+  label(o.x + 10, o.y + 178, lines[3])
+  label(o.x + 10, o.y + 196, lines[4])
+  label(o.x + 10, o.y + 214, lines[5])
+  if live.leak then label(o.x + 10, o.y + 232, lines[6], C.bad) end
+  label(o.x + 10, o.y + 254, 'oranžová = posláno, modrá = klávesa, šedá = strop, bílá = auto')
   if live.recordLog then
     if recorder.error then
-      label(o.x + 10, o.y + 254, 'záznam nefunguje: ' .. recorder.error, C.bad)
+      label(o.x + 10, o.y + 272, 'záznam nefunguje: ' .. recorder.error, C.bad)
     elseif recorder.lastIncident ~= '' then
-      label(o.x + 10, o.y + 254, 'záznam běží, poslední incident: ' .. recorder.lastIncident, C.warn)
+      label(o.x + 10, o.y + 272, 'záznam běží, poslední incident: ' .. recorder.lastIncident, C.warn)
     else
-      label(o.x + 10, o.y + 254, 'záznam běží: keydrive-log.csv ve složce skriptu (posledních 60 s)')
+      label(o.x + 10, o.y + 272, 'záznam běží: keydrive-log.csv ve složce skriptu (posledních 60 s)')
     end
   end
   ui.popFont()

@@ -1,7 +1,7 @@
 -- KeyDrive: Gamepad FX script turning on/off keyboard inputs into smooth, grip-aware pedal and steering inputs.
 -- Runs in the physics thread (script.update every physics step, dt ~ 0.003 s).
--- Phase 3: complete throttle (ramp, manual cap, corner cap, traction limiter). Brake and steering are still simple
--- placeholders so the car is drivable.
+-- Throttle: ramp, manual cap, corner cap, traction limiter. Brake: ramp, manual cap, trail-brake release, lock
+-- limiter. Steering is still a simple placeholder so the car is drivable.
 
 if car.isAIControlled then return end
 
@@ -9,6 +9,7 @@ local ramp = require('src/ramp')
 local keys = require('src/keys')
 local shared = require('src/shared')
 local traction = require('src/traction')
+local brakeLimiter = require('src/brake')
 
 local function loadSettings()
   local defaults = {
@@ -19,6 +20,13 @@ local function loadSettings()
     TARGET_SLIP = 100,
     TRACTION_RESPONSE = 100,
     CORNER_THROTTLE_REDUCTION = 25,
+    BRAKE_RISE_RATE = 400,
+    BRAKE_FALL_RATE = 800,
+    MAX_BRAKE = 100,
+    BRAKE_LIMITER = true,
+    BRAKE_TARGET_SLIP = 100,
+    BRAKE_USE_GAME_ABS = true,
+    TRAIL_BRAKE_RELEASE = 40,
     SHOW_DIAGNOSTICS = true,
     RECORD_LOG = true,
   }
@@ -39,23 +47,33 @@ local P = {
   targetSlip = math.clamp(S.TARGET_SLIP / 100, 0.3, 3), -- in ndSlip units, 1 = tyre peak
   tractionResponse = math.clamp(S.TRACTION_RESPONSE / 100, 0.1, 5),
   cornerThrottleReduction = math.clamp(S.CORNER_THROTTLE_REDUCTION / 100, 0, 1),
+  brakeRise = math.max(S.BRAKE_RISE_RATE, 1) / 100,
+  brakeFall = math.max(S.BRAKE_FALL_RATE, 1) / 100,
+  maxBrake = math.clamp(S.MAX_BRAKE / 100, 0, 1),
+  brakeLimiter = flag(S.BRAKE_LIMITER),
+  brakeTargetSlip = math.clamp(S.BRAKE_TARGET_SLIP / 100, 0.3, 3),
+  brakeUseGameAbs = flag(S.BRAKE_USE_GAME_ABS), -- car's ABS switched on: leave the regulation to it
+  trailBrakeRelease = math.clamp(S.TRAIL_BRAKE_RELEASE / 100, 0, 1),
 }
 
--- Placeholders until phases 4 and 5.
-local BRAKE_RISE, BRAKE_FALL = 6, 10           -- per second
+-- Placeholder until phase 5.
 local STEER_OUT, STEER_BACK = 2.5, 5           -- per second at standstill, scaled down with speed
 
 local CORNER_G_FULL = 1.5    -- lateral g at which the corner cap reduction is complete
 local CORNER_TAU = 0.15      -- s, smoothing of the corner factor
+local TRAIL_TAU = 0.2        -- s, smoothing of the steering amount used for the trail-brake release
 
 local live = shared.connect()
 live.showDiagnostics = flag(S.SHOW_DIAGNOSTICS)
 live.recordLog = flag(S.RECORD_LOG)
 live.targetSlip = P.targetSlip
+live.brakeTargetSlip = P.brakeTargetSlip
 
 local gasRequest = 0  -- ramped key throttle (the "foot" before limits)
 local gas, brake, steer = 0, 0, 0
+local brakeRequest = 0 -- ramped key brake before limits
 local corner = 0      -- smoothed 0..1 corner load factor
+local trail = 0       -- smoothed |steer| for the trail-brake release
 local lastWritten, leakTime = 0, 0
 local hz = 0
 
@@ -67,11 +85,13 @@ end
 keys.read()
 publishBinds()
 traction.configure(car)
+brakeLimiter.configure(car)
 
 local function reset()
-  gasRequest, gas, brake, steer, corner = 0, 0, 0, 0, 0
+  gasRequest, gas, brakeRequest, brake, steer, corner, trail = 0, 0, 0, 0, 0, 0, 0
   lastWritten, leakTime = 0, 0
   traction.configure(car)
+  brakeLimiter.configure(car)
 end
 
 ac.onCarJumped(car.index, reset)
@@ -106,6 +126,28 @@ local function throttle(dt, kGas, state)
   return gasRequest
 end
 
+local brakeState = 3
+
+local function brakeInput(dt, kBrake)
+  -- Trail braking: the more the wheels are turned, the lower the brake cap.
+  local st = math.abs(steer)
+  trail = trail + (st - trail) * math.min(1, dt / TRAIL_TAU)
+  local cap = P.maxBrake * (1 - P.trailBrakeRelease * trail)
+  brakeRequest = ramp.step(brakeRequest, kBrake and cap or 0, P.brakeRise, P.brakeFall, dt)
+  live.brakeCap = cap
+
+  if not brakeLimiter.available then brakeState = 0; return brakeRequest end
+  if not P.brakeLimiter then brakeState = 1; return brakeRequest end
+  if P.brakeUseGameAbs and car.absMode > 0 then
+    brakeState = 2
+    brakeLimiter.reset()
+    return brakeRequest
+  end
+  local out = brakeLimiter.update(dt, car, brakeRequest, P.brakeTargetSlip)
+  brakeState = brakeLimiter.active and 4 or 3
+  return out
+end
+
 function script.update(dt)
   if car.isAIControlled then return end
   if dt <= 0 then return end
@@ -120,7 +162,7 @@ function script.update(dt)
   local kGas, kBrake, kLeft, kRight = keys.gasDown(), keys.brakeDown(), keys.leftDown(), keys.rightDown()
 
   gas = throttle(dt, kGas, state)
-  brake = ramp.step(brake, kBrake and 1 or 0, BRAKE_RISE, BRAKE_FALL, dt)
+  brake = brakeInput(dt, kBrake)
 
   local steerTarget
   if kLeft and kRight then
@@ -157,6 +199,11 @@ function script.update(dt)
   live.tcLimit = traction.limit
   live.tcState = not traction.available and 0 or not P.traction and 1 or traction.airborne and 2
     or traction.active and 4 or 3
+  live.brakeRequest = brakeRequest
+  live.brakeK = brakeLimiter.k
+  live.brakeSlip = brakeLimiter.slip
+  live.brakeMemory = brakeLimiter.memory
+  live.brakeState = brakeState
   live.leak = leakTime > 0.3
   live.physicsHz = hz
 end

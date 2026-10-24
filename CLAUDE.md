@@ -114,10 +114,13 @@ extension/lua/joypad-assist/KeyDrive/
   src/traction.lua             throttle traction limiter: load-weighted ndSlip of the driven wheels (AC's combined
                                slip, 1 = tyre peak; fallback = wheel speed slip ratio), predicted 0.15 s ahead from its
                                rate; multiplier k on the ramped throttle (K_UP 2, K_DOWN 6), floor 20 % -> 50 % (160 km/h)
+  src/brake.lua                brake lock limiter: highest grounded wheel ndSlip (predicted 0.04 s), multiplier k on the
+                               ramped brake (K_UP 4, K_DOWN 15, floor 0.15), remembers the level where slip crossed the
+                               target and starts the next application there; off below 10 km/h; car ABS on -> left to it
   src/recorder.lua             render thread: 60 s ring buffer at 40 Hz (keys, outputs, car, 4 wheels, body slip,
                                collisions, event flags) -> keydrive-log.csv every 10 s, keydrive-incident-N.csv 3 s
                                after SPIN/CRASH/OFF. Ask the user for these files instead of guessing.
-  src/shared.lua               ac.connect layout 'KeyDrive.Live.v4' (same layout on every side)
+  src/shared.lua               ac.connect layout 'KeyDrive.Live.v5' (same layout on every side)
 tests/keydrive/                own mock + tests: python tests/keydrive/run_tests.py
 build-keydrive.sh / .ps1       dist/KeyDrive-<version>.zip (extension/... + apps/lua/KeyDriveConfig/...)
 ```
@@ -130,4 +133,10 @@ Status: phase 3, second attempt (v0.3.0). History of user feedback:
 - v0.3: AC's ndSlip (combined), prediction, floor, target 100 % of peak, and the recorder. A launch model in
   tests/keydrive showed that a target above the tyre peak oscillates and that a 50 % floor cannot stop a spin
   in first gear of a strong car.
-Next step: tune from the user's keydrive-log.csv / incident files, then phase 4 (brake).
+- incident log from the user (v0.3): traction fine (rear ndSlip ~0.9-1.05); placeholder brake reached 100 % in
+  0.15 s, fronts locked above ~60 % brake (ndSlip up to 8), avg -1.24 g locked vs -1.6 g possible; downshifts
+  under braking locked the rears; the OFF incident was understeer (front ndSlip 1.2-1.5) -> phase 5 steer limit.
+- v0.4: phase 4 brake (ramp 400/800 %/s, MAX_BRAKE, trail-brake release by |steer|, lock limiter). Brake model in
+  tests: no locked wheels, 20 % shorter stop.
+Analysis helpers for the CSV logs are quick Python scripts (csv module); group samples by key_brake phases.
+Next: user test of v0.4, then phase 5 (steering, incl. limiting front ndSlip against understeer).
