@@ -83,6 +83,26 @@ diod: na autě s jiným počtem se přepočítají, nebo (když přepočet vypne
 Sdílení: **Nastavení → Kopírovat aktuální preset do schránky** dá jeden řádek textu začínající `LEDCONTROL-PRESET 1`.
 **Vložit preset ze schránky** ho načte jako nový preset.
 
+### Světla
+
+Karta Světla ukazuje jen to, co auto opravdu má (světlomety, dálková, výstražná světla, přepínače CSP jako dešťové
+světlo, brzdová světla). Scénáře světel mají zapnutí, prioritu, Test a své parametry:
+
+- **Dešťové světlo bliká s pit limiterem** (formule). Dešťové světlo jde dvěma způsoby, volí se pro každé auto:
+  *přepínač* (skutečný přepínač auta, ostatní ho vidí; zvládne nejvýš 2 Hz) nebo *meshe* (vizuální kopie vybraných
+  meshů, jen u vás).
+- **Dešťové světlo svítí v dešti** (výchozí vypnuto).
+- **Výstražná světla při zastavení na trati** (mimo pit lane, po startu, po nastaveném čase).
+- **Světla za šera a v dešti**.
+- **Brzdová světla blikají při prudkém brzdění** (jen u vás).
+- **Podsvícení palubní desky a kabiny**: barevné světlo v kabině a/nebo vybrané meshe palubní desky (jen u vás);
+  volitelně oranžově s pit limiterem.
+- **Problik dálkovými na klávesu** (klávesa v Nastavení).
+
+Skutečná světla dostane auto vždy zpátky tak, jak je měl jezdec: po skončení scénáře, hlavním vypínačem, při chybě
+i při vypnutí aplikace. Příkazy posílá jen při změně a nejvýš čtyřikrát za sekundu. Když světlo během scénáře
+přepnete sami, scénář ho pustí. Online se nad kartou ukáže upozornění a skutečná světla jde online vypnout.
+
 ### Klávesy
 
 V Nastavení lze přiřadit klávesu nebo tlačítko volantu: hlavní vypínač, další preset, problik dálkovými světly.
