@@ -16,10 +16,11 @@ local function loadSettings()
     THROTTLE_FALL_RATE = 400,
     MAX_THROTTLE = 100,
     TRACTION = true,
-    TARGET_SLIP = 10,
+    TARGET_SLIP = 100,
     TRACTION_RESPONSE = 100,
     CORNER_THROTTLE_REDUCTION = 25,
     SHOW_DIAGNOSTICS = true,
+    RECORD_LOG = true,
   }
   local ok, s = pcall(function ()
     return ac.INIConfig.scriptSettings():mapSection('KEYDRIVE', defaults)
@@ -35,7 +36,7 @@ local P = {
   throttleFall = math.max(S.THROTTLE_FALL_RATE, 1) / 100,
   maxThrottle = math.clamp(S.MAX_THROTTLE / 100, 0, 1),
   traction = flag(S.TRACTION),
-  targetSlip = math.clamp(S.TARGET_SLIP / 100, 0.01, 1),
+  targetSlip = math.clamp(S.TARGET_SLIP / 100, 0.3, 3), -- in ndSlip units, 1 = tyre peak
   tractionResponse = math.clamp(S.TRACTION_RESPONSE / 100, 0.1, 5),
   cornerThrottleReduction = math.clamp(S.CORNER_THROTTLE_REDUCTION / 100, 0, 1),
 }
@@ -49,6 +50,7 @@ local CORNER_TAU = 0.15      -- s, smoothing of the corner factor
 
 local live = shared.connect()
 live.showDiagnostics = flag(S.SHOW_DIAGNOSTICS)
+live.recordLog = flag(S.RECORD_LOG)
 live.targetSlip = P.targetSlip
 
 local gasRequest = 0  -- ramped key throttle (the "foot" before limits)
@@ -82,7 +84,9 @@ pcall(ac.loadRenderThreadModule, 'module_render')
 
 local function throttle(dt, kGas, state)
   -- Corner cap: lateral g or steering, whichever is larger.
-  local g = math.abs(state.gForces.x) / CORNER_G_FULL
+  local gx = state.gForces.x
+  live.gx = gx
+  local g = math.abs(gx) / CORNER_G_FULL
   local st = math.abs(steer)
   local c = g > st and g or st
   if c > 1 then c = 1 end
@@ -148,6 +152,8 @@ function script.update(dt)
   live.outGas, live.outBrake, live.outSteer = gas, brake, steer
   live.gasRequest = gasRequest
   live.slip = traction.slip
+  live.slipRatio = traction.ratio
+  live.usesNdSlip = traction.usesNdSlip
   live.tcLimit = traction.limit
   live.tcState = not traction.available and 0 or not P.traction and 1 or traction.airborne and 2
     or traction.active and 4 or 3

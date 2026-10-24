@@ -2,11 +2,14 @@
 -- Runs in the render thread, shares no Lua state with assist.lua; data comes through ac.connect.
 
 local shared = require('src/shared')
+local recorder = require('src/recorder')
 
 local live = shared.connect()
 local carState = ac.getCar(__carIndex)
+recorder.init(__dirname)
+ac.onRelease(recorder.save)
 
-local W, H = 460, 262
+local W, H = 520, 280
 local P = {
   origin = vec2(24, 0),
   a = vec2(),
@@ -38,6 +41,7 @@ end
 
 function script.update(dt)
   ac.setDrawUIActive(live.showDiagnostics)
+  if live.recordLog then recorder.update(dt, live, carState) end
   if live.alive ~= lastAlive then
     lastAlive = live.alive
     staleTime = 0
@@ -49,8 +53,9 @@ function script.update(dt)
     textTimer = 0.1
     local m = live.keyMask
     lines[1] = string.format('Jádro: %s   fyzika %.0f Hz', staleTime < 0.5 and 'běží' or 'NEBĚŽÍ', live.physicsHz)
-    lines[2] = string.format('Trakce: %s   prokluz %.1f %% (cíl %.0f %%)   limit %.0f %%   strop %.0f %%',
-      TC_TEXT[live.tcState] or '?', live.slip * 100, live.targetSlip * 100, live.tcLimit * 100, live.cap * 100)
+    lines[2] = string.format('Trakce: %s  prokluz %.0f %% vrcholu (cíl %.0f %%)%s  podélně %.1f %%  plyn ×%.2f',
+      TC_TEXT[live.tcState] or '?', live.slip * 100, live.targetSlip * 100, live.usesNdSlip and '' or ' [náhradní měření]',
+      live.slipRatio * 100, live.tcLimit)
     lines[3] = string.format('Auto: plyn %.0f %%  brzda %.0f %%  převod %s  %.0f ot/min',
       carState.gas * 100, carState.brake * 100, gearText(carState.gear), carState.rpm)
     lines[4] = string.format('Vstup do skriptu: plyn %.0f %%  brzda %.0f %%  řízení %.0f %%',
@@ -62,7 +67,7 @@ function script.update(dt)
   end
 end
 
-local BAR_X, BAR_W, BAR_H = 92, 340, 12
+local BAR_X, BAR_W, BAR_H = 92, 400, 12
 
 local function marker(x, y, color, w)
   P.a:set(x - w, y - 3); P.b:set(x + w, y + BAR_H + 3)
@@ -136,6 +141,15 @@ function script.drawUI()
   label(o.x + 10, o.y + 178, lines[4])
   label(o.x + 10, o.y + 196, lines[5])
   if live.leak then label(o.x + 10, o.y + 214, lines[6], C.bad) end
-  label(o.x + 10, o.y + 238, 'plyn: oranžová = posláno, modrá = klávesa, šedá = strop, bílá = auto')
+  label(o.x + 10, o.y + 236, 'plyn: oranžová = posláno, modrá = klávesa, šedá = strop, bílá = auto')
+  if live.recordLog then
+    if recorder.error then
+      label(o.x + 10, o.y + 254, 'záznam nefunguje: ' .. recorder.error, C.bad)
+    elseif recorder.lastIncident ~= '' then
+      label(o.x + 10, o.y + 254, 'záznam běží, poslední incident: ' .. recorder.lastIncident, C.warn)
+    else
+      label(o.x + 10, o.y + 254, 'záznam běží: keydrive-log.csv ve složce skriptu (posledních 60 s)')
+    end
+  end
   ui.popFont()
 end

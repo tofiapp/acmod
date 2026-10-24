@@ -37,14 +37,16 @@ function M.reset()
   local wheels = {}
   for i = 0, 3 do
     wheels[i] = {
-      angularSpeed = 0, tyreRadius = 0.32, load = 3000,
+      angularSpeed = 0, tyreRadius = 0.32, load = 3000, ndSlip = 0, slipRatio = 0, slipAngle = 0,
       position = vec(i % 2 == 0 and 0.78 or -0.78, 0.3, i < 2 and 1.3 or -1.3),
     }
   end
   M.car = {
     index = 0, isAIControlled = false, physicsAvailable = true, speedKmh = 0, gas = 0, brake = 0,
     localVelocity = vec(), localAngularVelocity = vec(), gear = 1, rpm = 900, tractionType = 0, wheels = wheels,
+    acceleration = vec(), collisionDepth = 0, wheelsOutside = 0, steer = 0,
   }
+  M.saved = {}
   M.renderModules = {}
   M.calls = {}
 end
@@ -65,6 +67,8 @@ function M.install(core)
   car = M.car
   sim = { isPaused = false }
   __carIndex = 0
+  __dirname = 'KD'
+  io.save = function (path, data) M.saved[path] = data; return true end
   script = {}
 
   ac = {
@@ -84,6 +88,7 @@ function M.install(core)
     loadRenderThreadModule = function (name) table.insert(M.renderModules, name) end,
     getCar = function () return M.car end,
     setDrawUIActive = function (v) M.drawUIActive = v end,
+    onRelease = function (cb) M.callbacks.release = cb end,
     StructItem = {
       key = function (k) return { __key = k } end,
       int32 = function () return 0 end,

@@ -1,50 +1,50 @@
--- Traction limiter for the throttle: a PI-style limit L on the driven wheels' slip ratio.
+-- Traction limiter for the throttle.
 --
--- Slip is measured from wheel speed (angularSpeed * tyreRadius) against the car's forward speed, without
--- relying on AC's own slip fields:
---   axle slip  = (mean driven wheel speed - v) / max(|v|, V0)       (yaw cancels out between left and right)
---   wheel slip = (fastest driven wheel - v - |yaw rate| * halfTrack) / max(|v|, V0)
--- The yaw term removes the part of the outer wheel's speed that comes from turning, without needing signs.
--- V0 keeps the ratio meaningful at launch (allowed slip speed at standstill = target * V0).
+-- Measurement: AC's own normalised slip of the driven wheels (`wheels[i].ndSlip`, combined longitudinal + lateral,
+-- about 1 at the tyre's peak grip), load-weighted like Advanced Gamepad Assist reads it. Being combined, it also
+-- sees a rear axle that is already sliding sideways in a fast corner. If a car has no ndSlip, a longitudinal slip
+-- ratio from wheel speed is used instead (driven wheel speed vs the car's forward speed).
 --
--- Limit dynamics (rates in units of throttle per second, so independent of the physics rate):
---   e = (target - slip) / target, clamped to [-2, 1]
---   e >= 0: while limiting, L rises at K_UP * e (slows down as slip approaches the target: a gentle foot);
---           otherwise L simply follows the driver's ramp
---   e <  0: L falls at K_DOWN * e, output additionally reduced by K_P * e right away
--- While L is not the limiting factor it stays just above the requested throttle (anti-windup), so a slip spike
--- is caught from the current throttle level, not from 100 %.
+-- Control: a multiplier k on the driver's ramped throttle, out = requested * k.
+--   e = (target - (slip + PREDICT * slip rate)) / target, clamped to [-1, 1]
+--   dk/dt = K_UP * e (e > 0) or K_DOWN * e (e < 0), times `response`
+--   k never drops below a floor (20 % at low speed, 50 % from 160 km/h), so the car can always accelerate and a
+--   fast corner never gets a sudden lift. k returns to 1 whenever the driver is off the throttle.
 
 local M = {
   available = true,   -- false when the car gives no usable wheel data
-  slip = 0,           -- filtered slip ratio (0.1 = 10 %)
-  limit = 1,          -- current traction limit
-  active = false,     -- limit is below the requested throttle
+  usesNdSlip = true,  -- false: fallback to the wheel speed slip ratio
+  slip = 0,           -- filtered measured slip (ndSlip units, or slip ratio in fallback)
+  slipRate = 0,       -- filtered d(slip)/dt
+  ratio = 0,          -- longitudinal slip ratio of the driven wheels, for diagnostics
+  k = 1,              -- current throttle multiplier
+  limit = 1,          -- same as k (kept for the overlay)
+  active = false,     -- the multiplier is reducing the throttle
   airborne = false,
 }
 
-local V0 = 5            -- m/s, low-speed floor for the slip ratio
-local SLIP_TAU = 0.015  -- s, slip low-pass
-local K_UP = 2.5
+local SLIP_TAU = 0.02   -- s, slip low-pass
+local PREDICT = 0.15    -- s, the controller acts on slip + PREDICT * slip rate (reacts to a spin before it builds up)
+local RATE_TAU = 0.03   -- s, low-pass of the slip rate
+local K_UP = 2
 local K_DOWN = 6
-local K_P = 0.175
-local HEADROOM = 0.05
+local FLOOR_LOW, FLOOR_HIGH = 0.2, 0.5
+local FLOOR_V_LOW, FLOOR_V_HIGH = 40 / 3.6, 160 / 3.6
+local V0 = 5            -- m/s, low-speed floor for the fallback slip ratio
+local FALLBACK_SCALE = 0.12 -- slip ratio treated as "1.0" (peak) in the fallback
 local MIN_LOAD = 50     -- N, a wheel with less load is in the air and ignored
 
-local wheels = {}       -- cached wheel state references (0-based like car.wheels)
-local driven = {}       -- 1-based list of driven wheel indexes
+local wheels = {}
+local driven = {}
 local drivenCount = 0
-local halfTrack = 0.8
 
 local function finite(x)
   return x == x and x > -1e9 and x < 1e9
 end
 
--- Reads drivetrain layout and geometry. Call at start and after a car reset.
 function M.configure(carState)
   for i = 0, 3 do wheels[i] = carState.wheels[i] end
   local t = carState.tractionType
-  drivenCount = 0
   if t == 1 then
     driven[1], driven[2], drivenCount = 0, 1, 2       -- front-wheel drive
   elseif t == 0 then
@@ -52,92 +52,79 @@ function M.configure(carState)
   else
     driven[1], driven[2], driven[3], driven[4], drivenCount = 0, 1, 2, 3, 4 -- AWD or unknown
   end
-
-  local ok, ht = pcall(function ()
-    local a, b = wheels[2].position, wheels[3].position
-    local dx, dy, dz = a.x - b.x, a.y - b.y, a.z - b.z
-    return math.sqrt(dx * dx + dy * dy + dz * dz) * 0.5
-  end)
-  halfTrack = (ok and finite(ht) and ht > 0.3 and ht < 1.5) and ht or 0.8
-
-  local okR, r = pcall(function () return wheels[driven[1]].tyreRadius + wheels[driven[1]].angularSpeed end)
-  M.available = okR and finite(r) and wheels[driven[1]].tyreRadius > 0.05
+  local w = wheels[driven[1]]
+  local okR, r = pcall(function () return w.tyreRadius + w.angularSpeed + w.load end)
+  M.available = okR and finite(r) and w.tyreRadius > 0.05
+  local okN, nd = pcall(function () return w.ndSlip end)
+  M.usesNdSlip = okN and type(nd) == 'number' and finite(nd)
   M.reset()
 end
 
 function M.reset()
-  M.slip = 0
-  M.limit = 1
-  M.active = false
-  M.airborne = false
+  M.slip, M.slipRate, M.ratio, M.k, M.limit = 0, 0, 0, 1, 1
+  M.active, M.airborne = false, false
 end
 
--- Raw slip ratio of the driven wheels, or nil when every driven wheel is in the air.
+-- Returns measured slip (ndSlip or scaled ratio) and the raw slip ratio, or nil when the driven wheels are in the air.
 local function measure(carState)
   local v = carState.localVelocity.z
-  local yaw = math.abs(carState.localAngularVelocity.y)
   local ref = math.max(math.abs(v), V0)
-  local sum, n, fastest = 0, 0, -1e9
+  local ndSum, loadSum, speedSum, n = 0, 0, 0, 0
   for k = 1, drivenCount do
     local w = wheels[driven[k]]
-    if w.load > MIN_LOAD then
-      local s = w.angularSpeed * w.tyreRadius
-      sum = sum + s
+    local load = w.load
+    if load > MIN_LOAD then
+      if M.usesNdSlip then ndSum = ndSum + w.ndSlip * load end
+      loadSum = loadSum + load
+      speedSum = speedSum + w.angularSpeed * w.tyreRadius
       n = n + 1
-      if s > fastest then fastest = s end
     end
   end
   if n == 0 then return nil end
-  local axle = (sum / n - v) / ref
-  local wheel = (fastest - v - yaw * halfTrack) / ref
-  local slip = axle > wheel and axle or wheel
-  if not finite(slip) then return nil end
-  return slip
+  local ratio = (speedSum / n - v) / ref
+  local slip = M.usesNdSlip and ndSum / loadSum or ratio / FALLBACK_SCALE
+  if not finite(slip) or not finite(ratio) then return nil end
+  return slip, ratio
 end
 
--- Returns the throttle to send. `requested` is the ramped key throttle, `target` the slip ratio target
--- (0.1 = 10 %), `response` scales the controller gains (1 = default).
+-- Returns the throttle to send. `requested` is the ramped key throttle, `target` the slip target in ndSlip units
+-- (1 = tyre peak), `response` scales the controller gains (1 = default).
 function M.update(dt, carState, requested, target, response)
   if not M.available or target <= 0 then
     M.active = false
     return requested
   end
-
-  local raw = measure(carState)
-  if raw == nil then
-    M.airborne = true
-    M.active = M.limit < requested
-    return math.min(requested, M.limit) -- keep the limit frozen while the driven wheels are in the air
+  if requested < 0.02 then
+    M.k = 1 -- off the throttle: start fresh next time
   end
-  M.airborne = false
-  M.slip = M.slip + (raw - M.slip) * math.min(1, dt / SLIP_TAU)
 
-  local e = (target - M.slip) / target
-  if e > 1 then e = 1 elseif e < -2 then e = -2 end
-
-  -- Anti-windup: when not limiting, the limit tracks just above what the driver asks for.
-  local ceiling = requested + HEADROOM
-  if ceiling > 1 then ceiling = 1 end
-  local L = M.limit
-  if L > ceiling then L = ceiling end
-  if e >= 0 then
-    if M.active then
-      L = L + K_UP * response * e * dt   -- give throttle back gently while limiting
-    else
-      L = ceiling                         -- free: follow the driver's ramp
-    end
+  local slip, ratio = measure(carState)
+  if slip == nil then
+    M.airborne = true -- driven wheels in the air: keep k as it is
   else
-    L = L + K_DOWN * response * e * dt
-  end
-  if L < 0 then L = 0 end
-  if L > ceiling then L = ceiling end
-  M.limit = L
+    M.airborne = false
+    local a = math.min(1, dt / SLIP_TAU)
+    local prev = M.slip
+    M.slip = M.slip + (slip - M.slip) * a
+    M.ratio = M.ratio + (ratio - M.ratio) * a
+    local rate = (M.slip - prev) / dt
+    M.slipRate = M.slipRate + (rate - M.slipRate) * math.min(1, dt / RATE_TAU)
 
-  local out = L
-  if e < 0 then out = out + K_P * response * e end
-  if out < 0 then out = 0 end
-  M.active = out < requested
-  return out < requested and out or requested
+    local predicted = M.slip + PREDICT * M.slipRate
+    local e = (target - predicted) / target
+    if e > 1 then e = 1 elseif e < -1 then e = -1 end
+    local k = M.k + (e > 0 and K_UP or K_DOWN) * response * e * dt
+    local v = math.abs(carState.localVelocity.z)
+    local t = (v - FLOOR_V_LOW) / (FLOOR_V_HIGH - FLOOR_V_LOW)
+    if t < 0 then t = 0 elseif t > 1 then t = 1 end
+    local floor = FLOOR_LOW + (FLOOR_HIGH - FLOOR_LOW) * t
+    if k < floor then k = floor elseif k > 1 then k = 1 end
+    M.k = k
+  end
+
+  M.limit = M.k
+  M.active = M.k < 0.995 and requested > 0.02
+  return requested * M.k
 end
 
 return M

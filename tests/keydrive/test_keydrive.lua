@@ -115,7 +115,7 @@ do
   mock.keys[87] = true
   run(s, 0.2, 0.003)
   check('rebound gas key', mock.joypad.gas > 0.2, mock.joypad.gas)
-  check('binds published', mock.connected['KeyDrive.Live.v3'].bindGas == 87)
+  check('binds published', mock.connected['KeyDrive.Live.v4'].bindGas == 87)
 end
 
 -- 7b. Gear and handbrake keys from their own sections, hex values as Content Manager writes them.
@@ -143,7 +143,7 @@ do
   mock.keys[0x57] = true
   run(s, 0.1, 0.003)
   check('hex GAS bind', mock.joypad.gas > 0.1, mock.joypad.gas)
-  local live = mock.connected['KeyDrive.Live.v3']
+  local live = mock.connected['KeyDrive.Live.v4']
   check('gear binds published', live.bindGearUp == 0x53 and live.bindGearDown == 0x46)
 end
 
@@ -161,13 +161,13 @@ do
   mock.keys[VK_UP] = true
   mock.joypad.gas = 1 -- pretend AC sent raw keyboard gas
   s.update(0.003)
-  local live = mock.connected['KeyDrive.Live.v3']
+  local live = mock.connected['KeyDrive.Live.v4']
   check('incoming value published', live.inGas == 1, live.inGas)
   check('key mask', live.keyMask == 1, live.keyMask)
   check('render module requested', mock.renderModules[1] == 'module_render')
   local core = CORE
   local r = mock.load(core, 'module_render.lua')
-  mock.connected['KeyDrive.Live.v3'] = live
+  mock.connected['KeyDrive.Live.v4'] = live
   r.update(0.016)
   r.drawUI()
   check('render module draws', (mock.calls.drawRectFilled or 0) > 5 and (mock.calls.text or 0) >= 6)
@@ -215,13 +215,16 @@ local function launch(dt, settings, seconds)
       w = w + (gasNow * torque / 2 - F * r) / J * h
       if w < 0 then w = 0 end
     end
-    for i = 2, 3 do c.wheels[i].angularSpeed = w end
+    for i = 2, 3 do
+      c.wheels[i].angularSpeed = w
+      c.wheels[i].ndSlip = math.abs((w * r - v) / math.max(v, 3)) / 0.166 -- 1 at the model's peak
+    end
     for i = 0, 1 do c.wheels[i].angularSpeed = v / r end
     c.localVelocity.z = v
     c.speedKmh = v * 3.6
     t = t + dt
     if t > 1.0 then
-      slips[#slips + 1] = (w * r - v) / math.max(v, 5)
+      slips[#slips + 1] = c.wheels[2].ndSlip
       gases[#gases + 1] = gasNow
     end
   end
@@ -240,20 +243,21 @@ end
 
 do
   local free = launch(0.003, { TRACTION = 0 }, 3)
-  if os.getenv('KD_VERBOSE') then for _, x in ipairs({ free, launch(0.003, nil, 3), launch(0.003, { TARGET_SLIP = 20 }, 3), launch(0.003, { TRACTION_RESPONSE = 300 }, 3) }) do print(string.format('v %.2f slip %.3f±%.3f max %.3f gas %.3f±%.3f', x.v, x.slipMean, x.slipStd, x.slipMax, x.gasMean, x.gasStd)) end end
+  if os.getenv('KD_VERBOSE') then for _, x in ipairs({ free, launch(0.003, nil, 3), launch(0.003, { TARGET_SLIP = 70 }, 3), launch(0.003, { TRACTION_RESPONSE = 300 }, 3) }) do print(string.format('v %.2f slip %.3f±%.3f max %.3f gas %.3f±%.3f', x.v, x.slipMean, x.slipStd, x.slipMax, x.gasMean, x.gasStd)) end end
   check('model: without traction the wheels spin', free.slipMean > 0.5, free.slipMean)
   local a = launch(0.003, nil, 3)
-  check('traction holds slip near 10 %', a.slipMean > 0.06 and a.slipMean < 0.14, a.slipMean)
-  check('traction: no oscillation in slip', a.slipStd < 0.03, a.slipStd)
-  check('traction: smooth throttle', a.gasStd < 0.06, a.gasStd)
+  check('traction holds slip just under the tyre peak', a.slipMean > 0.7 and a.slipMean < 1.05, a.slipMean)
+  check('traction: no runaway spin', a.slipMax < 1.3, a.slipMax)
+  check('traction: little oscillation in slip', a.slipStd < 0.12, a.slipStd)
+  check('traction: smooth throttle', a.gasStd < 0.04, a.gasStd)
   check('traction: limited throttle', a.gasMean < 0.9, a.gasMean)
   check('traction beats wheelspin', a.v > free.v, string.format('%.1f vs %.1f', a.v, free.v))
   local b = launch(1 / 400, nil, 3)
   local c = launch(1 / 250, nil, 3)
   check('traction independent of physics rate', math.abs(a.v - b.v) / a.v < 0.03 and math.abs(a.v - c.v) / a.v < 0.03,
     string.format('%.2f %.2f %.2f', a.v, b.v, c.v))
-  local hi = launch(0.003, { TARGET_SLIP = 20 }, 3)
-  check('target slip setting', hi.slipMean > 0.14 and hi.slipMean < 0.26, hi.slipMean)
+  local lo = launch(0.003, { TARGET_SLIP = 70 }, 3)
+  check('target slip setting', lo.slipMean > 0.45 and lo.slipMean < 0.75, lo.slipMean)
 end
 
 -- 12. Reverse, missing wheel data, wheels in the air, corner cap, leak detection.
@@ -265,7 +269,7 @@ do
   mock.keys[VK_UP] = true
   run(s, 0.5, 0.003)
   check('reverse: no traction limit', near(mock.joypad.gas, 0.6, 0.01), mock.joypad.gas)
-  check('reverse: traction state ready/off', mock.connected['KeyDrive.Live.v3'].tcState ~= 4)
+  check('reverse: traction state ready/off', mock.connected['KeyDrive.Live.v4'].tcState ~= 4)
 
   s = fresh()
   for i = 0, 3 do mock.car.wheels[i].tyreRadius = 0 end
@@ -273,14 +277,14 @@ do
   mock.keys[VK_UP] = true
   run(s, 0.5, 0.003)
   check('no wheel data: plain ramp', near(mock.joypad.gas, 0.6, 0.01), mock.joypad.gas)
-  check('no wheel data: state 0', mock.connected['KeyDrive.Live.v3'].tcState == 0)
+  check('no wheel data: state 0', mock.connected['KeyDrive.Live.v4'].tcState == 0)
 
   s = fresh()
   mock.keys[VK_UP] = true
   run(s, 0.3, 0.003)
   for i = 2, 3 do mock.car.wheels[i].load = 0; mock.car.wheels[i].angularSpeed = 200 end
   run(s, 0.2, 0.003)
-  check('airborne: state 2', mock.connected['KeyDrive.Live.v3'].tcState == 2)
+  check('airborne: state 2', mock.connected['KeyDrive.Live.v4'].tcState == 2)
   check('airborne: throttle not cut', mock.joypad.gas > 0.4, mock.joypad.gas)
 
   s = fresh()
@@ -293,11 +297,78 @@ do
   mock.keys[VK_UP] = true
   s.update(0.003)
   for _ = 1, 200 do mock.car.gas = 1; s.update(0.003) end
-  check('leak detected', mock.connected['KeyDrive.Live.v3'].leak == true)
+  check('leak detected', mock.connected['KeyDrive.Live.v4'].leak == true)
   s = fresh()
   mock.keys[VK_UP] = true
   for _ = 1, 200 do s.update(0.003); mock.car.gas = mock.joypad.gas end
-  check('no false leak', mock.connected['KeyDrive.Live.v3'].leak == false)
+  check('no false leak', mock.connected['KeyDrive.Live.v4'].leak == false)
+end
+
+-- 13. Fast corner: 200 km/h, rear axle already at the limit sideways (ndSlip from cornering, wheels turning at road
+-- speed). Pressing the throttle must not send full power.
+do
+  local s = fresh()
+  local c = mock.car
+  c.gear = 4
+  c.localVelocity.z = 55
+  c.speedKmh = 198
+  mock.joypad.gForces.x = 1.4
+  for i = 0, 3 do c.wheels[i].angularSpeed = 55 / 0.32 end
+  for i = 2, 3 do c.wheels[i].ndSlip = 1.15 end
+  mock.keys[VK_UP] = true
+  local maxGas = 0
+  for _ = 1, math.floor(1.5 / 0.003) do
+    s.update(0.003)
+    if mock.joypad.gas > maxGas then maxGas = mock.joypad.gas end
+  end
+  check('fast corner at the limit: throttle held low', maxGas < 0.45, maxGas)
+  for i = 2, 3 do c.wheels[i].ndSlip = 0.5 end
+  mock.joypad.gForces.x = 0
+  run(s, 1.5, 0.003)
+  check('fast corner: throttle comes back when grip returns', mock.joypad.gas > 0.95, mock.joypad.gas)
+end
+
+-- 14. Recorder: rolling log, incident file after a crash, header and events.
+do
+  local s = fresh()
+  local r = mock.load(CORE, 'module_render.lua')
+  local c = mock.car
+  c.speedKmh = 80
+  c.localVelocity.z = 22
+  mock.keys[VK_UP] = true
+  for _ = 1, 11 * 60 do s.update(1 / 60); r.update(1 / 60) end
+  local log = mock.saved['KD/keydrive-log.csv']
+  check('log written', log ~= nil)
+  if log then
+    local header = log:match('^[^\n]+')
+    check('log header', header:find('key_gas', 1, true) and header:find('nd_rl', 1, true) and header:find('events', 1, true))
+    local _, rows = log:gsub('\n', '')
+    check('log has ~40 Hz rows (10 s)', rows > 380 and rows < 420, rows)
+    check('log rows have every column', select(2, log:match('\n([^\n]+)$'):gsub(',', '')) == select(2, header:gsub(',', '')))
+  end
+  c.collisionDepth = 0.2
+  for _ = 1, 10 do s.update(1 / 60); r.update(1 / 60) end
+  c.collisionDepth = 0
+  for _ = 1, 4 * 60 do s.update(1 / 60); r.update(1 / 60) end
+  local inc = mock.saved['KD/keydrive-incident-1.csv']
+  check('incident file after a crash', inc ~= nil)
+  check('crash flagged in events', inc and inc:find('CRASH', 1, true) ~= nil)
+  mock.saved['KD/keydrive-incident-2.csv'] = nil
+  c.collisionDepth = 0.2
+  for _ = 1, 4 * 60 do s.update(1 / 60); r.update(1 / 60) end
+  check('incident cooldown', mock.saved['KD/keydrive-incident-2.csv'] == nil)
+
+  -- A missing car field stops the recorder instead of breaking the overlay.
+  mock.reset()
+  s = mock.load(CORE, 'assist.lua')
+  r = mock.load(CORE, 'module_render.lua')
+  mock.car.wheels[0] = { angularSpeed = 0, tyreRadius = 0.32, load = 3000 }
+  setmetatable(mock.car, { __index = function (_, k) error('no field ' .. k) end })
+  mock.car.wheelsOutside = nil
+  mock.car.speedKmh = 50
+  mock.keys[VK_UP] = true
+  local ok = pcall(function () for _ = 1, 30 do s.update(1 / 60); r.update(1 / 60); r.drawUI() end end)
+  check('missing field: overlay keeps running', ok)
 end
 
 print(string.format('KeyDrive: %d passed, %d failed', passed, failed))

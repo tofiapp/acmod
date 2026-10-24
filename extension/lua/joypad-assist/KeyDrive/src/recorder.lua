@@ -1,0 +1,177 @@
+-- Driving log for tuning (render thread; io.save is used the same way by CSP's own Mobile gamepad script).
+--
+-- Keeps the last 60 s at 40 Hz in preallocated ring buffers: key inputs, what KeyDrive sent, what the car ran,
+-- slip of every wheel, body slide, collisions, and event flags. Files in the script folder:
+--   keydrive-log.csv               rolling log, rewritten every 10 s while driving
+--   keydrive-incident-N.csv        written 3 s after a spin, a crash or leaving the track (N = 1..5, rotating),
+--                                  so the moment is kept even if the driver keeps going
+-- Event flags (column `events`): WSPIN driven wheels over the slip target by 30 %, SLIDE body slip angle > 10 deg,
+-- SPIN > 30 deg, CRASH collision, OFF two or more wheels off the track, TC traction limiter reducing the throttle.
+
+local M = {}
+
+local RATE = 40
+local SECONDS = 60
+local SIZE = RATE * SECONDS
+local SAVE_EVERY = 10
+local INCIDENT_DELAY = 3
+local INCIDENT_FILES = 5
+local INCIDENT_COOLDOWN = 10 -- s after an incident file before the next incident can start
+
+local EV_WSPIN, EV_SLIDE, EV_SPIN, EV_CRASH, EV_OFF, EV_TC = 1, 2, 4, 8, 16, 32
+local EVENT_NAMES = { { EV_WSPIN, 'WSPIN' }, { EV_SLIDE, 'SLIDE' }, { EV_SPIN, 'SPIN' }, { EV_CRASH, 'CRASH' },
+  { EV_OFF, 'OFF' }, { EV_TC, 'TC' } }
+
+-- name, format; values are filled in `sample` in this order
+local COLUMNS = {
+  { 't', '%.3f' },
+  { 'key_gas', '%d' }, { 'key_brake', '%d' }, { 'key_left', '%d' }, { 'key_right', '%d' },
+  { 'gas_request', '%.3f' }, { 'gas_out', '%.3f' }, { 'car_gas', '%.3f' }, { 'tc_k', '%.3f' }, { 'tc_state', '%d' },
+  { 'drive_slip_nd', '%.3f' }, { 'drive_slip_ratio', '%.3f' }, { 'slip_target', '%.2f' },
+  { 'brake_out', '%.3f' }, { 'car_brake', '%.3f' }, { 'steer_out', '%.3f' }, { 'steer_deg', '%.1f' },
+  { 'speed_kmh', '%.1f' }, { 'gear', '%d' }, { 'rpm', '%.0f' },
+  { 'lat_g', '%.2f' }, { 'lon_g', '%.2f' }, { 'yaw_rate', '%.3f' }, { 'body_slip_deg', '%.1f' },
+  { 'nd_fl', '%.2f' }, { 'nd_fr', '%.2f' }, { 'nd_rl', '%.2f' }, { 'nd_rr', '%.2f' },
+  { 'ratio_fl', '%.3f' }, { 'ratio_fr', '%.3f' }, { 'ratio_rl', '%.3f' }, { 'ratio_rr', '%.3f' },
+  { 'angle_fl', '%.1f' }, { 'angle_fr', '%.1f' }, { 'angle_rl', '%.1f' }, { 'angle_rr', '%.1f' },
+  { 'collision_depth', '%.3f' }, { 'wheels_out', '%d' }, { 'events', '%d' },
+}
+local NC = #COLUMNS
+local EVENTS_COL = NC
+
+local header, rowFormat
+do
+  local names, fmts = {}, {}
+  for i, c in ipairs(COLUMNS) do names[i], fmts[i] = c[1], c[2] end
+  header = table.concat(names, ',')
+  fmts[NC] = '%s'
+  rowFormat = table.concat(fmts, ',')
+end
+
+local buf = {}
+for i = 1, NC do
+  local col = {}
+  for j = 1, SIZE do col[j] = 0 end
+  buf[i] = col
+end
+
+local head, count = 0, 0
+local time, sampleTimer, saveTimer = 0, 0, 0
+local incidentTimer, incidentIndex, incidentReason, lastIncidentTime = -1, 0, 0, -1e9
+local dirty = false
+local dir
+
+M.lastIncident = ''
+M.error = nil
+
+function M.init(folder)
+  dir = folder
+end
+
+local function bit(x, b) return math.floor(x / b) % 2 == 1 end
+
+local function eventText(flags)
+  if flags == 0 then return '' end
+  local s = ''
+  for _, e in ipairs(EVENT_NAMES) do
+    if bit(flags, e[1]) then s = s == '' and e[2] or s .. '|' .. e[2] end
+  end
+  return s
+end
+
+local function sample(live, c)
+  head = head % SIZE + 1
+  if count < SIZE then count = count + 1 end
+  local m = live.keyMask
+  local w0, w1, w2, w3 = c.wheels[0], c.wheels[1], c.wheels[2], c.wheels[3]
+  local lv = c.localVelocity
+  local bodySlip = math.abs(lv.z) > 1 and math.deg(math.atan2(lv.x, math.abs(lv.z))) or 0
+  local out = c.wheelsOutside
+
+  local flags = 0
+  if live.slip > live.targetSlip * 1.3 and live.gasRequest > 0.05 then flags = flags + EV_WSPIN end
+  if c.speedKmh > 30 and math.abs(bodySlip) > 10 then flags = flags + EV_SLIDE end
+  if c.speedKmh > 20 and math.abs(bodySlip) > 30 then flags = flags + EV_SPIN end
+  if c.collisionDepth > 0 and c.speedKmh > 5 then flags = flags + EV_CRASH end
+  if out >= 2 then flags = flags + EV_OFF end
+  if live.tcState == 4 then flags = flags + EV_TC end
+
+  local v = buf
+  v[1][head] = time
+  v[2][head] = m % 2; v[3][head] = bit(m, 2) and 1 or 0; v[4][head] = bit(m, 4) and 1 or 0; v[5][head] = bit(m, 8) and 1 or 0
+  v[6][head] = live.gasRequest; v[7][head] = live.outGas; v[8][head] = c.gas; v[9][head] = live.tcLimit
+  v[10][head] = live.tcState
+  v[11][head] = live.slip; v[12][head] = live.slipRatio; v[13][head] = live.targetSlip
+  v[14][head] = live.outBrake; v[15][head] = c.brake; v[16][head] = live.outSteer; v[17][head] = c.steer
+  v[18][head] = c.speedKmh; v[19][head] = c.gear; v[20][head] = c.rpm
+  v[21][head] = live.gx; v[22][head] = c.acceleration.z; v[23][head] = c.localAngularVelocity.y; v[24][head] = bodySlip
+  v[25][head] = w0.ndSlip; v[26][head] = w1.ndSlip; v[27][head] = w2.ndSlip; v[28][head] = w3.ndSlip
+  v[29][head] = w0.slipRatio; v[30][head] = w1.slipRatio; v[31][head] = w2.slipRatio; v[32][head] = w3.slipRatio
+  v[33][head] = w0.slipAngle; v[34][head] = w1.slipAngle; v[35][head] = w2.slipAngle; v[36][head] = w3.slipAngle
+  v[37][head] = c.collisionDepth; v[38][head] = out
+  v[EVENTS_COL][head] = flags
+  return flags
+end
+
+local row = {}
+local function write(path)
+  if not dir or count == 0 then return end
+  local lines = { header }
+  local start = count < SIZE and 1 or head % SIZE + 1
+  for n = 0, count - 1 do
+    local i = (start - 1 + n) % SIZE + 1
+    for k = 1, NC do row[k] = buf[k][i] end
+    row[EVENTS_COL] = eventText(row[EVENTS_COL])
+    lines[#lines + 1] = string.format(rowFormat, unpack(row, 1, NC))
+  end
+  pcall(io.save, dir .. '/' .. path, table.concat(lines, '\n'))
+end
+
+function M.save()
+  if dirty then write('keydrive-log.csv') end
+  dirty = false
+end
+
+-- Call every render frame. Nothing is recorded while the car stands still with no keys pressed.
+function M.update(dt, live, carState)
+  if M.error then return end
+  time = time + dt
+  if incidentTimer >= 0 then
+    incidentTimer = incidentTimer + dt
+    if incidentTimer >= INCIDENT_DELAY then
+      incidentIndex = incidentIndex % INCIDENT_FILES + 1
+      local name = string.format('keydrive-incident-%d.csv', incidentIndex)
+      write(name)
+      M.lastIncident = string.format('%s (%s)', name, eventText(incidentReason))
+      incidentTimer = -1
+      lastIncidentTime = time
+    end
+  end
+
+  local idle = carState.speedKmh < 1 and live.keyMask == 0
+  if idle then return end
+  sampleTimer = sampleTimer + dt
+  if sampleTimer >= 1 / RATE then
+    sampleTimer = sampleTimer % (1 / RATE)
+    local ok, flags = pcall(sample, live, carState)
+    if not ok then
+      M.error = tostring(flags) -- a car state field is missing: stop recording, show why
+      return
+    end
+    dirty = true
+    local serious = (bit(flags, EV_SPIN) and EV_SPIN or 0) + (bit(flags, EV_CRASH) and EV_CRASH or 0)
+      + (bit(flags, EV_OFF) and EV_OFF or 0)
+    if serious > 0 and incidentTimer < 0 and time - lastIncidentTime > INCIDENT_COOLDOWN then
+      incidentTimer = 0
+      incidentReason = serious
+    end
+  end
+  saveTimer = saveTimer + dt
+  if saveTimer >= SAVE_EVERY then
+    saveTimer = 0
+    M.save()
+  end
+end
+
+M.header = header
+return M

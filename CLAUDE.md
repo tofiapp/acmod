@@ -111,15 +111,23 @@ extension/lua/joypad-assist/KeyDrive/
   src/keys.lua                 AC keyboard binds from cfg/controls.ini ([KEYBOARD] GAS/BRAKE/LEFT/RIGHT, [GEARUP]/[GEARDN]/
                                [HANDBRAKE] KEY; CM writes hex "0x53"), ac.isKeyDown. In gamepad mode AC does not
                                forward keyboard gear keys (user report), so assist.lua sets state.gearUp/gearDown/handbrake
-  src/traction.lua             throttle traction limiter (own slip from angularSpeed * tyreRadius vs localVelocity.z,
-                               floor V0 = 5 m/s, yaw term |yawRate| * halfTrack; PI-style limit, anti-windup)
-  src/shared.lua               ac.connect layout 'KeyDrive.Live.v3' (same layout on every side)
+  src/traction.lua             throttle traction limiter: load-weighted ndSlip of the driven wheels (AC's combined
+                               slip, 1 = tyre peak; fallback = wheel speed slip ratio), predicted 0.15 s ahead from its
+                               rate; multiplier k on the ramped throttle (K_UP 2, K_DOWN 6), floor 20 % -> 50 % (160 km/h)
+  src/recorder.lua             render thread: 60 s ring buffer at 40 Hz (keys, outputs, car, 4 wheels, body slip,
+                               collisions, event flags) -> keydrive-log.csv every 10 s, keydrive-incident-N.csv 3 s
+                               after SPIN/CRASH/OFF. Ask the user for these files instead of guessing.
+  src/shared.lua               ac.connect layout 'KeyDrive.Live.v4' (same layout on every side)
 tests/keydrive/                own mock + tests: python tests/keydrive/run_tests.py
 build-keydrive.sh / .ps1       dist/KeyDrive-<version>.zip (extension/... + apps/lua/KeyDriveConfig/...)
 ```
 
-Status: phase 3 (throttle complete: ramp -> manual cap reduced by lateral g / steering -> traction limit; brake
-and steering are placeholders). User feedback on the PoC: in gamepad mode the plain ramp spun the wheels all the time
-(AC's keyboard mode had its own hidden throttle help), and AC did not apply the keyboard gear keys (fixed by
-forwarding [GEARUP]/[GEARDN]). The overlay shows slip vs target, the limit, and a leak warning when `car.gas` is
-higher than what KeyDrive wrote. tests/keydrive section 11 runs a launch model (wheel inertia + tyre curve).
+Status: phase 3, second attempt (v0.3.0). History of user feedback:
+- v0.1: plain ramp spun the wheels all the time in gamepad mode (AC's keyboard mode has its own hidden throttle help);
+  keyboard gear keys were not applied in gamepad mode (fixed by forwarding [GEARUP]/[GEARDN]).
+- v0.2 (own longitudinal slip ratio, limit down to 0): first gear "power keeps dropping, cannot accelerate", and at
+  200 km/h in 4th it gave full throttle in a corner (longitudinal slip cannot see a rear axle sliding sideways).
+- v0.3: AC's ndSlip (combined), prediction, floor, target 100 % of peak, and the recorder. A launch model in
+  tests/keydrive showed that a target above the tyre peak oscillates and that a 50 % floor cannot stop a spin
+  in first gear of a strong car.
+Next step: tune from the user's keydrive-log.csv / incident files, then phase 4 (brake).
