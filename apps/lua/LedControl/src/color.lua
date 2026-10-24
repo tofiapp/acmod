@@ -35,6 +35,27 @@ function M.hsv(h, s, v)
   return M.pack(v, p, q)
 end
 
+-- Packed colour between a (f = 0) and b (f = 1).
+function M.mix(a, b, f)
+  if a < 0 then a = 0 end
+  if b < 0 then b = 0 end
+  local ar, ag, ab = M.unpack(a)
+  local br, bg, bb = M.unpack(b)
+  return M.pack(ar + (br - ar) * f, ag + (bg - ag) * f, ab + (bb - ab) * f)
+end
+
+-- '#RRGGBB' / 'RRGGBB' / number -> packed, or fallback when it cannot be read.
+function M.parse(v, fallback)
+  if type(v) == 'number' then
+    if v == M.ORIGINAL or (v >= 0 and v <= 0xFFFFFF) then return math.floor(v) end
+    return fallback
+  end
+  if type(v) ~= 'string' then return fallback end
+  local h = v:match('^#?(%x%x%x%x%x%x)$')
+  if not h then return fallback end
+  return tonumber(h, 16)
+end
+
 function M.hex(p)
   if p < 0 then return 'původní' end
   return string.format('#%06X', p)

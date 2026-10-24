@@ -1,24 +1,33 @@
 -- Lifecycle and the LED frame loop. States: wait (no car yet) -> run | off (master switch) | noleds | failed.
--- A restart (session start, car change, method change, "Znovu najít") gives every LED back, heals what an earlier run
--- left hidden, reads the car again and attaches the takeover. Phase 3 fills the LEDs from test patterns.
+-- A restart (session start, car change, method change, LED map change, "Znovu najít") gives every LED back, heals
+-- what an earlier run left hidden, reads the car again and attaches the takeover.
+-- Per frame in run: car_state.fill -> engine.step (scenarios of the car's preset) or a test pattern from the Diody tab
+-- -> takeover.set for every LED (change-only). The lights module runs in every state but wait.
 
 local config = require('src/config')
 local store = require('src/store')
 local carInfo = require('src/car_info')
+local carState = require('src/car_state')
 local detect = require('src/detect')
 local takeover = require('src/takeover')
 local color = require('src/color')
+local presets = require('src/presets')
+local engine = require('src/engine')
+local lights = require('src/lights')
 
 local S = config.S
+local ST = carState.ST
 
 local M = {
   state = 'wait', carId = '', info = nil, layout = nil, profile = { v = 1 },
   fb = {}, manual = {}, n = 0, hover = 0, hoverUntil = 0, healed = 0,
   clock = 0, version = 0, restartReason = 'start', lastRestart = '',
+  presetId = 'builtin:f1', compiled = nil, compiledVersion = -1, ST = ST, lights = lights,
 }
 
+-- Test patterns of the Diody tab (0 = normal operation: the scenarios drive the LEDs).
 M.MODES = { 'Původní stav', 'Duha', 'Běžící světlo', 'Vše zhasnout', 'Vše bílé', 'Ruční barvy' }
-M.MANUAL = 6
+M.NORMAL, M.MANUAL = 0, 6
 M.STATES = {
   wait = 'čekám na auto',
   run = 'běží',
@@ -35,13 +44,19 @@ function M.restart(reason)
   M.restartReason = reason or 'restart'
 end
 
+local function saveProfile()
+  if M.carId ~= '' then store.saveCar(M.carId, M.profile) end
+end
+
+-- ---------------------------------------------------------------- settings used by the window
+
 function M.method()
   return M.profile.method or S.method
 end
 
 function M.setMethod(m)
   M.profile.method = m
-  if M.carId ~= '' then store.saveCar(M.carId, M.profile) end
+  saveProfile()
   M.restart('method')
 end
 
@@ -64,10 +79,60 @@ function M.setIntensity(v)
   takeover.invalidate()
 end
 
--- The window marks an LED under the mouse; it blinks on the car while marked.
+-- The window marks an LED under the mouse; it blinks on the car while marked (the preview keeps its colour).
 function M.markHover(i)
   M.hover, M.hoverUntil = i, M.clock + 0.15
 end
+
+function M.preset()
+  return presets.get(M.presetId) or presets.BUILTIN[1]
+end
+
+function M.setPreset(id)
+  if not presets.get(id) then return end
+  M.presetId = id
+  M.profile.preset = id
+  saveProfile()
+  M.compiledVersion = -1
+  bump()
+end
+
+function M.cyclePreset()
+  local all = presets.all()
+  local at = 1
+  for i = 1, #all do if all[i].id == M.presetId then at = i end end
+  M.setPreset(all[at % #all + 1].id)
+end
+
+-- Preset edits from the Scénáře / Editor tabs: a built-in preset is copied first, the car switches to the copy.
+local function follow(id)
+  if id and id ~= M.presetId then M.setPreset(id) end
+  M.compiledVersion = -1
+  return id
+end
+function M.editScenario(scId, field, value) return follow(presets.setScenario(M.presetId, scId, field, value)) end
+function M.moveScenario(scId, delta) return follow(presets.move(M.presetId, scId, delta)) end
+function M.addCustom()
+  local id, scId = presets.addCustom(M.presetId)
+  follow(id)
+  return scId
+end
+function M.removeScenario(scId) return follow(presets.removeScenario(M.presetId, scId)) end
+function M.setBase(base) return follow(presets.setBase(M.presetId, base)) end
+
+-- Button Test: the scenario shows for 5 s even when its condition does not hold.
+function M.testScenario(id, seconds)
+  if M.compiled then engine.test(M.compiled, id, seconds or 5, ST.t) end
+end
+
+-- Manual LED map (order and groups picked by the user); nil = automatic detection.
+function M.setMap(map)
+  M.profile.map = map
+  saveProfile()
+  M.restart('map')
+end
+
+-- ---------------------------------------------------------------- lifecycle
 
 local function attach()
   takeover.attach(M.layout, M.method(), M.carId)
@@ -79,7 +144,8 @@ local function detectCar(car, id)
   M.healed = M.healed + takeover.heal(id)
   M.info = carInfo.read()
   M.profile = store.loadCar(id)
-  M.layout = detect.run(car, M.info)
+  carState.setCarInfo(M.info)
+  M.layout = detect.run(car, M.info, M.profile.map)
   if M.layout.notReady then return false end
   local n = #M.layout.leds
   M.n = n
@@ -87,6 +153,10 @@ local function detectCar(car, id)
     M.fb[i] = color.ORIGINAL
     if i > n or M.manual[i] == nil then M.manual[i] = color.ORIGINAL end
   end
+  carState.fill(0)
+  M.presetId = presets.choose(M.profile.preset, S.defaultPreset, M.layout, ST.drsPresent)
+  M.compiledVersion = -1
+  lights.init(id, M.profile, M.layout, M.info)
   if n == 0 then M.state = 'noleds'
   elseif not S.master then M.state = 'off'
   else attach() end
@@ -96,8 +166,8 @@ end
 
 local floor = math.floor
 
-local function fill(t)
-  local n, fb, mode = M.n, M.fb, S.testMode
+local function fillTest(t, mode)
+  local n, fb = M.n, M.fb
   if mode == 2 then
     local step = floor(t * 8) / 48
     for i = 1, n do fb[i] = color.hsv((i - 1) / n + step, 1, 1) end
@@ -114,19 +184,29 @@ local function fill(t)
   else
     for i = 1, n do fb[i] = color.ORIGINAL end
   end
-  local h = M.hover
-  if h > 0 and h <= n and M.clock < M.hoverUntil then
-    fb[h] = floor(t * 6) % 2 == 0 and color.WHITE or color.OFF
-  end
+end
+
+local function compileIfNeeded()
+  local v = presets.version
+  if M.compiled and M.compiledVersion == v then return end
+  M.compiled = engine.compile(M.preset(), M.layout, ST)
+  M.compiledVersion = v
+  bump()
 end
 
 local carCheck = 0
 local waitTimer = 0
+local lightsOn = false
+
+local function stopLights()
+  if lightsOn then lights.release(); lightsOn = false end
+end
 
 function M.update(dt)
   M.clock = M.clock + dt
   if M.restartReason then
     takeover.dispose()
+    stopLights()
     M.lastRestart = M.restartReason
     M.restartReason = nil
     M.state = 'wait'
@@ -147,6 +227,13 @@ function M.update(dt)
     carCheck = 0
     if ac.getCarID(0) ~= M.carId then M.restart('car'); return end
   end
+  carState.fill(dt)
+  if S.master then
+    lights.update(dt, ST)
+    lightsOn = true
+  else
+    stopLights()
+  end
   if M.state == 'off' then
     if S.master then attach(); bump() end
     return
@@ -158,16 +245,32 @@ function M.update(dt)
     bump()
     return
   end
-  fill(M.clock)
-  local fb = M.fb
-  for i = 1, M.n do takeover.set(i, fb[i]) end
+  local mode = S.testMode
+  if mode == M.NORMAL then
+    compileIfNeeded()
+    engine.step(M.compiled, ST, M.fb)
+  else
+    fillTest(M.clock, mode)
+  end
+  local fb, h = M.fb, M.hover
+  if not (h > 0 and h <= M.n and M.clock < M.hoverUntil) then h = 0 end
+  local blink = floor(M.clock * 6) % 2 == 0 and color.WHITE or color.OFF
+  for i = 1, M.n do takeover.set(i, i == h and blink or fb[i]) end
   takeover.guard(dt)
 end
 
--- Error boundary restorer: everything back to the car.
+-- Error boundary restorer and app unload: everything back to the car.
 function M.halt()
   takeover.dispose()
+  pcall(lights.release)
+  lightsOn = false
   M.state = 'wait'
+end
+
+-- Called once at load: user presets from disk; test patterns never survive a restart.
+function M.init()
+  presets.load()
+  if S.testMode ~= M.NORMAL then config.set('testMode', M.NORMAL) end
 end
 
 return M

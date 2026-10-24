@@ -1,16 +1,29 @@
--- Bindable buttons (CSP controls, ac.ControlButton as TimeShift uses it), polled in script.update so they work with
--- the window closed.
+-- Bindable buttons (CSP controls, ac.ControlButton as TimeShift uses it; bound in the Nastavení tab with
+-- :control()), polled in script.update so they work with the window closed. Handlers are set by the entry script.
 
-local config = require('src/config')
+local M = { list = {} }
 
-local S = config.S
-local M = {}
+local function make(key, id, name)
+  local ok, button = pcall(ac.ControlButton, id)
+  local e = { key = key, id = id, name = name, button = ok and button or nil, handler = nil }
+  M.list[#M.list + 1] = e
+  M[key] = e
+end
 
-local ok, button = pcall(ac.ControlButton, '__APP_LEDCONTROL_MASTER')
-M.master = ok and button or nil
+make('master', '__APP_LEDCONTROL_MASTER', 'Hlavní vypínač (zapnout / vypnout vše)')
+make('nextPreset', '__APP_LEDCONTROL_NEXT_PRESET', 'Další preset')
+make('flash', '__APP_LEDCONTROL_FLASH', 'Problik dálkovými světly')
+
+function M.on(key, fn)
+  if M[key] then M[key].handler = fn end
+end
 
 function M.update()
-  if M.master and M.master:pressed() then config.set('master', not S.master) end
+  local list = M.list
+  for i = 1, #list do
+    local e = list[i]
+    if e.button and e.handler and e.button:pressed() then e.handler() end
+  end
 end
 
 return M

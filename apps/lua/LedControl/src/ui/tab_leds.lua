@@ -21,11 +21,14 @@ for i = 1, detect.MAX_LEDS do
   LABELS[i] = '##led' .. i
   PREVIEW[i] = rgbm(0, 0, 0, 1)
 end
-local MODE_LABELS, MODE_ACTIVE = {}, {}
-for i = 1, #runtime.MODES do
-  MODE_LABELS[i] = runtime.MODES[i] .. '##mode' .. i
-  MODE_ACTIVE[i] = '> ' .. runtime.MODES[i] .. ' <##mode' .. i
+local MODE_LABELS, MODE_ACTIVE, MODE_NAMES = {}, {}, {}
+MODE_NAMES[0] = 'Normální provoz'
+for i = 1, #runtime.MODES do MODE_NAMES[i] = 'Test: ' .. runtime.MODES[i] end
+for i = 0, #runtime.MODES do
+  MODE_LABELS[i] = MODE_NAMES[i] .. '##mode' .. i
+  MODE_ACTIVE[i] = '> ' .. MODE_NAMES[i] .. ' <##mode' .. i
 end
+local GREEN = rgbm(0.4, 1, 0.5, 1)
 
 local seen = -1
 local groupLabels, tips, ledLines, rejectedLines, warningLines = {}, {}, {}, {}, {}
@@ -69,12 +72,12 @@ local function methodRow()
 end
 
 local function modeRow()
-  ui.text('Test:')
+  ui.text('Co diody ukazují:')
   local avail = ui.availableSpaceX()
   local used = 0
-  for i = 1, #runtime.MODES do
-    local w = 12 + 8 * #runtime.MODES[i]
-    if i > 1 then
+  for i = 0, #runtime.MODES do
+    local w = 12 + 8 * #MODE_NAMES[i]
+    if i > 0 then
       if used + w < avail then ui.sameLine() else used = 0 end
     end
     used = used + w
@@ -87,9 +90,15 @@ local function preview()
   local fb = runtime.fb
   local running = runtime.state == 'run'
   local perRow = math.max(1, math.floor(ui.availableSpaceX() / CELL_STEP))
+  local C = runtime.compiled
+  local normal = S.testMode == runtime.NORMAL
   for gi = 1, #lay.groups do
     local g = lay.groups[gi]
     ui.text(groupLabels[gi] or '')
+    if normal and running and C and C.groups[gi] then
+      ui.sameLine()
+      ui.textColored(C.groups[gi].activeName or '(nic, základ presetu)', GREEN)
+    end
     for k = 1, #g.leds do
       local i = g.leds[k]
       local c = PREVIEW[i]
@@ -106,7 +115,7 @@ local function preview()
       end
     end
   end
-  ui.textColored('Šedá = dioda řízená autem. Najetím myší dioda na autě bliká.', GREY)
+  ui.textColored('Šedá = dioda řízená autem. Najetím myší dioda na autě bliká, klik = vlastní barva (test).', GREY)
   if S.testMode == runtime.MANUAL and ui.button('Všechny zpět autu') then
     for i = 1, runtime.n do runtime.manual[i] = color.ORIGINAL end
   end

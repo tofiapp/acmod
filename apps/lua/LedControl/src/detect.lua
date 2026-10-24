@@ -230,9 +230,29 @@ end
 
 local REASON_NONE = 'mesh se jménem nebyl v modelu auta nalezen'
 
-function M.run(car, info)
+-- Groups from a manual map: { leds = { { name, group } ... }, groups = { { name, role } ... } }, LEDs in map order.
+local function mapGroups(valid, map)
+  local byGroup, order = {}, {}
+  for i = 1, #valid do
+    local gi = valid[i].mapGroup or 1
+    if not byGroup[gi] then byGroup[gi] = { leds = {} }; order[#order + 1] = gi end
+    local g = byGroup[gi]
+    g.leds[#g.leds + 1] = valid[i]
+  end
+  table.sort(order)
+  local groups = {}
+  for _, gi in ipairs(order) do
+    local def = map.groups and map.groups[gi]
+    local name = def and def[1] or ('Skupina ' .. gi)
+    local role = def and def[2] or (gi == 1 and 'main' or 'side')
+    groups[#groups + 1] = { name = name, role = role, cluster = { leds = byGroup[gi].leds, vertical = false }, mapIndex = gi }
+  end
+  return groups
+end
+
+function M.run(car, info, map)
   local layout = { carId = info.carId, leds = {}, groups = {}, rejected = {}, warnings = {}, counts = {},
-    source = 'none', signature = '0', threshold = 0, steer = 0 }
+    source = 'none', signature = '0', threshold = 0, steer = 0, manual = false }
   local root = ac.findNodes('carRoot:0')
   if not root or #root == 0 then
     layout.warnings[#layout.warnings + 1] = 'Model auta zatím není načtený.'
@@ -241,6 +261,25 @@ function M.run(car, info)
   end
   local lodA = safeFind(root, '{ lod:A }') or root
   local groupsOfNames = candidateGroups(root, info, layout.counts)
+  local manual = map and type(map.leds) == 'table' and #map.leds > 0
+  if manual then
+    local names, seen = {}, {}
+    for i = 1, #map.leds do
+      local e = map.leds[i]
+      if type(e[1]) == 'string' and not seen[e[1]] then
+        seen[e[1]] = true
+        names[#names + 1] = { name = e[1], source = 'manual', mapGroup = tonumber(e[2]) or 1 }
+      end
+    end
+    -- keep the RPM thresholds the car's files give for the same meshes
+    local rpmOf = {}
+    for gi = 1, #groupsOfNames do
+      for _, c in ipairs(groupsOfNames[gi]) do if c.rpm then rpmOf[c.name] = c.rpm end end
+    end
+    for _, c in ipairs(names) do c.rpm = rpmOf[c.name] end
+    groupsOfNames = { names }
+    layout.manual = true
+  end
 
   local eyes = vec3()
   car.transform:transformPointTo(eyes, car.driverEyesPosition)
@@ -271,7 +310,7 @@ function M.run(car, info)
         layout.rejected[#layout.rejected + 1] = { name = c.name, source = c.source, reason = reason }
       else
         local rx, ry, rz = world.x - cp.x, world.y - cp.y, world.z - cp.z
-        tried[#tried + 1] = { name = c.name, source = c.source, rpm = c.rpm, inst = inst, primary = p,
+        tried[#tried + 1] = { name = c.name, source = c.source, rpm = c.rpm, inst = inst, primary = p, mapGroup = c.mapGroup,
           world = vec3(world.x, world.y, world.z),
           lateral = dot(rx, ry, rz, side) * leftSign, height = dot(rx, ry, rz, up), visible = p.visible }
       end
@@ -281,7 +320,7 @@ function M.run(car, info)
     for i = 1, #tried do if tried[i].visible then anyVisible = true end end
     for i = 1, #tried do
       local led = tried[i]
-      if anyVisible and not led.visible then
+      if anyVisible and not led.visible and not manual then
         layout.rejected[#layout.rejected + 1] = { name = led.name, source = led.source, reason = 'skrytý mesh' }
       elseif #valid < MAX_LEDS then
         valid[#valid + 1] = led
@@ -296,7 +335,8 @@ function M.run(car, info)
     end
   end
 
-  local groups, th = makeGroups(valid)
+  local groups, th
+  if manual then groups, th = mapGroups(valid, map), 0 else groups, th = makeGroups(valid) end
   layout.threshold = th
   local sig = {}
   for gi = 1, #groups do
@@ -321,6 +361,41 @@ function M.run(car, info)
       'Volant byl při hledání natočený (%.0f°), pořadí může být nepřesné. S rovným volantem dejte Znovu najít.', layout.steer)
   end
   return layout
+end
+
+-- Cockpit meshes for manual mapping: LOD A meshes up to 10 cm within 2 m of the driver's eyes, nearest first.
+-- Returns { { name, material, radius, dist } ... } (one entry per name, at most limit). Called on demand only.
+function M.listMeshes(car, limit)
+  local out = {}
+  local root = ac.findNodes('carRoot:0')
+  if not root or #root == 0 or not car then return out end
+  local all = safeFind(root, '{ lod:A }') or safeFind(root, '?')
+  if not all then return out end
+  local eyes, world = vec3(), vec3()
+  car.transform:transformPointTo(eyes, car.driverEyesPosition)
+  local seen = {}
+  for i = 1, math.min(#all, 5000) do
+    local name = all:name(i)
+    if not seen[name] and not name:find('^__ledcontrol_') then
+      seen[name] = true
+      local ref = all:at(i)
+      local inst = { centre = vec3(), chain = nil }
+      local c, r = ref:boundingSphere(1, inst.centre)
+      if c and r and r <= 0.1 then
+        inst.chain = M.chainOf(ref)
+        M.worldOf(inst, world)
+        local dx, dy, dz = world.x - eyes.x, world.y - eyes.y, world.z - eyes.z
+        local d = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if d <= 2 then
+          local okM, mat = pcall(ref.materialName, ref, 1)
+          out[#out + 1] = { name = name, material = okM and mat or '?', radius = r, dist = d }
+        end
+      end
+    end
+  end
+  table.sort(out, function (a, b) return a.dist < b.dist end)
+  while #out > (limit or 300) do out[#out] = nil end
+  return out
 end
 
 return M

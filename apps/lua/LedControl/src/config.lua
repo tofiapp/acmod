@@ -5,7 +5,8 @@ local defaults = {
   master = true,       -- master switch: false gives the car its own LEDs back
   method = 1,          -- default takeover method for cars without a profile: 1 shadow copy, 2 redraw, 3 direct write
   intensity = 25,      -- emissive strength of a full colour (AC's own LED configs use roughly 10..60)
-  testMode = 1,        -- proof of concept test pattern (see runtime.MODES)
+  testMode = 0,        -- 0 = normal operation (scenarios), 1..6 = test pattern of the Diody tab (runtime.MODES)
+  defaultPreset = 'auto', -- preset for cars without their own choice ('auto': F1 styl for long rows / DRS, else GT3)
   showDiag = false,    -- Diody tab: show the diagnostics block
   hiddenGuard = '',    -- self-heal marker: "carId|mesh|mesh|..." of original meshes hidden by the shadow method
 }

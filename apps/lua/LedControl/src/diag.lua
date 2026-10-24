@@ -31,7 +31,24 @@ function M.text()
     runtime.lastRestart)
   add('Metoda: chtěná %s, běží %s', takeover.NAMES[runtime.method()] or '?', takeover.NAMES[takeover.method] or 'žádná')
   if takeover.fallback then add('Záloha: %s', takeover.fallback) end
-  add('Hlavní vypínač: %s | jas: %d | test: %s', tostring(S.master), S.intensity, runtime.MODES[S.testMode] or '?')
+  add('Hlavní vypínač: %s | jas: %d | režim: %s | preset: %s', tostring(S.master), S.intensity,
+    runtime.MODES[S.testMode] or 'normální provoz', runtime.presetId)
+  local C = runtime.compiled
+  if C then
+    for gi = 1, #C.groups do
+      local g = C.groups[gi]
+      add('  skupina %d (%s): kandidátů %d, teď svítí: %s', gi, g.name, #g.cands, g.activeName or 'základ presetu')
+    end
+    for i = 1, #C.scen do
+      local sc = C.scen[i]
+      if not sc.avail or sc.note then add('  scénář %s: %s%s', sc.id, sc.avail and '' or 'nedostupný, ', sc.note or '') end
+    end
+    for i = 1, #C.warnings do add('  varování: %s', C.warnings[i]) end
+  end
+  local ST = runtime.ST
+  add('Stav auta: rpm %.0f / omezovač %.0f / řazení %.0f%s | rychlost %.0f | palivo %.1f (varování %.1f) | vlajka %d | DRS %s | ABS %s TC %s',
+    ST.rpm, ST.rpmLimiter, ST.shiftUp, ST.shiftKnown and ' (ai.ini)' or ' (odhad)', ST.speed, ST.fuel, ST.fuelWarn, ST.flag,
+    tostring(ST.drsPresent), tostring(ST.hasAbs), tostring(ST.hasTc))
   if lay then
     local c = lay.counts or {}
     add('Zdroj diod: %s | kandidáti: digital_instruments=%d, csp_rpm=%d, actsAsLED=%d, jména=%d', lay.source,

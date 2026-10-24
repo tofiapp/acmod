@@ -365,7 +365,12 @@ ac = {
   onSessionStart = function (cb) M.callbacks.session = cb end,
   setClipboardText = function (t) M.clipboard = t end,
   ControlButton = function (id)
-    return { id = id, pressed = function () local p = M.hotkeyPressed; M.hotkeyPressed = false; return p end,
+    return { id = id, pressed = function ()
+        local p = M.hotkeys and M.hotkeys[id]
+        if p then M.hotkeys[id] = nil return true end
+        if id == '__APP_LEDCONTROL_MASTER' and M.hotkeyPressed then M.hotkeyPressed = false return true end
+        return false
+      end,
       control = function () M.hotkeyControlDrawn = true end }
   end,
 }
@@ -399,12 +404,133 @@ stringify = setmetatable({
   end,
 }, { __call = function (_, v) local out = {}; ser(v, out); return table.concat(out) end })
 
+function io.scanDir(dir, mask)
+  local out = {}
+  local pat = '^' .. mask:gsub('[%.%-]', '%%%0'):gsub('%*', '.*') .. '$'
+  local p = io.popen('ls "' .. dir .. '" 2>/dev/null')
+  if p then
+    for name in p:lines() do if name:match(pat) then out[#out + 1] = name end end
+    p:close()
+  end
+  return out
+end
+
+-- JSON (CSP's is native; this is a small pure Lua stand-in)
+local function jenc(v, out)
+  local t = type(v)
+  if t == 'nil' then out[#out + 1] = 'null'
+  elseif t == 'boolean' then out[#out + 1] = tostring(v)
+  elseif t == 'number' then out[#out + 1] = string.format('%.14g', v)
+  elseif t == 'string' then out[#out + 1] = '"' .. v:gsub('[%c"\\]', function (c) return string.format('\\u%04x', c:byte()) end) .. '"'
+  elseif t == 'table' then
+    local n = #v
+    local isArray = n > 0 or next(v) == nil
+    if isArray then for k in pairs(v) do if type(k) ~= 'number' or k > n or k < 1 then isArray = false end end end
+    if isArray then
+      out[#out + 1] = '['
+      for i = 1, n do if i > 1 then out[#out + 1] = ',' end jenc(v[i], out) end
+      out[#out + 1] = ']'
+    else
+      out[#out + 1] = '{'
+      local first = true
+      for k, x in pairs(v) do
+        if not first then out[#out + 1] = ',' end
+        first = false
+        jenc(tostring(k), out); out[#out + 1] = ':'; jenc(x, out)
+      end
+      out[#out + 1] = '}'
+    end
+  end
+end
+local function jdec(s)
+  local i = 1
+  local function ws() i = s:find('[^%s]', i) or #s + 1 end
+  local val
+  local function str()
+    local j = i + 1
+    local buf = {}
+    while true do
+      local c = s:sub(j, j)
+      if c == '' then error('bad json string') end
+      if c == '"' then break end
+      if c == '\\' then
+        local e = s:sub(j + 1, j + 1)
+        if e == 'u' then buf[#buf + 1] = string.char(tonumber(s:sub(j + 2, j + 5), 16) % 256); j = j + 6
+        else buf[#buf + 1] = ({ n = '\n', t = '\t', r = '\r' })[e] or e; j = j + 2 end
+      else buf[#buf + 1] = c; j = j + 1 end
+    end
+    i = j + 1
+    return table.concat(buf)
+  end
+  function val()
+    ws()
+    local c = s:sub(i, i)
+    if c == '{' then
+      i = i + 1
+      local o = {}
+      ws()
+      if s:sub(i, i) == '}' then i = i + 1 return o end
+      while true do
+        ws()
+        local k = str()
+        ws()
+        if s:sub(i, i) ~= ':' then error('bad json object') end
+        i = i + 1
+        o[k] = val()
+        ws()
+        local d = s:sub(i, i)
+        i = i + 1
+        if d == '}' then return o end
+        if d ~= ',' then error('bad json object') end
+      end
+    elseif c == '[' then
+      i = i + 1
+      local a = {}
+      ws()
+      if s:sub(i, i) == ']' then i = i + 1 return a end
+      while true do
+        a[#a + 1] = val()
+        ws()
+        local d = s:sub(i, i)
+        i = i + 1
+        if d == ']' then return a end
+        if d ~= ',' then error('bad json array') end
+      end
+    elseif c == '"' then return str()
+    elseif s:sub(i, i + 3) == 'true' then i = i + 4 return true
+    elseif s:sub(i, i + 4) == 'false' then i = i + 5 return false
+    elseif s:sub(i, i + 3) == 'null' then i = i + 4 return nil
+    else
+      local num = s:match('^-?%d+%.?%d*[eE]?[-+]?%d*', i)
+      if not num or num == '' then error('bad json value at ' .. i) end
+      i = i + #num
+      return tonumber(num)
+    end
+  end
+  local v = val()
+  ws()
+  if i <= #s then error('trailing json') end
+  return v
+end
+JSON = {
+  stringify = function (v) local out = {}; jenc(v, out); return table.concat(out) end,
+  parse = jdec,
+}
+
 -- ---------------------------------------------------------------- ui
 
 local U = M.ui
 local function rec(s) if U.record then U.texts[#U.texts + 1] = s end end
 ui = {
   ColorPickerFlags = { PickerHueBar = 1 },
+  ComboFlags = { None = 0 },
+  setNextItemWidth = function () end,
+  selectable = function (label) U.last = label; rec(label); return U.click == label end,
+  combo = function (label, preview, flags, content)
+    U.last = label
+    rec(preview)
+    if U.openCombo == label and content then content() end
+  end,
   checkbox = function (label) U.last = label; rec(label); return U.click == label end,
   button = function (label) U.last = label; rec(label); return U.click == label end,
   radioButton = function (label) U.last = label; rec(label); return U.click == label end,

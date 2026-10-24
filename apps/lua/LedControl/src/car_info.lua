@@ -15,7 +15,7 @@ end
 
 local function read()
   local info = { carId = ac.getCarID(0) or '', leds = {}, cspRpm = {}, generators = {}, cspSections = 0,
-    shiftUp = 0, errors = {} }
+    shiftUp = 0, fuelWarn = 0, errors = {} }
 
   local ok, ini = pcall(ac.INIConfig.carData, 0, 'digital_instruments.ini')
   if ok and ini and ini.sections then
@@ -56,13 +56,21 @@ local function read()
     local ok4, up = pcall(ai.get, ai, 'GEARS', 'UP', 0)
     if ok4 then info.shiftUp = tonumber(up) or 0 end
   end
+
+  -- fuel warning light as CSP's led_colors / RGBControl read it
+  local ok5, carIni = pcall(ac.INIConfig.carData, 0, 'car.ini')
+  if ok5 and carIni then
+    local ok6, w = pcall(carIni.get, carIni, 'GRAPHICS', 'FUEL_LIGHT_MIN_LITERS', 0)
+    if ok6 then info.fuelWarn = tonumber(w) or 0 end
+  end
   return info
 end
 
 function M.read()
   local ok, info = pcall(read)
   if ok then return info end
-  return { carId = '', leds = {}, cspRpm = {}, generators = {}, cspSections = 0, shiftUp = 0, errors = { tostring(info) } }
+  return { carId = '', leds = {}, cspRpm = {}, generators = {}, cspSections = 0, shiftUp = 0, fuelWarn = 0,
+    errors = { tostring(info) } }
 end
 
 return M

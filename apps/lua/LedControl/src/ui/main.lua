@@ -4,15 +4,13 @@ local config = require('src/config')
 local runtime = require('src/runtime')
 local takeover = require('src/takeover')
 local safety = require('src/safety')
-local hotkeys = require('src/hotkeys')
-local tabLeds = require('src/ui/tab_leds')
+local presets = require('src/presets')
 
 local S = config.S
 local M = {}
 
 local RED = rgbm(1, 0.35, 0.3, 1)
 local ORANGE = rgbm(1, 0.7, 0.2, 1)
-local HOTKEY_SIZE = vec2(220, 0)
 
 local seen = -1
 local statusLine = ''
@@ -30,32 +28,53 @@ local function refresh()
   errorLine = safety.error and string.format('Chyba (%s): %s', tostring(safety.where), safety.error) or ''
 end
 
-local function placeholder(text)
-  return function () ui.textWrapped(text) end
+-- Tabs are loaded on first use under pcall, so a broken tab shows its error instead of stopping the window.
+local TABS = {
+  { 'Diody', 'src/ui/tab_leds' },
+  { 'Scénáře', 'src/ui/tab_scenarios' },
+  { 'Editor', 'src/ui/tab_editor' },
+  { 'Světla', 'src/ui/tab_lights' },
+  { 'Nastavení', 'src/ui/tab_settings' },
+}
+local loaded, loadErrors, drawers = {}, {}, {}
+
+local function tabDrawer(i)
+  return function ()
+    local mod = loaded[i]
+    if mod == nil then
+      local ok, res = pcall(require, TABS[i][2])
+      if ok and type(res) == 'table' and type(res.draw) == 'function' then mod = res
+      else mod = false; loadErrors[i] = 'Karta se nenačetla: ' .. tostring(res) end
+      loaded[i] = mod
+    end
+    if mod then mod.draw() else ui.textColored(loadErrors[i], RED) end
+  end
+end
+for i = 1, #TABS do drawers[i] = tabDrawer(i) end
+
+local function presetItems()
+  local all = presets.all()
+  for i = 1, #all do
+    if ui.selectable(all[i].name, all[i].id == runtime.presetId) then runtime.setPreset(all[i].id) end
+  end
 end
 
-local tabScenarios = placeholder('Scénáře (pit limiter, vlajky, řazení, DRS, ABS/TC, palivo, …) přijdou ve fázi 4.')
-local tabEditor = placeholder('Ruční editor presetů přijde ve fázi 5.')
-local tabLights = placeholder('Světla přijdou ve fázi 6.')
-
-local function tabSettings()
-  ui.text('Klávesa pro hlavní vypínač:')
-  if hotkeys.master then hotkeys.master:control(HOTKEY_SIZE) else ui.text('(ovládání kláves není k dispozici)') end
-  ui.textWrapped('Ostatní nastavení (presety, import/export, smazání dat) přijdou v dalších fázích.')
+local function presetRow()
+  ui.text('Preset pro toto auto:')
+  ui.sameLine()
+  ui.setNextItemWidth(220)
+  ui.combo('##preset', runtime.preset().name, ui.ComboFlags.None, presetItems)
 end
 
 local function tabs()
-  ui.tabItem('Diody', tabLeds.draw)
-  ui.tabItem('Scénáře', tabScenarios)
-  ui.tabItem('Editor', tabEditor)
-  ui.tabItem('Světla', tabLights)
-  ui.tabItem('Nastavení', tabSettings)
+  for i = 1, #TABS do ui.tabItem(TABS[i][1], drawers[i]) end
 end
 
 local function draw()
   refresh()
   if ui.checkbox('Zapnuto (hlavní vypínač)', S.master) then config.set('master', not S.master) end
   ui.textWrapped(statusLine)
+  presetRow()
   if takeover.fallback then ui.textColored(takeover.fallback, ORANGE) end
   if errorLine ~= '' then
     ui.textColored(errorLine, RED)
