@@ -112,8 +112,10 @@ extension/lua/joypad-assist/KeyDrive/
                                [HANDBRAKE] KEY; CM writes hex "0x53"), ac.isKeyDown. In gamepad mode AC does not
                                forward keyboard gear keys (user report), so assist.lua sets state.gearUp/gearDown/handbrake
   src/traction.lua             throttle traction limiter: load-weighted ndSlip of the driven wheels (AC's combined
-                               slip, 1 = tyre peak; fallback = wheel speed slip ratio), predicted 0.15 s ahead from its
-                               rate; multiplier k on the ramped throttle (K_UP 2, K_DOWN 6), floor 20 % -> 50 % (160 km/h)
+                               slip, 1 = tyre peak; fallback = wheel speed slip ratio), filtered 80 ms, no prediction;
+                               slow multiplier k (K_UP 1, K_DOWN 1.5, floor 0.4), frozen 0.5 s after a gear change;
+                               riseScale slows the throttle rise near the target. Target must stay <= 1 (past the peak
+                               the slip runs away).
   src/brake.lua                brake lock limiter on LONGITUDINAL slip only: max -slipRatio / peakRatio over grounded wheels
                                (peakRatio learned from straight-running wheels: |slipRatio| / ndSlip, default 0.13),
                                predicted 0.04 s; multiplier k on the ramped brake (K_UP 4, K_DOWN 15, floor 0.15);
@@ -153,4 +155,13 @@ Analysis helpers for the CSV logs are quick Python scripts (csv module); group s
 - v0.5: brake on longitudinal slip, phase 5 steering (rate curve, grip window, countersteer). Single-track model in
   tests: fronts held at 0.99 of peak, +15 % lateral force; countersteer recovers a slide. A countersteer to the window
   edge (first attempt) pushed the nose further into the spin.
-Next: user test of v0.5, then phase 6 (modes, tyre temperature).
+- v0.5 user verdict: "the car grabs the steering", throttle "not acceptable", "I want it smooth", "not 20 times from
+  20 to 0 and back". Log incident 4: in 1st/2nd gear the traction cut the throttle 50-100 % of the time, swinging
+  97 -> 22 -> 75 -> 22 % (prediction + fast K_DOWN), triggered also by the clutch bite after selecting first.
+- v0.6 = smoothness first: every output is slew-limited. Throttle: assists may lower it at most 1.5 /s, only the
+  driver's lift uses THROTTLE_FALL_RATE. Steering: the assist never moves the wheels faster than the key rate (except
+  an opt-in countersteer and 0.6 s after it); COUNTERSTEER_ASSIST default 0, STEER_TARGET default 120.
+  Launch model with realistic first-gear inertia (J 8): slip ~1.0 of peak, one spike, gas eases 1.0 -> 0.6 in 0.35 s.
+Rule learned the hard way: the user values predictability and smoothness over maximum grip. Never let an assist
+step an output; prefer gentle, slow corrections and opt-in for anything that moves controls on its own.
+Next: user test of v0.6, then phase 6 (modes, tyre temperature).

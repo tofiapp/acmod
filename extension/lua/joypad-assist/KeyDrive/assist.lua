@@ -33,8 +33,8 @@ local function loadSettings()
     STEER_RETURN_SPEED = 150,
     STEER_BOTH_KEYS = 0,
     STEER_LIMIT_STRENGTH = 100,
-    STEER_TARGET = 100,
-    COUNTERSTEER_ASSIST = 50,
+    STEER_TARGET = 120,
+    COUNTERSTEER_ASSIST = 0,
     SHOW_DIAGNOSTICS = true,
     RECORD_LOG = true,
   }
@@ -70,6 +70,7 @@ local P = {
   countersteerAssist = math.clamp(S.COUNTERSTEER_ASSIST / 100, 0, 1),
 }
 
+local THROTTLE_ASSIST_FALL = 1.5 -- per second: fastest throttle reduction an assist may make
 local CORNER_G_FULL = 1.5    -- lateral g at which the corner cap reduction is complete
 local CORNER_TAU = 0.15      -- s, smoothing of the corner factor
 local TRAIL_TAU = 0.2        -- s, smoothing of the steering amount used for the trail-brake release
@@ -131,13 +132,19 @@ local function throttle(dt, kGas, state)
 
   -- Traction only when driving forwards in a forward gear; reverse, neutral and standing in reverse never use it.
   local forward = car.gear > 0 and car.localVelocity.z > -1
-  if P.traction and forward then
-    live.cap = cap
-    return traction.update(dt, car, gasRequest, P.targetSlip, P.tractionResponse)
-  end
-  traction.reset()
   live.cap = cap
-  return gasRequest
+  local out
+  if P.traction and forward then
+    out = traction.update(dt, car, gasRequest, P.targetSlip, P.tractionResponse)
+  else
+    traction.reset()
+    out = gasRequest
+  end
+  -- Smoothness: the sent throttle never jumps. It drops at the key fall rate only when the driver lifts,
+  -- otherwise (traction, corner cap) at most THROTTLE_ASSIST_FALL per second.
+  local fall = gasRequest < gas and P.throttleFall or THROTTLE_ASSIST_FALL
+  local rise = P.throttleRise * ((P.traction and forward) and traction.riseScale or 1)
+  return ramp.step(gas, out, rise, fall, dt)
 end
 
 local brakeState = 3
@@ -162,6 +169,8 @@ local function brakeInput(dt, kBrake)
   return out
 end
 
+local counterHold = 0
+
 local function steerInput(dt, kLeft, kRight)
   local target
   if kLeft and kRight then
@@ -175,7 +184,13 @@ local function steerInput(dt, kLeft, kRight)
     steering.reset()
     return steerRequest -- reversing: plain keys
   end
-  return steering.update(dt, car, steerRequest, steer, P.steerTarget, P.steerLimitStrength, P.countersteerAssist)
+  local wanted = steering.update(dt, car, steerRequest, steer, P.steerTarget, P.steerLimitStrength, P.countersteerAssist)
+  -- The assist may never move the wheels faster than the keys do (user report: it grabbed the steering).
+  -- A countersteer (opt-in) has to be quick, and so does taking it back, else the car swings the other way.
+  if steering.countering then counterHold = 0.6 elseif counterHold > 0 then counterHold = counterHold - dt end
+  if counterHold > 0 then return wanted end
+  local maxRate = rate * math.max(1, P.steerReturn)
+  return ramp.stepSigned(steer, wanted, maxRate, maxRate, dt)
 end
 
 function script.update(dt)

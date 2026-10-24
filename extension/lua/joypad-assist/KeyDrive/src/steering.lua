@@ -37,7 +37,7 @@ local M = {
   fade = 0,           -- 0 at low speed (no window) .. 1
 }
 
-local BETA_TAU = 0.04
+local BETA_TAU = 0.08
 local LEARN_TAU = 3
 local FADE_V0, FADE_V1 = 20 / 3.6, 40 / 3.6
 
