@@ -96,3 +96,24 @@ Delta layout B (sectors top, line middle, number bottom), 24 sectors in 3 groups
 number 30 px, opacity 100 %, intensity off. Timing side by side, best lap purple frame, lap flash on.
 Tyres style 1 (big core numbers + zone bar); style 2 = core number + tyre + three zone numbers.
 Gear: rounded style, speed on a dark bar as wide as the gear tile, speed step 3 km/h, font Unbounded.
+
+## KeyDrive (separate project, work in progress)
+
+Smart keyboard input for AC as a CSP Gamepad FX script; independent of MirrorDelta (do not touch its code).
+Research and verified API: `docs/keydrive-research.md`.
+
+```
+extension/lua/joypad-assist/KeyDrive/
+  manifest.ini, settings.ini   Gamepad FX script (settings.ini = CM settings, section KEYDRIVE)
+  assist.lua                   physics thread: reads keys, writes ac.getJoypadState().gas/brake/steer
+  module_render.lua            render thread (ac.loadRenderThreadModule): diagnostic overlay via script.drawUI
+  src/ramp.lua                 rate limiters in units/s (dt based)
+  src/keys.lua                 AC keyboard binds from cfg/controls.ini [KEYBOARD], ac.isKeyDown
+  src/shared.lua               ac.connect layout 'KeyDrive.Live.v1' (same layout on every side)
+tests/keydrive/                own mock + tests: python tests/keydrive/run_tests.py
+build-keydrive.sh / .ps1       dist/KeyDrive-<version>.zip (extension/... + apps/lua/KeyDriveConfig/...)
+```
+
+Status: phase 2 (PoC: throttle ramp; brake and steering are placeholders). Open questions for the in-game test:
+does the script run with no physical gamepad, and does AC leak raw keyboard gas into the joypad state
+(the PoC overlay shows the incoming joypad values and the final `car.gas`).
