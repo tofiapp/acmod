@@ -32,16 +32,18 @@ local function num(v)
   return math.floor(v + 0.5)
 end
 
--- Clean copy of a stored profile.rpm (store.lua calls it).
+-- Clean copy of a stored profile.rpm (store.lua calls it). The learned limiter is stored as learnedLimiter: the old
+-- key 'learned' (0.3.0 / 0.3.1, could be learned from the pit limiter) is dropped.
 function M.sanitise(t)
   if type(t) ~= 'table' then return nil end
-  local out = { start = num(t.start), shift = num(t.shift), limiter = num(t.limiter), learned = num(t.learned) }
+  local out = { start = num(t.start), shift = num(t.shift), limiter = num(t.limiter),
+    learnedLimiter = num(t.learnedLimiter) }
   if type(t.leds) == 'table' then
     out.leds = {}
     for i = 1, math.min(#t.leds, 64) do out.leds[i] = num(t.leds[i]) or MIN_RPM end
     if #out.leds == 0 then out.leds = nil end
   end
-  if not (out.start or out.shift or out.limiter or out.learned or out.leds) then return nil end
+  if not (out.start or out.shift or out.limiter or out.learnedLimiter or out.leds) then return nil end
   return out
 end
 
@@ -55,7 +57,7 @@ local function compute(ST)
   local c = cfg()
   local a = M.auto
   -- limiter
-  if (c.learned or 0) > 0 then a.limiter, a.limiterFrom = c.learned, 'naměřeno ve hře'
+  if (c.learnedLimiter or 0) > 0 then a.limiter, a.limiterFrom = c.learnedLimiter, 'naměřeno ve hře'
   elseif carLimiter > 0 then a.limiter, a.limiterFrom = carLimiter, 'z auta'
   elseif aiUp > 0 then a.limiter, a.limiterFrom = math.floor(aiUp / 0.97 + 0.5), 'odhad z ai.ini'
   else a.limiter, a.limiterFrom = 8000, 'neznámý' end
@@ -66,7 +68,7 @@ local function compute(ST)
   local shift = c.shift or a.shift
   M.limiter, M.shift, M.start = limiter, shift, c.start or 0
   M.manual.start, M.manual.shift, M.manual.limiter = c.start ~= nil, c.shift ~= nil, c.limiter ~= nil
-  M.limiterKnown = c.limiter ~= nil or (c.learned or 0) > 0 or carLimiter > 0
+  M.limiterKnown = c.limiter ~= nil or (c.learnedLimiter or 0) > 0 or carLimiter > 0
   M.ledRpm = c.leds
   ST.shiftUp, ST.shiftKnown = shift, true
   ST.shiftStartManual = c.start or 0
@@ -84,7 +86,7 @@ function M.init(prof, info, ST, save)
   carLimiter = (ok and tonumber(lim) and lim > 0) and lim or 0
   M.maxSeen, M.flagUnreliable, edgeWas, lowFlagTime = 0, false, false, 0
   local c = cfg()
-  M.learned = c.learned or 0
+  M.learned = c.learnedLimiter or 0
   compute(ST)
 end
 
@@ -106,11 +108,14 @@ function M.update(ST, dt)
   else
     lowFlagTime = 0
   end
-  if flag and not edgeWas and not M.flagUnreliable and rpm > 2500 and rpm > M.shift * 0.7 then
+  -- not in the pit lane / on the pit limiter (its cut set a far too low limiter at the spawn), and close to the
+  -- car's own limiter when the car reports one
+  if flag and not edgeWas and not M.flagUnreliable and rpm > 2500 and rpm > M.shift * 0.7
+      and not ST.pitLimiter and not ST.inPitlane and (carLimiter <= 0 or rpm >= carLimiter * 0.9) then
     local learned = math.floor(rpm + 0.5)
     if math.abs(learned - M.learned) > 50 and (M.learned == 0 or learned > M.learned) then
       M.learned = learned
-      cfg().learned = learned
+      cfg().learnedLimiter = learned
       compute(ST)
       saveDue = clock + 2
     end
@@ -129,7 +134,7 @@ end
 
 function M.forgetLearned(ST)
   local c = cfg()
-  c.learned, M.learned = nil, 0
+  c.learnedLimiter, M.learned = nil, 0
   compute(ST)
   save()
 end

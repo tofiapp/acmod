@@ -43,13 +43,40 @@ check(rpm.learned == 10400 and rpm.limiter == 10400 and rpm.auto.limiterFrom == 
 check(rpm.shift == math.floor(10400 * 0.97 + 0.5), 'shift point follows the learned limiter')
 frame(200)
 local profile = require('src/store').loadCar('test_formula')
-check(profile.rpm and profile.rpm.learned == 10400, 'learned limiter saved in the car profile')
+check(profile.rpm and profile.rpm.learnedLimiter == 10400, 'learned limiter saved in the car profile')
 app = H.loadApp()
 frame(3)
 rt, rpm = app.runtime, app.runtime.rpm
 check(rpm.limiter == 10400, 'learned limiter kept after a restart')
 rpm.forgetLearned(rt.ST)
 check(rpm.limiter == 11000 and rpm.learned == 0, 'forget: back to the car value')
+
+-- the pit limiter's cut in the pit lane is not the engine limiter (it set a far too low limiter at the spawn)
+env.car.isInPitlane, env.car.manualPitsSpeedLimiterEnabled = true, true
+env.car.rpm = 9000
+env.car.isEngineLimiterOn = true
+frame(2)
+env.car.isEngineLimiterOn = false
+frame(2)
+check(rpm.learned == 0 and rpm.limiter == 11000, 'no learning in the pit lane on the pit limiter (' .. rpm.learned .. ')')
+env.car.isInPitlane, env.car.manualPitsSpeedLimiterEnabled = false, false
+-- far below the car's own limiter: not learned either
+env.car.rpm = 8000
+env.car.isEngineLimiterOn = true
+frame(2)
+env.car.isEngineLimiterOn = false
+frame(2)
+check(rpm.learned == 0, 'no learning far below the car limiter (' .. rpm.learned .. ')')
+-- an old stored value under the 0.3.0 key is dropped
+check(rpm.sanitise({ learned = 6000 }) == nil, 'old learned key dropped')
+
+-- standing in the pit box after the spawn is not "in the pit lane without the limiter"
+local pitLane = require('src/scenarios').byId.pitLane
+check(not pitLane.test({ inPitlane = true, pitLimiter = false, inPit = true, speed = 0 }), 'pit lane warning: quiet in the box')
+check(not pitLane.test({ inPitlane = true, pitLimiter = false, inPit = false, speed = 2 }), 'pit lane warning: quiet standing')
+check(pitLane.test({ inPitlane = true, pitLimiter = false, inPit = false, speed = 40 }), 'pit lane warning: driving in the lane')
+local damage = require('src/scenarios').byId.damage
+check(not damage.test({ engineLife = 0, damage = 0 }, 30), 'damage: engine life not read yet is no warning')
 
 -- a flag that is on at low RPM is not the limiter
 env.car.rpm = 3000
@@ -107,8 +134,8 @@ check(rpm.manual.start and rpm.manual.shift and not rpm.manual.limiter, 'manual 
 rpm.setLeds(nil, rt.ST)
 
 -- sanitising
-local clean = rpm.sanitise({ start = 'x', shift = 1e999, limiter = -5, learned = 0 / 0, leds = { 7000, 'bad', 1e9 } })
-check(clean and clean.start == nil and clean.shift == nil and clean.limiter == nil and clean.learned == nil
+local clean = rpm.sanitise({ start = 'x', shift = 1e999, limiter = -5, learnedLimiter = 0 / 0, leds = { 7000, 'bad', 1e9 } })
+check(clean and clean.start == nil and clean.shift == nil and clean.limiter == nil and clean.learnedLimiter == nil
   and #clean.leds == 3 and clean.leds[1] == 7000 and clean.leds[2] == 500, 'hostile values dropped')
 check(rpm.sanitise({}) == nil, 'empty rpm settings are not stored')
 

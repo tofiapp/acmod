@@ -62,7 +62,8 @@ Po pádu nebo restartu skriptu se schované diody samy vrátí.
 Karta **Otáčky** ukazuje živě otáčky a kde řadicí světla začínají, kde jsou plná (bod řazení) a kde bliká omezovač.
 Automaticky:
 
-- **Omezovač** se naučí ve hře: když AC poprvé zapne svůj omezovač, aplikace si otáčky zapamatuje pro toto auto.
+- **Omezovač** se naučí ve hře: když AC zapne svůj omezovač (mimo pit lane a pit limiter), aplikace si otáčky
+  zapamatuje pro toto auto.
   Jinak vezme omezovač z dat auta.
 - **Plno / řazení** je bod řazení z `ai.ini`, ale jen když leží pod omezovačem. U závodních aut bývá v `ai.ini` stejně
   vysoko nebo výš než omezovač, a pak by se světla nikdy nedoplnila a omezovač blikal už v půlce. Pak se použije 97 %

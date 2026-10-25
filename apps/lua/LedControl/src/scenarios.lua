@@ -50,7 +50,8 @@ M.list = {
     test = function (ST) return ST.pitLimiter end, avail = always },
   { id = 'pitLane', name = 'V pit lane bez limiteru', cat = 'Box', to = 'all',
     look = { p = 'blink', c = { RED, '#000000' }, hz = 4 },
-    test = function (ST) return ST.inPitlane and not ST.pitLimiter end, avail = always },
+    -- only while driving in the lane: standing in the pit box after the spawn is not a warning
+    test = function (ST) return ST.inPitlane and not ST.pitLimiter and not ST.inPit and ST.speed > 5 end, avail = always },
 
   flag('flagBlue', 'Modrá vlajka (pouští rychlejší auto)', 12, { p = 'blink', c = { BLUE, '#000000' }, hz = 2 }, true),
   flag('flagYellow', 'Žlutá vlajka', 2, { p = 'blink', c = { YELLOW, '#000000' }, hz = 2 }, true),
@@ -122,7 +123,8 @@ M.list = {
   { id = 'damage', name = 'Poškození', cat = 'Varování', to = 'side',
     param = { name = 'Karoserie nad', unit = '(surová hodnota AC)', default = 30, min = 1, max = 500 },
     look = { p = 'blink', c = { RED, '#000000' }, hz = 1 },
-    test = function (ST, p) return ST.engineLife < 500 or ST.damage > p end,
+    -- engineLife 0 = not read yet (a frame at the spawn), a blown engine shows as engine off
+    test = function (ST, p) return (ST.engineLife > 0 and ST.engineLife < 500) or ST.damage > p end,
     avail = sideNote },
 
   { id = 'startCountdown', name = 'Odpočet startu', cat = 'Start', to = 'main',
