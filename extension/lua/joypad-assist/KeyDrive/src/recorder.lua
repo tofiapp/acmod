@@ -1,7 +1,8 @@
 -- Driving log for tuning (render thread; io.save is used the same way by CSP's own Mobile gamepad script).
 --
 -- Keeps the last 60 s at 40 Hz in preallocated ring buffers: key inputs, what KeyDrive sent, what the car ran,
--- slip of every wheel, body slide, collisions, and event flags. Files in the script folder:
+-- slip of every wheel, body slide, collisions, and event flags. Files go to Documents/Assetto Corsa/logs/keydrive
+-- (survives reinstalling the script; falls back to the script folder if that cannot be written):
 --   keydrive-log.csv               rolling log, rewritten every 10 s while driving
 --   keydrive-incident-N.csv        written 3 s after a spin, a crash or leaving the track (N = 1..5, rotating),
 --                                  so the moment is kept even if the driver keeps going
@@ -30,12 +31,12 @@ local EVENT_NAMES = { { EV_WSPIN, 'WSPIN' }, { EV_SLIDE, 'SLIDE' }, { EV_SPIN, '
 local COLUMNS = {
   { 't', '%.3f' },
   { 'key_gas', '%d' }, { 'key_brake', '%d' }, { 'key_left', '%d' }, { 'key_right', '%d' },
-  { 'gas_request', '%.3f' }, { 'gas_out', '%.3f' }, { 'car_gas', '%.3f' }, { 'tc_k', '%.3f' }, { 'tc_state', '%d' },
+  { 'gas_request', '%.3f' }, { 'gas_out', '%.3f' }, { 'car_gas', '%.3f' }, { 'tc_cap', '%.3f' }, { 'tc_state', '%d' },
   { 'drive_slip_nd', '%.3f' }, { 'drive_slip_ratio', '%.3f' }, { 'slip_target', '%.2f' },
   { 'brake_out', '%.3f' }, { 'car_brake', '%.3f' },
   { 'brake_request', '%.3f' }, { 'brake_k', '%.3f' }, { 'brake_slip', '%.3f' }, { 'brake_memory', '%.3f' },
   { 'brake_state', '%d' },
-  { 'brake_peak_ratio', '%.3f' },
+  { 'brake_peak_ratio', '%.3f' }, { 'tc_memory', '%.3f' },
   { 'steer_out', '%.3f' }, { 'steer_deg', '%.1f' },
   { 'steer_request', '%.3f' }, { 'steer_lo', '%.3f' }, { 'steer_hi', '%.3f' }, { 'front_alpha', '%.2f' },
   { 'alpha_peak', '%.2f' }, { 'beta_f', '%.2f' }, { 'deg_per_unit', '%.2f' }, { 'steer_state', '%d' },
@@ -69,13 +70,25 @@ local head, count = 0, 0
 local time, sampleTimer, saveTimer = 0, 0, 0
 local incidentTimer, incidentIndex, incidentReason, lastIncidentTime = -1, 0, 0, -1e9
 local dirty = false
-local dir
+local dir, fallbackDir
 
 M.lastIncident = ''
 M.error = nil
+M.folderLabel = ''
+M.statusText = ''
 
-function M.init(folder)
-  dir = folder
+function M.init(scriptFolder)
+  fallbackDir = scriptFolder
+  local ok, logs = pcall(ac.getFolder, ac.FolderID.Logs)
+  if ok and type(logs) == 'string' and logs ~= '' then
+    dir = logs .. '/keydrive'
+    pcall(io.createDir, dir)
+    M.folderLabel = 'Dokumenty\\Assetto Corsa\\logs\\keydrive'
+  else
+    dir = scriptFolder
+    M.folderLabel = 'složka skriptu KeyDrive'
+  end
+  M.statusText = 'záznam běží: keydrive-log.csv v ' .. M.folderLabel
 end
 
 local function bit(x, b) return math.floor(x / b) % 2 == 1 end
@@ -120,17 +133,17 @@ local function sample(live, c)
   v[14][head] = live.outBrake; v[15][head] = c.brake
   v[16][head] = live.brakeRequest; v[17][head] = live.brakeK; v[18][head] = live.brakeSlip
   v[19][head] = live.brakeMemory; v[20][head] = live.brakeState
-  v[21][head] = live.brakePeakRatio
-  v[22][head] = live.outSteer; v[23][head] = c.steer
-  v[24][head] = live.steerRequest; v[25][head] = live.steerLo; v[26][head] = live.steerHi
-  v[27][head] = live.frontAlpha; v[28][head] = live.alphaPeak; v[29][head] = live.betaF
-  v[30][head] = live.degPerUnit; v[31][head] = live.steerState
-  v[32][head] = c.speedKmh; v[33][head] = c.gear; v[34][head] = c.rpm
-  v[35][head] = live.gx; v[36][head] = c.acceleration.z; v[37][head] = c.localAngularVelocity.y; v[38][head] = bodySlip
-  v[39][head] = w0.ndSlip; v[40][head] = w1.ndSlip; v[41][head] = w2.ndSlip; v[42][head] = w3.ndSlip
-  v[43][head] = w0.slipRatio; v[44][head] = w1.slipRatio; v[45][head] = w2.slipRatio; v[46][head] = w3.slipRatio
-  v[47][head] = w0.slipAngle; v[48][head] = w1.slipAngle; v[49][head] = w2.slipAngle; v[50][head] = w3.slipAngle
-  v[51][head] = c.collisionDepth; v[52][head] = out
+  v[21][head] = live.brakePeakRatio; v[22][head] = live.tcMemory
+  v[23][head] = live.outSteer; v[24][head] = c.steer
+  v[25][head] = live.steerRequest; v[26][head] = live.steerLo; v[27][head] = live.steerHi
+  v[28][head] = live.frontAlpha; v[29][head] = live.alphaPeak; v[30][head] = live.betaF
+  v[31][head] = live.degPerUnit; v[32][head] = live.steerState
+  v[33][head] = c.speedKmh; v[34][head] = c.gear; v[35][head] = c.rpm
+  v[36][head] = live.gx; v[37][head] = c.acceleration.z; v[38][head] = c.localAngularVelocity.y; v[39][head] = bodySlip
+  v[40][head] = w0.ndSlip; v[41][head] = w1.ndSlip; v[42][head] = w2.ndSlip; v[43][head] = w3.ndSlip
+  v[44][head] = w0.slipRatio; v[45][head] = w1.slipRatio; v[46][head] = w2.slipRatio; v[47][head] = w3.slipRatio
+  v[48][head] = w0.slipAngle; v[49][head] = w1.slipAngle; v[50][head] = w2.slipAngle; v[51][head] = w3.slipAngle
+  v[52][head] = c.collisionDepth; v[53][head] = out
   v[EVENTS_COL][head] = flags
   return flags
 end
@@ -146,7 +159,14 @@ local function write(path)
     row[EVENTS_COL] = eventText(row[EVENTS_COL])
     lines[#lines + 1] = string.format(rowFormat, unpack(row, 1, NC))
   end
-  pcall(io.save, dir .. '/' .. path, table.concat(lines, '\n'))
+  local data = table.concat(lines, '\n')
+  local ok, res = pcall(io.save, dir .. '/' .. path, data)
+  if (not ok or res == false) and dir ~= fallbackDir then
+    dir = fallbackDir
+    M.folderLabel = 'složka skriptu KeyDrive'
+    M.statusText = 'záznam běží: keydrive-log.csv v ' .. M.folderLabel
+    pcall(io.save, dir .. '/' .. path, data)
+  end
 end
 
 function M.save()

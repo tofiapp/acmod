@@ -21,7 +21,7 @@ local function loadSettings()
     TRACTION = true,
     TARGET_SLIP = 100,
     TRACTION_RESPONSE = 100,
-    CORNER_THROTTLE_REDUCTION = 25,
+    CORNER_THROTTLE_REDUCTION = 0,
     BRAKE_RISE_RATE = 400,
     BRAKE_FALL_RATE = 800,
     MAX_BRAKE = 100,
@@ -32,7 +32,7 @@ local function loadSettings()
     STEER_SPEED_CURVE = '0:250 60:160 120:100 200:70',
     STEER_RETURN_SPEED = 150,
     STEER_BOTH_KEYS = 0,
-    STEER_LIMIT_STRENGTH = 100,
+    STEER_LIMIT_STRENGTH = 0,
     STEER_TARGET = 120,
     COUNTERSTEER_ASSIST = 0,
     SHOW_DIAGNOSTICS = true,
@@ -235,6 +235,7 @@ function script.update(dt)
   live.slipRatio = traction.ratio
   live.usesNdSlip = traction.usesNdSlip
   live.tcLimit = traction.limit
+  live.tcMemory = traction.memoryNow
   live.tcState = not traction.available and 0 or not P.traction and 1 or traction.airborne and 2
     or traction.active and 4 or 3
   live.brakeRequest = brakeRequest

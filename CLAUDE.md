@@ -111,11 +111,12 @@ extension/lua/joypad-assist/KeyDrive/
   src/keys.lua                 AC keyboard binds from cfg/controls.ini ([KEYBOARD] GAS/BRAKE/LEFT/RIGHT, [GEARUP]/[GEARDN]/
                                [HANDBRAKE] KEY; CM writes hex "0x53"), ac.isKeyDown. In gamepad mode AC does not
                                forward keyboard gear keys (user report), so assist.lua sets state.gearUp/gearDown/handbrake
-  src/traction.lua             throttle traction limiter: load-weighted ndSlip of the driven wheels (AC's combined
-                               slip, 1 = tyre peak; fallback = wheel speed slip ratio), filtered 80 ms, no prediction;
-                               slow multiplier k (K_UP 1, K_DOWN 1.5, floor 0.4), frozen 0.5 s after a gear change;
-                               riseScale slows the throttle rise near the target. Target must stay <= 1 (past the peak
-                               the slip runs away).
+  src/traction.lua             throttle traction "remembering foot": load-weighted ndSlip of the driven wheels (1 = tyre
+                               peak; fallback wheel speed ratio), filtered 30 ms; absolute cap A; at a crossing caused by
+                               real throttle (> 30 %) remembers 95 % of the sent level per gear, pulls A to 85 % of it
+                               (to the 0.3 floor only if the slip persists 0.4 s), holds still between 80-100 % of the
+                               target, returns quickly to 92 % of the memory, then creeps 0.08/s. Memory recovers
+                               0.02/s; a new press or gear starts at the memory. Target must stay <= 1.
   src/brake.lua                brake lock limiter on LONGITUDINAL slip only: max -slipRatio / peakRatio over grounded wheels
                                (peakRatio learned from straight-running wheels: |slipRatio| / ndSlip, default 0.13),
                                predicted 0.04 s; multiplier k on the ramped brake (K_UP 4, K_DOWN 15, floor 0.15);
@@ -129,8 +130,10 @@ extension/lua/joypad-assist/KeyDrive/
   src/curve.lua                "x:y x:y" piecewise linear curve (STEER_SPEED_CURVE; spaces, not commas: CSP INI lists)
   src/recorder.lua             render thread: 60 s ring buffer at 40 Hz (keys, outputs, car, 4 wheels, body slip,
                                collisions, event flags) -> keydrive-log.csv every 10 s, keydrive-incident-N.csv 3 s
-                               after SPIN/CRASH/OFF. Ask the user for these files instead of guessing.
-  src/shared.lua               ac.connect layout 'KeyDrive.Live.v6' (same layout on every side)
+                               after SPIN/CRASH/OFF, in Documents/Assetto Corsa/logs/keydrive (fallback: script folder;
+                               v0.6 and older wrote into the script folder, which a reinstall wipes). Ask the user for
+                               these files instead of guessing.
+  src/shared.lua               ac.connect layout 'KeyDrive.Live.v7' (same layout on every side)
 tests/keydrive/                own mock + tests: python tests/keydrive/run_tests.py
 build-keydrive.sh / .ps1       dist/KeyDrive-<version>.zip (extension/... + apps/lua/KeyDriveConfig/...)
 ```
@@ -164,4 +167,11 @@ Analysis helpers for the CSV logs are quick Python scripts (csv module); group s
   Launch model with realistic first-gear inertia (J 8): slip ~1.0 of peak, one spike, gas eases 1.0 -> 0.6 in 0.35 s.
 Rule learned the hard way: the user values predictability and smoothness over maximum grip. Never let an assist
 step an output; prefer gentle, slow corrections and opt-in for anything that moves controls on its own.
-Next: user test of v0.6, then phase 6 (modes, tyre temperature).
+- v0.6 user verdict: no steering intervention at all; the throttle "pulses slowly". Logs (incident 1 + log): (a) in
+  higher gears k = 1 but the throttle swung 80-94 % with every steering tap: the corner cap; (b) in first gear the
+  car takes ~70 %, the PI loop climbed to 72 %, spun, fell to the floor 0.4, climbed back in 0.5 s: ~1 s limit cycle;
+  (c) the 0.5 s shift hold let a real spin after selecting first (60 % throttle) grow to ndSlip 65.
+- v0.7: defaults STEER_LIMIT_STRENGTH 0, COUNTERSTEER_ASSIST 0, CORNER_THROTTLE_REDUCTION 0; traction rewritten as the
+  remembering foot (see traction.lua), shift hold removed. Launch model: one spike, then steady 81 -> 91 % creeping,
+  gas std 0.03 (was 0.17); logs moved to Documents/Assetto Corsa/logs/keydrive.
+Next: user test of v0.7, then phase 6 (modes, tyre temperature).

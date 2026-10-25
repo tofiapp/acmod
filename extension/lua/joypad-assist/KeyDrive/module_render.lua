@@ -55,9 +55,9 @@ function script.update(dt)
     textTimer = 0.1
     local m = live.keyMask
     lines[1] = string.format('Jádro: %s   fyzika %.0f Hz', staleTime < 0.5 and 'běží' or 'NEBĚŽÍ', live.physicsHz)
-    lines[2] = string.format('Trakce: %s  prokluz %.0f %% vrcholu (cíl %.0f %%)%s  podélně %.1f %%  plyn ×%.2f',
-      TC_TEXT[live.tcState] or '?', live.slip * 100, live.targetSlip * 100, live.usesNdSlip and '' or ' [náhradní měření]',
-      live.slipRatio * 100, live.tcLimit)
+    lines[2] = string.format('Trakce: %s  prokluz %.0f %% vrcholu (cíl %.0f %%)%s  strop %.0f %%  převod unese %.0f %%',
+      TC_TEXT[live.tcState] or '?', live.slip * 100, live.targetSlip * 100, live.usesNdSlip and '' or ' [náhradní]',
+      live.tcLimit * 100, live.tcMemory * 100)
     lines[3] = string.format('Auto: plyn %.0f %%  brzda %.0f %%  převod %s  %.0f ot/min',
       carState.gas * 100, carState.brake * 100, gearText(carState.gear), carState.rpm)
     lines[4] = string.format('Vstup do skriptu: plyn %.0f %%  brzda %.0f %%  řízení %.0f %%',
@@ -164,7 +164,7 @@ function script.drawUI()
     elseif recorder.lastIncident ~= '' then
       label(o.x + 10, o.y + 290, 'záznam běží, poslední incident: ' .. recorder.lastIncident, C.warn)
     else
-      label(o.x + 10, o.y + 290, 'záznam běží: keydrive-log.csv ve složce skriptu (posledních 60 s)')
+      label(o.x + 10, o.y + 290, recorder.statusText)
     end
   end
   ui.popFont()

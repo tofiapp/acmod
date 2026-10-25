@@ -5,7 +5,7 @@ local M = {}
 
 function M.connect()
   return ac.connect({
-    ac.StructItem.key('KeyDrive.Live.v6'),
+    ac.StructItem.key('KeyDrive.Live.v7'),
     alive = ac.StructItem.int32(),      -- physics update counter, wraps at 1e6
     keyMask = ac.StructItem.int32(),    -- bit 0 gas, 1 brake, 2 left, 3 right, 4 gear up, 5 gear down
     inGas = ac.StructItem.double(),     -- joypad state as it arrived, before KeyDrive
@@ -20,7 +20,8 @@ function M.connect()
     slipRatio = ac.StructItem.double(), -- longitudinal slip ratio of the driven wheels (diagnostics)
     usesNdSlip = ac.StructItem.boolean(),
     targetSlip = ac.StructItem.double(),
-    tcLimit = ac.StructItem.double(),   -- traction multiplier on the requested throttle
+    tcLimit = ac.StructItem.double(),   -- traction cap (absolute throttle level)
+    tcMemory = ac.StructItem.double(),  -- throttle level this gear took last time (1 = no limit learned)
     gx = ac.StructItem.double(),        -- lateral g
     brakeRequest = ac.StructItem.double(), -- ramped key brake before limits
     brakeCap = ac.StructItem.double(),  -- manual brake cap reduced by the trail-brake release

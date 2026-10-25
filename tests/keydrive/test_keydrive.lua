@@ -115,7 +115,7 @@ do
   mock.keys[87] = true
   run(s, 0.2, 0.003)
   check('rebound gas key', mock.joypad.gas > 0.2, mock.joypad.gas)
-  check('binds published', mock.connected['KeyDrive.Live.v6'].bindGas == 87)
+  check('binds published', mock.connected['KeyDrive.Live.v7'].bindGas == 87)
 end
 
 -- 7b. Gear and handbrake keys from their own sections, hex values as Content Manager writes them.
@@ -143,7 +143,7 @@ do
   mock.keys[0x57] = true
   run(s, 0.1, 0.003)
   check('hex GAS bind', mock.joypad.gas > 0.1, mock.joypad.gas)
-  local live = mock.connected['KeyDrive.Live.v6']
+  local live = mock.connected['KeyDrive.Live.v7']
   check('gear binds published', live.bindGearUp == 0x53 and live.bindGearDown == 0x46)
 end
 
@@ -161,13 +161,13 @@ do
   mock.keys[VK_UP] = true
   mock.joypad.gas = 1 -- pretend AC sent raw keyboard gas
   s.update(0.003)
-  local live = mock.connected['KeyDrive.Live.v6']
+  local live = mock.connected['KeyDrive.Live.v7']
   check('incoming value published', live.inGas == 1, live.inGas)
   check('key mask', live.keyMask == 1, live.keyMask)
   check('render module requested', mock.renderModules[1] == 'module_render')
   local core = CORE
   local r = mock.load(core, 'module_render.lua')
-  mock.connected['KeyDrive.Live.v6'] = live
+  mock.connected['KeyDrive.Live.v7'] = live
   r.update(0.016)
   r.drawUI()
   check('render module draws', (mock.calls.drawRectFilled or 0) > 5 and (mock.calls.text or 0) >= 6)
@@ -253,6 +253,7 @@ do
   check('traction: no runaway spin (one short spike allowed)', a.slipMax < 4, a.slipMax)
   check('traction: smooth throttle (no jumps faster than 1.5/s down, rise rate up)', a.maxJump < 1.55, a.maxJump)
   check('traction: throttle mostly kept', a.gasMean > 0.6, a.gasMean)
+  check('traction: no pulsing (steady throttle once the limit is known)', a.gasStd < 0.06, a.gasStd)
   check('traction beats wheelspin', a.v > free.v, string.format('%.1f vs %.1f', a.v, free.v))
   local b = launch(1 / 400, nil, 3)
   local c = launch(1 / 250, nil, 3)
@@ -272,7 +273,7 @@ do
   mock.keys[VK_UP] = true
   run(s, 0.5, 0.003)
   check('reverse: no traction limit', near(mock.joypad.gas, 0.6, 0.01), mock.joypad.gas)
-  check('reverse: traction state ready/off', mock.connected['KeyDrive.Live.v6'].tcState ~= 4)
+  check('reverse: traction state ready/off', mock.connected['KeyDrive.Live.v7'].tcState ~= 4)
 
   s = fresh()
   for i = 0, 3 do mock.car.wheels[i].tyreRadius = 0 end
@@ -280,17 +281,17 @@ do
   mock.keys[VK_UP] = true
   run(s, 0.5, 0.003)
   check('no wheel data: plain ramp', near(mock.joypad.gas, 0.6, 0.01), mock.joypad.gas)
-  check('no wheel data: state 0', mock.connected['KeyDrive.Live.v6'].tcState == 0)
+  check('no wheel data: state 0', mock.connected['KeyDrive.Live.v7'].tcState == 0)
 
   s = fresh()
   mock.keys[VK_UP] = true
   run(s, 0.3, 0.003)
   for i = 2, 3 do mock.car.wheels[i].load = 0; mock.car.wheels[i].angularSpeed = 200 end
   run(s, 0.2, 0.003)
-  check('airborne: state 2', mock.connected['KeyDrive.Live.v6'].tcState == 2)
+  check('airborne: state 2', mock.connected['KeyDrive.Live.v7'].tcState == 2)
   check('airborne: throttle not cut', mock.joypad.gas > 0.4, mock.joypad.gas)
 
-  s = fresh()
+  s = fresh({ CORNER_THROTTLE_REDUCTION = 25 })
   mock.joypad.gForces.x = 1.5
   mock.keys[VK_UP] = true
   run(s, 2, 0.003)
@@ -300,11 +301,11 @@ do
   mock.keys[VK_UP] = true
   s.update(0.003)
   for _ = 1, 200 do mock.car.gas = 1; s.update(0.003) end
-  check('leak detected', mock.connected['KeyDrive.Live.v6'].leak == true)
+  check('leak detected', mock.connected['KeyDrive.Live.v7'].leak == true)
   s = fresh()
   mock.keys[VK_UP] = true
   for _ = 1, 200 do s.update(0.003); mock.car.gas = mock.joypad.gas end
-  check('no false leak', mock.connected['KeyDrive.Live.v6'].leak == false)
+  check('no false leak', mock.connected['KeyDrive.Live.v7'].leak == false)
 end
 
 -- 13. Fast corner: 200 km/h, rear axle already at the limit sideways (ndSlip from cornering, wheels turning at road
@@ -340,7 +341,7 @@ do
   c.localVelocity.z = 22
   mock.keys[VK_UP] = true
   for _ = 1, 11 * 60 do s.update(1 / 60); r.update(1 / 60) end
-  local log = mock.saved['KD/keydrive-log.csv']
+  local log = mock.saved['cfg/keydrive/keydrive-log.csv']
   check('log written', log ~= nil)
   if log then
     local header = log:match('^[^\n]+')
@@ -353,13 +354,13 @@ do
   for _ = 1, 10 do s.update(1 / 60); r.update(1 / 60) end
   c.collisionDepth = 0
   for _ = 1, 4 * 60 do s.update(1 / 60); r.update(1 / 60) end
-  local inc = mock.saved['KD/keydrive-incident-1.csv']
+  local inc = mock.saved['cfg/keydrive/keydrive-incident-1.csv']
   check('incident file after a crash', inc ~= nil)
   check('crash flagged in events', inc and inc:find('CRASH', 1, true) ~= nil)
-  mock.saved['KD/keydrive-incident-2.csv'] = nil
+  mock.saved['cfg/keydrive/keydrive-incident-2.csv'] = nil
   c.collisionDepth = 0.2
   for _ = 1, 4 * 60 do s.update(1 / 60); r.update(1 / 60) end
-  check('incident cooldown', mock.saved['KD/keydrive-incident-2.csv'] == nil)
+  check('incident cooldown', mock.saved['cfg/keydrive/keydrive-incident-2.csv'] == nil)
 
   -- A missing car field stops the recorder instead of breaking the overlay.
   mock.reset()
@@ -425,7 +426,7 @@ local function stop(dt, settings, seconds, abs)
   mock.keys[VK_DOWN] = nil
   local sum = 0
   for _, x in ipairs(slips) do sum = sum + x end
-  local live = mock.connected['KeyDrive.Live.v6']
+  local live = mock.connected['KeyDrive.Live.v7']
   return { t = t, dist = dist, slipMean = sum / math.max(1, #slips), lockedShare = locked / math.max(1, #slips),
     memory = live.brakeMemory, state = live.brakeState, peak = live.brakePeakRatio }
 end
@@ -529,14 +530,17 @@ local function corner(settings, seconds, init, keys)
   local sum = 0
   for _, x in ipairs(fronts) do sum = sum + x end
   return { front = sum / #fronts, lat = latSum / n, r = r, vy = vy, maxR = maxR,
-    live = mock.connected['KeyDrive.Live.v6'] }
+    live = mock.connected['KeyDrive.Live.v7'] }
 end
 
 do
   local raw = corner({ STEER_LIMIT_STRENGTH = 0, COUNTERSTEER_ASSIST = 0 }, 4)
-  local lim = corner({ STEER_TARGET = 100 }, 4)
+  local lim = corner({ STEER_LIMIT_STRENGTH = 100, STEER_TARGET = 100 }, 4)
+  local soft = corner({ STEER_LIMIT_STRENGTH = 100 }, 4)
+  check('steer limit at 120 % only stops clear overdriving', soft.front > 1.0 and soft.front < 1.35, soft.front)
   local default = corner(nil, 4)
-  check('default steer limit only stops clear overdriving', default.front > 1.0 and default.front < 1.35, default.front)
+  check('default: no steering intervention at all', default.live.steerState ~= 3 and default.live.steerState ~= 4
+    and math.abs(default.front - raw.front) < 0.01, default.front)
   if os.getenv('KD_VERBOSE') then
     for _, x in ipairs({ raw, lim }) do
       print(string.format('corner front %.2f lat %.2f r %.3f peak %.2f dpu %.2f', x.front, x.lat, x.r, x.live.alphaPeak, x.live.degPerUnit))
@@ -552,7 +556,7 @@ do
   -- A slide with no keys: the rear has stepped out (car rotating right, front axle moving left of the nose).
   local slide = { vy = -5, r = 0.9 }
   local free = corner({ COUNTERSTEER_ASSIST = 0 }, 2, slide, {})
-  local cs = corner({ COUNTERSTEER_ASSIST = 100 }, 2, slide, {})
+  local cs = corner({ COUNTERSTEER_ASSIST = 100, STEER_LIMIT_STRENGTH = 100 }, 2, slide, {})
   if os.getenv('KD_VERBOSE') then
     print(string.format('slide free r %.3f vy %.2f | cs r %.3f vy %.2f', free.r, free.vy, cs.r, cs.vy))
   end
@@ -582,6 +586,23 @@ do
   run(s, 0.5, 0.003)
   check('steer speed curve at standstill', near(mock.joypad.steer, 0.5, 0.01), mock.joypad.steer)
   mock.keys[VK_RIGHT] = nil
+end
+
+-- 19. Recorder falls back to the script folder when the logs folder cannot be written.
+do
+  local s = fresh()
+  local r = mock.load(CORE, 'module_render.lua')
+  local realSave = io.save
+  io.save = function (path, data)
+    if path:sub(1, 4) == 'cfg/' then return false end
+    return realSave(path, data)
+  end
+  mock.car.speedKmh, mock.car.localVelocity.z = 80, 22
+  mock.keys[VK_UP] = true
+  for _ = 1, 11 * 60 do s.update(1 / 60); r.update(1 / 60) end
+  io.save = realSave
+  mock.keys[VK_UP] = nil
+  check('log falls back to the script folder', mock.saved['KD/keydrive-log.csv'] ~= nil)
 end
 
 print(string.format('KeyDrive: %d passed, %d failed', passed, failed))
