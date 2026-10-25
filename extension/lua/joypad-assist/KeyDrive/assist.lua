@@ -29,6 +29,7 @@ local function loadSettings()
     BRAKE_TARGET_SLIP = 100,
     BRAKE_USE_GAME_ABS = true,
     TRAIL_BRAKE_RELEASE = 40,
+    STEER_STYLE = 0,
     STEER_SPEED_CURVE = '0:250 60:160 120:100 200:70',
     STEER_RETURN_SPEED = 150,
     STEER_BOTH_KEYS = 0,
@@ -62,6 +63,7 @@ local P = {
   brakeTargetSlip = math.clamp(S.BRAKE_TARGET_SLIP / 100, 0.3, 3),
   brakeUseGameAbs = flag(S.BRAKE_USE_GAME_ABS), -- car's ABS switched on: leave the regulation to it
   trailBrakeRelease = math.clamp(S.TRAIL_BRAKE_RELEASE / 100, 0, 1),
+  steerStyleAC = S.STEER_STYLE ~= 1, -- 0: AC's own keyboard steering rates from controls.ini, 1: KeyDrive's curve
   steerCurve = curve.parse(S.STEER_SPEED_CURVE, '0:250 60:160 120:100 200:70'), -- km/h -> % of full lock per s
   steerReturn = math.clamp(S.STEER_RETURN_SPEED / 100, 0.2, 5),
   steerBothReturn = S.STEER_BOTH_KEYS == 1 or S.STEER_BOTH_KEYS == true, -- false: hold the angle
@@ -178,8 +180,24 @@ local function steerInput(dt, kLeft, kRight)
   else
     target = (kRight and 1 or 0) - (kLeft and 1 or 0)
   end
-  local rate = curve.eval(P.steerCurve, math.abs(car.speedKmh)) / 100
-  steerRequest = ramp.stepSigned(steerRequest, target, rate, rate * P.steerReturn, dt)
+  local rate
+  if P.steerStyleAC then
+    -- Same as AC's keyboard steering: STEERING_SPEED towards a side, STEERING_OPPOSITE_DIRECTION_SPEED while the
+    -- wheels still point the other way, STEER_RESET_SPEED back to the centre with no key.
+    local cur = steerRequest
+    local back
+    if target == 0 or (kLeft and kRight) then
+      back = keys.steerResetSpeed
+    else
+      back = keys.steerOppositeSpeed
+    end
+    rate = keys.steerSpeed
+    steerRequest = ramp.stepSigned(cur, target, rate, back, dt)
+    if back > rate then rate = back end
+  else
+    rate = curve.eval(P.steerCurve, math.abs(car.speedKmh)) / 100
+    steerRequest = ramp.stepSigned(steerRequest, target, rate, rate * P.steerReturn, dt)
+  end
   if car.gear < 0 or car.localVelocity.z < 0 then
     steering.reset()
     return steerRequest -- reversing: plain keys

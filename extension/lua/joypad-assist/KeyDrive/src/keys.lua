@@ -6,6 +6,8 @@
 local M = {
   gas = 38, brake = 40, left = 37, right = 39, -- defaults: arrow keys (VK codes)
   gearUp = -1, gearDown = -1, handbrake = -1,
+  -- AC's own keyboard steering rates (per second, full lock = 1), as set in AC / Content Manager controls
+  steerSpeed = 1.75, steerOppositeSpeed = 2.5, steerResetSpeed = 1.8,
 }
 
 local function parse(cfg, section, key, fallback)
@@ -25,6 +27,9 @@ function M.read()
   M.gearUp = parse(cfg, 'GEARUP', 'KEY', -1)
   M.gearDown = parse(cfg, 'GEARDN', 'KEY', -1)
   M.handbrake = parse(cfg, 'HANDBRAKE', 'KEY', -1)
+  M.steerSpeed = math.max(0.1, parse(cfg, 'KEYBOARD', 'STEERING_SPEED', 1.75))
+  M.steerOppositeSpeed = math.max(0.1, parse(cfg, 'KEYBOARD', 'STEERING_OPPOSITE_DIRECTION_SPEED', 2.5))
+  M.steerResetSpeed = math.max(0.1, parse(cfg, 'KEYBOARD', 'STEER_RESET_SPEED', 1.8))
 end
 
 local function down(k)

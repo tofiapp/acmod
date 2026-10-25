@@ -581,7 +581,7 @@ do
   run(s, 1, 0.003)
   check('both keys return when set', mock.joypad.steer == 0, mock.joypad.steer)
   mock.keys[VK_LEFT], mock.keys[VK_RIGHT] = nil, nil
-  s = fresh({ STEER_SPEED_CURVE = '0:100 100:50' })
+  s = fresh({ STEER_STYLE = 1, STEER_SPEED_CURVE = '0:100 100:50' })
   mock.keys[VK_RIGHT] = true
   run(s, 0.5, 0.003)
   check('steer speed curve at standstill', near(mock.joypad.steer, 0.5, 0.01), mock.joypad.steer)
@@ -603,6 +603,28 @@ do
   io.save = realSave
   mock.keys[VK_UP] = nil
   check('log falls back to the script folder', mock.saved['KD/keydrive-log.csv'] ~= nil)
+end
+
+-- 20. Default steering = AC's own keyboard steering rates from controls.ini.
+do
+  mock.reset()
+  mock.controls.KEYBOARD.STEERING_SPEED = '2'
+  mock.controls.KEYBOARD.STEERING_OPPOSITE_DIRECTION_SPEED = '4'
+  mock.controls.KEYBOARD.STEER_RESET_SPEED = '1'
+  local s = mock.load(CORE, 'assist.lua')
+  mock.car.speedKmh, mock.car.localVelocity.z = 150, 41
+  mock.keys[VK_RIGHT] = true
+  run(s, 0.2, 0.003)
+  check('AC style: STEERING_SPEED at any speed', near(mock.joypad.steer, 0.4, 0.01), mock.joypad.steer)
+  mock.keys[VK_RIGHT] = nil
+  run(s, 0.1, 0.003)
+  check('AC style: STEER_RESET_SPEED back to centre', near(mock.joypad.steer, 0.3, 0.01), mock.joypad.steer)
+  mock.keys[VK_LEFT] = true
+  run(s, 0.05, 0.003)
+  check('AC style: STEERING_OPPOSITE_DIRECTION_SPEED', near(mock.joypad.steer, 0.1, 0.015), mock.joypad.steer)
+  run(s, 0.1, 0.003)
+  check('AC style: past the centre at STEERING_SPEED', near(mock.joypad.steer, -0.15, 0.015), mock.joypad.steer)
+  mock.keys[VK_LEFT] = nil
 end
 
 print(string.format('KeyDrive: %d passed, %d failed', passed, failed))

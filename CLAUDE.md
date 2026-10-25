@@ -108,7 +108,7 @@ extension/lua/joypad-assist/KeyDrive/
   assist.lua                   physics thread: reads keys, writes ac.getJoypadState().gas/brake/steer
   module_render.lua            render thread (ac.loadRenderThreadModule): diagnostic overlay via script.drawUI
   src/ramp.lua                 rate limiters in units/s (dt based)
-  src/keys.lua                 AC keyboard binds from cfg/controls.ini ([KEYBOARD] GAS/BRAKE/LEFT/RIGHT, [GEARUP]/[GEARDN]/
+  src/keys.lua                 AC keyboard binds and keyboard steering rates from cfg/controls.ini ([KEYBOARD] GAS/BRAKE/LEFT/RIGHT, [GEARUP]/[GEARDN]/
                                [HANDBRAKE] KEY; CM writes hex "0x53"), ac.isKeyDown. In gamepad mode AC does not
                                forward keyboard gear keys (user report), so assist.lua sets state.gearUp/gearDown/handbrake
   src/traction.lua             throttle traction "remembering foot": load-weighted ndSlip of the driven wheels (1 = tyre
@@ -174,4 +174,7 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
 - v0.7: defaults STEER_LIMIT_STRENGTH 0, COUNTERSTEER_ASSIST 0, CORNER_THROTTLE_REDUCTION 0; traction rewritten as the
   remembering foot (see traction.lua), shift hold removed. Launch model: one spike, then steady 81 -> 91 % creeping,
   gas std 0.03 (was 0.17); logs moved to Documents/Assetto Corsa/logs/keydrive.
-Next: user test of v0.7, then phase 6 (modes, tyre temperature).
+- v0.7 user: steering "feels completely different from plain keyboard". v0.7.1: STEER_STYLE 0 (default) uses AC's
+  own keyboard rates from controls.ini [KEYBOARD] STEERING_SPEED (1.75), STEERING_OPPOSITE_DIRECTION_SPEED (2.5),
+  STEER_RESET_SPEED (1.8) (names from Content Manager's ControlsSettings.cs); STEER_STYLE 1 = KeyDrive's speed curve.
+Next: user test of v0.7.1, then phase 6 (modes, tyre temperature).
