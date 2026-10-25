@@ -64,7 +64,7 @@ local DEFAULT_PALETTE = { '#FF0000', '#00FF00', '#0000FF', '#FFC800', '#FFFFFF',
   '#FF40A0' }
 
 local L = {
-  presetCombo = '##edPreset', deleteConfirm = 'Smazat?##edDeleteOk',
+  deleteConfirm = 'Smazat?##edDeleteOk',
   renameText = '##edRenameText', renameOk = 'Uložit název##edRenameOk', renameCancel = 'Zrušit##edRenameCancel',
   scenarioCombo = '##edScenario', newAnim = 'Nová animace##edScNew', on = 'Zapnutý##edOn',
   delAnimConfirm = 'Smazat?##edScDelOk', fit = 'Přizpůsobit##edFit', rescale = 'Přepočítat##edRescale',
@@ -151,7 +151,7 @@ local presetMsg, presetMsgColour, presetMsgUntil = '', K.GREEN, -1
 local editMsg, editMsgColour, editMsgUntil = '', K.GREEN, -1
 
 -- caches (rebuilt in refresh)
-local presetItems, scItems = {}, {}
+local scItems = {}
 local scPreview = T.pickPreview
 local layoutGroups = 0
 local groupName, groupTip, groupOff = {}, {}, {}
@@ -333,11 +333,6 @@ end
 -- ---------------------------------------------------------------- caches
 
 local function rebuildLists()
-  presetItems = {}
-  local all = presets.all()
-  for i = 1, #all do
-    presetItems[i] = { id = all[i].id, label = all[i].name .. '##edPreset:' .. all[i].id }
-  end
   scItems = {}
   local list = presets.effective(runtime.preset())
   local prevCat = nil
@@ -652,15 +647,6 @@ end
 
 -- ---------------------------------------------------------------- drawing
 
-local function presetComboItems()
-  for i = 1, #presetItems do
-    local it = presetItems[i]
-    if ui.selectable(it.label, it.id == runtime.presetId) and it.id ~= runtime.presetId then
-      runtime.setPreset(it.id)    -- unsaved edits are dropped with a message in refresh()
-    end
-  end
-end
-
 local function scenarioComboItems()
   for i = 1, #scItems do
     local it = scItems[i]
@@ -682,7 +668,9 @@ local function presetRow()
     ui.sameLine()
     if ui.button(L.renameCancel) then renameFor = nil end
   else
-    ui.combo(L.presetCombo, runtime.preset().name, ui.ComboFlags.None, presetComboItems)
+    -- the header's combo switches presets; here only the name and what can be done with it
+    if ui.alignTextToFramePadding then ui.alignTextToFramePadding() end
+    ui.text(runtime.preset().name)
     ui.sameLine()
     if icon(ID.new, ui.Icons.Plus, T.tipNew) then newPreset(false) end
     ui.sameLine()

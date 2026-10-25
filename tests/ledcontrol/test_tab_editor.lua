@@ -179,7 +179,7 @@ tabFrame(2)
 local t = texts()
 check(rt.presetId == 'builtin:f1', 'start: formula on the F1 preset')
 check(has(t, 'icon:edNew') and has(t, 'icon:edCopy') and has(t, 'icon:edRename') and has(t, 'icon:edDelete')
-  and has(t, 'combo:##edPreset'), 'editor: preset row = combo + four icons')
+  and not has(t, 'combo:##edPreset'), 'editor: preset row = name + four icons (the header combo switches presets)')
 check(not has(t, 'Kopírovat do schránky') and not has(t, 'Vložit ze schránky'),
   'editor: export / import are not repeated here (tab Nastavení)')
 check(not has(t, 'relativní'), 'editor: no long explanation in the main view')
@@ -192,9 +192,9 @@ check(not has(texts(), 'Smazat?##edDeleteOk'), 'built-in preset: delete does not
 click('edRename')
 check(not has(texts(), '##edRenameText'), 'built-in preset: rename does nothing')
 
-pickCombo('##edPreset', 'GT3 styl##edPreset:builtin:gt3')
+pickCombo('##preset', 'GT3 styl##hdrPreset:builtin:gt3')
 check(rt.presetId == 'builtin:gt3', 'preset combo: car switches to the chosen preset')
-pickCombo('##edPreset', 'F1 styl##edPreset:builtin:f1')
+pickCombo('##preset', 'F1 styl##hdrPreset:builtin:f1')
 check(rt.presetId == 'builtin:f1', 'preset combo: back to F1')
 
 -- Nový: copy of the current preset with a new name, the name box opens in place of the combo
@@ -261,7 +261,7 @@ check(rt.presetId == presets.choose(nil, app.config.S.defaultPreset, rt.layout, 
   'delete: the car falls back to presets.choose (F1 for a 15 LED row)')
 check(has(texts(), 'je smazaný'), 'delete: said so')
 
-pickCombo('##edPreset', 'Moje animace##edPreset:' .. myId)
+pickCombo('##preset', 'Moje animace##hdrPreset:' .. myId)
 check(rt.presetId == myId, 'own preset chosen again')
 
 -- export / import (buttons in Nastavení): the exported text of the own preset imports as a new preset, which the
@@ -277,7 +277,7 @@ local bad, why = presets.import('nesmysl')
 check(bad == nil and why and has(why, 'LEDCONTROL-PRESET'), 'import of bad text: refused with a reason')
 click('edDelete')
 click('Smazat?##edDeleteOk')
-pickCombo('##edPreset', 'Moje animace##edPreset:' .. myId)
+pickCombo('##preset', 'Moje animace##hdrPreset:' .. myId)
 check(rt.presetId == myId and #presets.user == 1, 'imported preset deleted, own preset again')
 check(styleDepth == 0, 'style colour pushes and pops balanced')
 
@@ -656,7 +656,7 @@ check(grown < 4, string.format('no per-frame allocation with Editor open (%.2f K
 U.openCombo = '##edScenario'
 grown = measure(300)
 check(grown < 4, string.format('no per-frame allocation with the animation combo open (%.2f KB / 300 frames)', grown))
-U.openCombo = '##edPreset'
+U.openCombo = '##preset'
 U.mouseDown, U.active = true, '##edCell1_4'
 grown = measure(300)
 check(grown < 4, string.format('no per-frame allocation with the preset combo open, mouse held (%.2f KB / 300 frames)', grown))

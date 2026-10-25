@@ -51,8 +51,8 @@ local T = {
   sharing = 'Sdílení',
   shareHelp = 'Preset se přenáší jako jeden řádek textu přes schránku (do zprávy, na fórum).\n'
     .. 'Kopírovat: preset tohoto auta. Vložit: načte preset ze schránky a toto auto ho začne používat.',
-  export = 'Kopírovat preset##export',
-  import = 'Vložit preset##import',
+  export = 'Do schránky##export',
+  import = 'Ze schránky##import',
   data = 'Data',
   dataHelp = 'Smazat: odstraní vaše presety a nastavení všech aut.\n'
     .. 'Výchozí nastavení: vrátí jas, ochranu barev, způsob převzetí, výchozí preset a scénáře světel '
@@ -168,7 +168,12 @@ local function sharing()
     local text = presets.export(runtime.presetId)
     if text then
       ac.setClipboardText(text)
-      say('share', 'Preset „' .. runtime.preset().name .. '“ je ve schránce.')
+      local ed = package.loaded['src/ui/tab_editor']
+      if type(ed) == 'table' and ed.unsaved and ed.unsaved() then
+        say('share', 'Preset „' .. runtime.preset().name .. '“ je ve schránce, ale bez neuložených změn z Editoru.', K.ORANGE)
+      else
+        say('share', 'Preset „' .. runtime.preset().name .. '“ je ve schránce.')
+      end
     end
   end
   ui.sameLine()

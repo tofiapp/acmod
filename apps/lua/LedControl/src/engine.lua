@@ -68,8 +68,9 @@ function M.compile(preset, layout, ST)
           sc.frames[gi] = f
           if f and not f.ok then
             sc.layoutOk = false
-            C.warnings[#C.warnings + 1] = string.format('%s: snímky jsou pro %d diod, skupina %s má %d.', sc.name,
-              f.srcN, g.name, grp.n)
+            local word = f.srcN == 1 and 'diodu' or ((f.srcN >= 2 and f.srcN <= 4) and 'diody' or 'diod')
+            C.warnings[#C.warnings + 1] = string.format('%s: snímky jsou pro %d %s, skupina %s má %d.', sc.name,
+              f.srcN, word, g.name, grp.n)
           end
         end
         if sc.cl.p == 'fill' then

@@ -99,15 +99,15 @@ clickIn('Nastavení', 'Minimální##defp:builtin:minimal')
 env.ui.openCombo = nil
 
 -- export / import through the clipboard
-clickIn('Nastavení', 'Kopírovat preset##export')
+clickIn('Nastavení', 'Do schránky##export')
 check(env.clipboard and env.clipboard:find('LEDCONTROL-PRESET 1 ', 1, true) == 1, 'settings: preset exported to the clipboard')
 local before = #app.presets.user
 check(texts('Nastavení'):find('je ve schránce', 1, true) ~= nil, 'settings: export confirmed under the buttons')
-clickIn('Nastavení', 'Vložit preset##import')
+clickIn('Nastavení', 'Ze schránky##import')
 check(#app.presets.user == before + 1 and rt.presetId == app.presets.user[#app.presets.user].id,
   'settings: imported preset used by this car')
 env.clipboard = 'nesmysl'
-clickIn('Nastavení', 'Vložit preset##import')
+clickIn('Nastavení', 'Ze schránky##import')
 check(texts('Nastavení'):find('LEDCONTROL-PRESET', 1, true) ~= nil, 'settings: import failure explained')
 -- "Kopírovat diagnostiku" lives in the Diagnostika sections (Diody, Světla)
 clickIn('Světla', 'Kopírovat diagnostiku##ldiag_copy')

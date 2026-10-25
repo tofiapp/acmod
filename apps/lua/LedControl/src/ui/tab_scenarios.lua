@@ -82,7 +82,7 @@ local T = {
   -- the expanded scenario
   target = 'Kde',
   pattern = 'Vzor',
-  hz = 'Rychlost',
+  hz = 'Blikání',
   dir = 'Směr',
   width = 'Počet diod',
   zones = 'Barvy',
@@ -933,7 +933,7 @@ local function test(C, r)
     if sc and painted(C, sc) then return end
     flash(T.testNoLeds, K.ORANGE, r.id)
   elseif runtime.state == 'run' then
-    flash(string.format(T.testLater, T.testPattern), K.ORANGE, r.id, true)
+    flash(string.format(T.testLater, T.testPattern), K.ORANGE, r.id)   -- the header has [Zpět na provoz]
   else
     flash(string.format(T.testLater, tostring(runtime.STATES[runtime.state] or runtime.state)), K.ORANGE, r.id)
   end

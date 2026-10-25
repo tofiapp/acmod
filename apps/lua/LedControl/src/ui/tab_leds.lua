@@ -62,7 +62,7 @@ local copiedUntil, redetectedUntil = 0, 0
 local nowTexts = {}
 
 local function refresh()
-  local v = runtime.version * 100000 + takeover.version
+  local v = runtime.version              -- everything shown here comes from the layout (not the takeover stats)
   if v == seen then return end
   seen = v
   groupNames, plan, tips, ledLines, rejectedLines = {}, {}, {}, {}, {}
@@ -97,6 +97,13 @@ end
 -- ---------------------------------------------------------------- preview
 
 local fb, running, normal, compiled = nil, false, true, nil   -- set once per frame by preview()
+local CELL_LOCKED = bit.bor(ui.ColorPickerFlags.NoPicker or 0, ui.ColorPickerFlags.NoTooltip or 0)
+local shortNames = {}            -- scenario name -> shortened name for two-column rows (cached, no allocation)
+local function shortName(name)
+  local s = shortNames[name]
+  if not s then s = K.shorten(name, 24); shortNames[name] = s end
+  return s
+end
 
 local function cell(i)
   local c = PREVIEW[i]
@@ -107,7 +114,8 @@ local function cell(i)
     else c.r, c.g, c.b = color.unpack(p) end
     SHOWN[i] = p
   end
-  if ui.colorButton(LABELS[i], c, ui.ColorPickerFlags.PickerHueBar, CELL) then
+  -- while the LEDs are not taken over (master off, failed) a cell is only shown: no picker, no manual mode
+  if ui.colorButton(LABELS[i], c, running and ui.ColorPickerFlags.PickerHueBar or CELL_LOCKED, CELL) and running then
     local q = color.pack(c.r, c.g, c.b)
     SHOWN[i] = q
     runtime.setManual(i, q)
@@ -119,12 +127,14 @@ local function cell(i)
 end
 
 -- group name + what paints it now (active scenario, or the preset's base)
-local function groupCaption(gi)
+local function groupCaption(gi, narrow)
   K.caption(groupNames[gi] or '')
   local g = normal and running and compiled and compiled.groups[gi]
   if g then
     ui.sameLine()
-    if g.activeName then ui.textColored(g.activeName, K.GREEN)
+    if g.activeName then
+      ui.textColored(narrow and shortName(g.activeName) or g.activeName, K.GREEN)
+      if narrow then K.tip(g.activeName) end
     else
       ui.textColored(BASE_WORD, K.DIM)
       K.tip(BASE_TIP)
@@ -145,8 +155,8 @@ local function preview()
   local perRow = math.max(1, math.floor(math.min(ui.availableSpaceX(), K.ROW_W) / CELL_STEP))
   for r = 1, #plan do
     local a, b = plan[r][1], plan[r][2]
-    groupCaption(a)
-    if b > 0 then ui.sameLine(COL2); groupCaption(b) end
+    groupCaption(a, b > 0)
+    if b > 0 then ui.sameLine(COL2); groupCaption(b, true) end
     groupCells(a, b > 0 and HALF or perRow)
     if b > 0 then ui.sameLine(COL2); groupCells(b, HALF) end
   end

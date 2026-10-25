@@ -104,11 +104,13 @@ for i = 1, #TABS do drawers[i] = tabDrawer(i) end
 
 -- header combo labels carry the preset id, so two presets with one name never share an ImGui id
 local presetLabels, labelsVersion = {}, -1
+local allPresets = {}
 local function presetItems()
-  local all = presets.all()
   if labelsVersion ~= presets.version then
-    presetLabels, labelsVersion = {}, presets.version
+    -- the list and its labels are rebuilt only when presets change, not every frame the combo is open
+    presetLabels, labelsVersion, allPresets = {}, presets.version, presets.all()
   end
+  local all = allPresets
   for i = 1, #all do
     local p = all[i]
     local label = presetLabels[p.id]

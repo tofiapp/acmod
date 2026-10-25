@@ -89,13 +89,21 @@ function M.effectiveIntensity()
   return S.intensityNight + (S.intensityDay - S.intensityNight) * f
 end
 
+local function level(v)
+  v = tonumber(v) or 25
+  if v ~= v then v = 25 end
+  return math.max(1, math.min(100, math.floor(v + 0.5)))
+end
+
 function M.setIntensity(v)
-  config.set('intensity', v)
+  config.set('intensity', level(v))
   takeover.setIntensity(M.effectiveIntensity())
 end
 
 -- key: 'autoBrightness' | 'intensityDay' | 'intensityNight' | 'colourGuard'
 function M.setBrightness(key, v)
+  if key == 'intensityDay' or key == 'intensityNight' then v = level(v)
+  elseif key == 'colourGuard' then v = math.max(0, math.min(1, tonumber(v) or 0.7)) end
   config.set(key, v)
   if key == 'colourGuard' then takeover.invalidate() end
   takeover.setIntensity(M.effectiveIntensity())

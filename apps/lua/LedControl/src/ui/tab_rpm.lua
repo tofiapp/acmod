@@ -158,9 +158,6 @@ local function refresh()
   local autoStart = floor(rpm.shift * pct / 100 + 0.5)
   start = rpm.start > 0 and rpm.start or autoStart
   local cl = patterns.compile(entry and entry.look)
-  for k = 1, n do
-    setColours(k, cl.p == 'fill' and zoneColour(cl, n > 1 and (k - 1) / (n - 1) or 1) or cl.c1)
-  end
 
   local c = runtime.profile and runtime.profile.rpm or {}
   value[1], value[2], value[3] = start, rpm.shift, rpm.limiter
@@ -200,6 +197,27 @@ local function refresh()
       if not r or r <= 0 then carList = nil; break end
       carList[k] = r
     end
+  end
+
+  -- cell / dot colours as the engine paints them: by RPM rank with per-LED values or the car's own thresholds,
+  -- else by the LED's rank along the preset's fill direction (GT3 styl: from both edges)
+  local carLo, carHi = math.huge, 0
+  if carList then for k = 1, n do carLo, carHi = math.min(carLo, carList[k]), math.max(carHi, carList[k]) end end
+  local half = floor((n + 1) / 2)
+  for k = 1, n do
+    local u
+    if ledsOn then u = ledMax > ledMin and (leds[k] - ledMin) / (ledMax - ledMin) or 1
+    elseif cl.src == 'car' and carList then u = carHi > carLo and (carList[k] - carLo) / (carHi - carLo) or 1
+    else
+      local r, len = k, n
+      if cl.dir == 'right' then r = n - k + 1
+      elseif cl.dir == 'edges' or cl.dir == 'centre' then
+        r, len = math.min(k, n - k + 1), half
+        if cl.dir == 'centre' then r = half - r + 1 end
+      end
+      u = len > 1 and (r - 1) / (len - 1) or 1
+    end
+    setColours(k, cl.p == 'fill' and zoneColour(cl, u) or cl.c1)
   end
 
   local limit = rpm.limiter * 0.995

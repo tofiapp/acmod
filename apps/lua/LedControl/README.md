@@ -103,8 +103,8 @@ Vestavěné presety jsou relativní, fungují na libovolném počtu diod. Když 
 kopie a auto začne používat ji. Preset se pamatuje pro každé auto. Ruční animace z Editoru jsou vázané na počet
 diod: na autě s jiným počtem se přepočítají, nebo (když přepočet vypnete) se scénář vypne s upozorněním.
 
-Sdílení: **Nastavení → Kopírovat preset** dá do schránky jeden řádek textu začínající `LEDCONTROL-PRESET 1`.
-**Vložit preset** ho načte jako nový preset.
+Sdílení: **Nastavení → Sdílení → Do schránky** dá do schránky jeden řádek textu začínající `LEDCONTROL-PRESET 1`.
+**Ze schránky** ho načte jako nový preset.
 
 ### Světla
 
