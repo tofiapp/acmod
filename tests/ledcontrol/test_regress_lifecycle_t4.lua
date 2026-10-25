@@ -227,6 +227,9 @@ end
 U.slide = nil
 print(string.format('[T4] 60 frames dragging ##cab_b: io.save called %d times', saves))
 check(saves <= 1, 'slider drag: the car file is written once, not every frame')
+clickTab('Při zastavení na trati##lx_hazardStop')   -- the parameters show when the row is expanded
+env.windowOpen = true
+U.tab = 'Světla'
 local scenWrites, n0 = 0, nil
 local before = env.storage['lcl_scen']
 local changes = 0
@@ -239,5 +242,7 @@ U.slide = nil
 env.windowOpen = false
 print(string.format('[T4] 60 frames dragging a scenario parameter: lcl_scen rewritten %d times', changes))
 check(changes <= 1, 'slider drag: ac.storage written once')
+check(L.byId.hazardStop.P.stop == 25, 'the dragged parameter slider is drawn (' .. L.byId.hazardStop.P.stop .. ')')
+check(L.carSettings().dash.bright == 4, 'the dragged cabin light slider is drawn (' .. L.carSettings().dash.bright .. ')')
 io.save = baseSave
 return H.finish('test_regress_lifecycle_t4')

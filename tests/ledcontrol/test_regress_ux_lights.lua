@@ -232,7 +232,10 @@ end
 U.slide = nil
 print('car file writes during 60-frame drag of Jas světla:', saves)
 check(saves <= 2, 'slider drag writes the car file ' .. saves .. ' times')
--- param slider: ac.storage writes + rebuild
+-- param slider: ac.storage writes + rebuild (the row is expanded by a click on its name)
+clickTab('Při zastavení na trati##lx_hazardStop')
+env.windowOpen = true
+U.tab = 'Světla'
 local v0 = L.version
 for f = 1, 60 do
   U.slide = { ['##lp_hazardStop_stop'] = 3 + f * 0.2 }
@@ -240,6 +243,7 @@ for f = 1, 60 do
 end
 U.slide = nil
 print('lights.version bumps during 60-frame drag of a scenario param:', L.version - v0)
+check(L.byId.hazardStop.P.stop == 15, 'the scenario parameter slider is drawn and moves (' .. L.byId.hazardStop.P.stop .. ')')
 -- allocation during drag
 jit.off(); collectgarbage('collect'); collectgarbage('stop')
 local mem = collectgarbage('count')

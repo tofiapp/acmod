@@ -163,7 +163,7 @@ local function problemLines()
     ui.textColored(FALLBACK_TEXT[m] or '', K.ORANGE)
     K.help(takeover.fallback)
   end
-  if runtime.ST.isOnline and lights.online and lights.online.BANNER then
+  if runtime.ST.isOnline and lights.G and lights.G.realOnline and lights.online and lights.online.BANNER then
     ui.textColored(ONLINE_TEXT, K.ORANGE)
     K.help(lights.online.BANNER)
   end

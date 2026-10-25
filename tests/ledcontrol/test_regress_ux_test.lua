@@ -223,6 +223,10 @@ clickTab('Test##lt_hazardStop')
 seconds(10)
 local labels = texts(function () drawTab() end)
 local stuck = hasText(labels, 'Test běží…##lt_hazardStop')
+check(not stuck, 'Test with master off: the button does not stay on "Test běží…"')
+local said = texts(function () clickTab('Test##lt_hazardStop'); drawTab() end)
+env.windowOpen = false
+check(hasText(said, 'Test nejde: zapněte hlavní vypínač.'), 'Test with master off: the tab says why')
 print('after 10 s with master off: label still "Test běží…":', stuck, ' hazards commands:', count('turn', mark))
 -- much later the driver turns the master switch on while driving
 seconds(60)

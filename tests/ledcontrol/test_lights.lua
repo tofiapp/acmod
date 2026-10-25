@@ -114,6 +114,21 @@ ui.colorButton = function (label, c, flags, size)
   return baseColorButton(label, c, flags, size)
 end
 
+-- icon buttons (Výš / Níž) are recorded by their id, so a test can see which arrows are drawn
+local baseIconButton = ui.iconButton
+ui.iconButton = function (...)
+  local id = U.idStack and U.idStack[#U.idStack]
+  if U.record and id then U.texts[#U.texts + 1] = 'icon:' .. tostring(id) end
+  return baseIconButton(...)
+end
+
+-- sliders are recorded by their label too (to see which parameters a row shows)
+local baseSlider = ui.slider
+ui.slider = function (label, ...)
+  if U.record then U.texts[#U.texts + 1] = label end
+  return baseSlider(label, ...)
+end
+
 ui.inputText = function (label, str)
   U.last = label
   local v = U.input and U.input[label]
@@ -360,7 +375,7 @@ local p = A.last.position
 check(near(p.x, 0, 1e-6) and near(p.y, 0.5, 1e-6) and near(p.z, 0.7, 1e-6), 'cabin light placed relative to the eyes')
 -- pick a dash mesh in the tab
 U.tab = 'Světla'
-H.click('Vybrat meshe palubní desky…##pick_dash')
+H.click('Vybrat…##pick_dash')
 local list = texts(function () env.windowOpen = true; frame(1) end)
 local dashLabel = nil
 for _, t in ipairs(list) do if type(t) == 'string' and t:find('^DASH_GLOW  %(') then dashLabel = t end end
@@ -443,18 +458,33 @@ check(car.hazardLights and L.testing('hazardStop'), 'Test: hazards on while driv
 seconds(5)
 check(not car.hazardLights and count('turn', mark) == 2, 'Test: hazards back off after 5 s')
 
--- tab controls: on/off checkbox, priority arrows, slider
-clickTab('Výstražná světla při zastavení na trati##lon_hazardStop')
+-- tab controls: on/off checkbox, priority arrows (inside one light), name that expands, slider
+clickTab('##lon_hazardStop')
 check(not L.byId.hazardStop.on, 'tab: scenario switched off')
-clickTab('Výstražná světla při zastavení na trati##lon_hazardStop')
-local before = L.byId.hazardStop.prio
-clickTab('Výš##lup_hazardStop')
-check(L.byId.hazardStop.prio < before, 'tab: priority up')
-clickTab('Níž##ldn_hazardStop')
+clickTab('##lon_hazardStop')
+check(L.byId.hazardStop.on, 'tab: scenario switched on again')
+local arrows = texts(drawTab)
+env.windowOpen = false
+check(not hasText(arrows, 'icon:lup_hazardStop') and not hasText(arrows, 'icon:ldn_hazardStop')
+  and hasText(arrows, 'icon:ldn_rainPit') and not hasText(arrows, 'icon:lup_rainPit') and hasText(arrows, 'icon:lup_rainWet'),
+  'tab: Výš / Níž only between the scenarios of one light')
+check(L.byId.rainWet.prio > L.byId.rainPit.prio, 'setup: rain blink above the solid rain light')
+clickTab('lup_rainWet')
+check(L.byId.rainWet.prio < L.byId.rainPit.prio, 'tab: priority up')
+clickTab('ldn_rainWet')
+check(L.byId.rainWet.prio > L.byId.rainPit.prio, 'tab: priority down')
+local closed = texts(drawTab)
+env.windowOpen = false
+check(not hasText(closed, '##lp_hazardStop_stop'), 'tab: parameters hidden until the name is clicked')
+clickTab('Při zastavení na trati##lx_hazardStop')
 U.slide = { ['##lp_hazardStop_stop'] = 5 }
 clickTab('nic')
 U.slide = nil
 check(L.byId.hazardStop.P.stop == 5, 'tab: parameter slider')
+clickTab('Na klávesu##lx_flash')
+local opened = texts(drawTab)
+env.windowOpen = false
+check(not hasText(opened, '##lp_hazardStop_stop') and hasText(opened, '##lp_flash_count'), 'tab: one scenario expanded at a time')
 U.slide = { ['##lp_flash_count'] = 2.4 }
 clickTab('nic')
 U.slide = nil
@@ -465,6 +495,7 @@ check(L.byId.flash.P.count == 2, 'tab: whole-number parameter rounded (' .. L.by
 local color = require('src/color')
 car.headlightsActive = true
 frame(3)
+clickTab('Palubní deska a kabina##lx_backlight')
 U.pick = { ['##lc_backlight'] = { 0.33, 0.9, 0.25 } }
 clickTab('nic')
 U.pick = nil
@@ -483,7 +514,7 @@ seconds(3)
 
 -- ---------------------------------------------------------------- rain light, mesh mode
 
-clickTab('Kopie vybraných meshů##rm_mesh')
+clickTab('Meshe##rm_mesh')
 frame(2)
 check(L.rainMode == 'mesh' and L.carSettings().rain.meshes[1] == 'RAIN_LIGHT', 'mesh mode: prefilled with the detected rain mesh')
 mark = #A.log + 1
@@ -505,7 +536,7 @@ loadApp()
 frame(3)
 check(L.carSettings().rain.mode == 'mesh' and L.carSettings().dash.meshes[1] == 'DASH_GLOW', 'per car: rain mode and dash meshes saved')
 check(L.byId.hazardStop.P.stop == 5 and L.byId.flash.on, 'global: scenario parameters saved')
-clickTab('Vybrat automaticky##rm_auto')
+clickTab('Automaticky##rm_auto')
 frame(2)
 check(L.rainMode == 'switch' and L.carSettings().rain.mode == nil, 'rain light back to automatic')
 
@@ -649,15 +680,19 @@ check(env.brake1.visible and env.brake2.visible and L.healed >= 2, 'self-heal: o
 env.sim.isOnlineRace = true
 frame(2)
 local t = texts(drawTab)
-check(hasText(t, 'vidí i ostatní jezdci'), 'online: banner shown')
+check(hasText(t, 'vidí i ostatní'), 'online: banner shown')
+check(not hasText(t, 'řídí jen řidič („I online“'), 'online with real lights allowed: no block note')
 env.windowOpen = false
 env.sim.timeHours = 21
 frame(5)
 check(car.headlightsActive, 'online: real lights allowed by default')
-clickTab('Online používat i skutečná světla##lrealonline')
+clickTab('I online##lrealonline')
 seconds(0.5)                                -- the give-back waits for the 0.25 s minimum after the last command
 check(not car.headlightsActive and itemOf('headlights').holder == L.TEXT.blocked, 'online block: lights given back, reason shown')
-clickTab('Online používat i skutečná světla##lrealonline')
+t = texts(drawTab)
+env.windowOpen = false
+check(hasText(t, 'řídí jen řidič („I online“'), 'online block: the tab says so')
+clickTab('I online##lrealonline')
 env.sim.timeHours = 14
 seconds(21)
 env.sim.isOnlineRace = false
@@ -665,17 +700,20 @@ env.onlineExtras = { sections = { EXTRA_RULES = {}, ABOUT = {} } }
 check(L.online.readExtras():find('EXTRA_RULES', 1, true) ~= nil, 'online extras read on demand')
 t = texts(drawTab)
 env.windowOpen = false
-check(not hasText(t, 'vidí i ostatní jezdci.'), 'offline: no banner')
+check(not hasText(t, 'vidí i ostatní') and not hasText(t, '„I online“ je vypnuto'), 'offline: no banner')
 
 -- diagnostics: lines for "Kopírovat diagnostiku" and the tab block
 local dl = table.concat(L.diagLines(), '\n')
 check(dl:find('Světla: zapnuto', 1, true) and dl:find('EXTRA_RULES', 1, true) and dl:find('dešťové světlo', 1, true)
   and dl:find('výstup Výstražná světla', 1, true), 'diagnostics lines')
-clickTab('Diagnostika světel##ldiag')
 t = texts(drawTab)
 env.windowOpen = false
-check(hasText(t, 'příkazů') and hasText(t, 'meshe brake'), 'tab: diagnostics block shown')
-clickTab('Diagnostika světel##ldiag')
+check(hasText(t, 'Diagnostika##ldiag') and hasText(t, 'příkazů') and hasText(t, 'meshe brake'),
+  'tab: diagnostics block shown (collapsed section)')
+env.clipboard = nil
+clickTab('Kopírovat diagnostiku##ldiag_copy')
+check(env.clipboard and env.clipboard:find('diagnostika', 1, true) ~= nil and env.clipboard:find('výstup', 1, true) ~= nil,
+  'tab: diagnostics (with the lights) copied')
 
 -- ---------------------------------------------------------------- formula without headlights, a car with less
 
@@ -733,12 +771,26 @@ local function visibleOrder()
   return table.concat(out, ',')
 end
 check(visibleOrder() == 'rainPit,rainWet,backlightPit,backlight', 'visible scenarios: ' .. visibleOrder())
-clickTab('Výš##lup_backlightPit')
+L.move('backlightPit', -1)
 check(visibleOrder() == 'rainPit,backlightPit,rainWet,backlight', 'moved up past hidden scenarios: ' .. visibleOrder())
-clickTab('Níž##ldn_backlightPit')
+L.move('backlightPit', 1)
 check(visibleOrder() == 'rainPit,rainWet,backlightPit,backlight', 'moved back down: ' .. visibleOrder())
-clickTab('Výš##lup_rainPit')
+L.move('rainPit', -1)
 check(visibleOrder() == 'rainPit,rainWet,backlightPit,backlight', 'top scenario cannot move up')
+clickTab('lup_backlight')
+check(visibleOrder() == 'rainPit,rainWet,backlight,backlightPit', 'tab: Výš inside one light: ' .. visibleOrder())
+clickTab('ldn_backlight')
+check(visibleOrder() == 'rainPit,rainWet,backlightPit,backlight', 'tab: Níž inside one light: ' .. visibleOrder())
+-- another light in between (an older saved order): Výš still passes the neighbour of the same light
+L.move('rainWet', 1)
+check(visibleOrder() == 'rainPit,backlightPit,rainWet,backlight', 'setup: another light between the rain scenarios')
+clickTab('lup_rainWet')
+check(visibleOrder() == 'rainWet,rainPit,backlightPit,backlight', 'tab: Výš passes the other light: ' .. visibleOrder())
+local top = texts(drawTab)
+env.windowOpen = false
+check(not hasText(top, 'icon:lup_rainWet') and hasText(top, 'icon:ldn_rainWet'), 'tab: the top scenario of a light has no Výš')
+clickTab('ldn_rainWet')
+check(L.byId.rainWet.prio > L.byId.rainPit.prio, 'tab: Níž back below the blink')
 
 -- high beam flash fallback (no own flash)
 H.formulaCar(1)
@@ -779,7 +831,8 @@ L.toggleMesh('dash', 'DASH_GLOW')
 env.windowOpen = true
 U.tab = 'Světla'
 frame(10)
-H.click('Vybrat meshe dešťového světla…##pick_rain')
+H.click('Vybrat…##pick_rain')
+H.click('Palubní deska a kabina##lx_backlight')   -- an expanded row (parameter, colour field) is part of the check
 env.windowOpen = true
 frame(120)
 local function sweep() frame(1) end
@@ -793,6 +846,7 @@ collectgarbage('restart')
 jit.on()
 env.windowOpen = false
 check(A.alive == 1 and not env.rainMesh.visible and not env.brake1.visible, 'allocation test runs with lights active')
+print(string.format('allocation with tab Světla open: %.2f KB / 300 frames', grown))
 check(grown < 4, string.format('no per-frame allocation with lights active and tab Světla open (%.2f KB / 300 frames)', grown))
 
 return H.finish('test_lights')

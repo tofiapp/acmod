@@ -269,8 +269,10 @@ apps/lua/LedControl/
                           the design rules are docs/ledcontrol-ui.md; tests/ledcontrol/dump_ui.py prints a tab as text
   src/ui/main.lua         header (master, status, preset combo, errors, online / test pattern notes) + tabs loaded
                           lazily under pcall; src/ui/common.lua note() = coloured text that wraps (textColored does not)
-  src/ui/tab_leds.lua     Diody (+ led_map.lua: manual order, groups, mesh picker), tab_scenarios.lua, tab_editor.lua,
-                          tab_lights.lua, tab_settings.lua
+  src/ui/tab_leds.lua     Diody: preview, brightness (Noc / Den / Slunce, Auto), test patterns; collapsed sections
+                          Pořadí a skupiny (led_map.lua), Způsob převzetí, Diagnostika; tab_rpm.lua (Otáčky: live bar,
+                          Auto / manual start, shift, limiter, learned limiter, RPM per LED), tab_scenarios.lua,
+                          tab_editor.lua, tab_lights.lua, tab_settings.lua
 tests/ledcontrol/         mock_csp.lua (scene graph, shared materials, AC LED writer, JSON, ui), helpers.lua (test
                           cars: formula 15+3+3 with HR/LR/LOD B instances, GT3 10 LEDs one material, actsAsLED, names,
                           empty), test_*.lua each in its own LuaJIT runtime

@@ -9,7 +9,7 @@ local rt, S = app.runtime, app.config.S
 print('car profile preset:', tostring(rt.profile.preset), ' current preset:', rt.presetId)
 env.windowOpen, env.ui.tab = true, 'Nastavení'
 env.ui.openCombo = '##defaultPreset'
-env.ui.click = 'Minimální'
+env.ui.click = 'Minimální##defp:builtin:minimal'
 frame(1)
 env.ui.click, env.ui.openCombo = nil, nil
 frame(3)

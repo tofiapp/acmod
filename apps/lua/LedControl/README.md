@@ -22,11 +22,12 @@ auto**. Pod tím jsou karty:
 
 | Karta | Co v ní je |
 | --- | --- |
-| **Diody** | Způsob převzetí (A/B/C), jas, náhled diod ve skutečném pořadí po skupinách, co teď svítí, testy, ruční pořadí a výběr diod, diagnostika |
+| **Diody** | Náhled diod ve skutečném pořadí po skupinách a co teď svítí, jas (Noc / Den / Slunce, Auto), testy; sbalené: pořadí a skupiny, způsob převzetí, diagnostika |
+| **Otáčky** | Živé otáčky, kde světla začínají, kde jsou plná a kde bliká omezovač; ruční hodnoty a otáčky pro každou diodu |
 | **Scénáře** | Seznam situací presetu: zapnutí, priorita, cíl (skupina diod), vzor, barvy, rychlost blikání, Test, vlastní podmínky |
 | **Editor** | Vlastní presety a ruční animace: mřížka s tolika políčky, kolik má auto diod, snímky a jejich rychlost |
 | **Světla** | Světla, která auto má, a jejich scénáře (dešťové světlo, výstražná světla, dálková, brzdová světla, podsvícení) |
-| **Nastavení** | Jas, výchozí způsob a preset, klávesy, export/import presetů přes schránku, smazání dat, výchozí nastavení |
+| **Nastavení** | Preset a způsob převzetí pro nové auto, klávesy, ochrana barev, sdílení presetů, smazání dat, výchozí nastavení |
 
 ## Jak to funguje
 
@@ -40,7 +41,7 @@ Aplikace diody najde sama, v tomto pořadí:
 4. meshe kokpitu se jménem obsahujícím LED, RPM nebo SHIFT.
 
 Diody seřadí zleva doprava podle skutečné polohy na volantu a rozdělí do skupin (řada otáček, levé a pravé boční
-diody, další řady). Když pořadí nesedí nebo auto diody nemá, v kartě Diody je **Upravit pořadí a skupiny diod** (šipky ↑ ↓, „Obrátit pořadí“ celé skupiny) nebo
+diody, další řady). Když pořadí nesedí nebo auto diody nemá, v kartě Diody je sbalená sekce **Pořadí a skupiny** (šipky ↑ ↓, **Obrátit** celou skupinu, **Uložit**) nebo
 **Vybrat diody ručně** (seznam malých meshů v kokpitu s hledáním). Najetím myší na diodu v náhledu dioda na autě bliká.
 
 ### Způsob převzetí
@@ -102,8 +103,8 @@ Vestavěné presety jsou relativní, fungují na libovolném počtu diod. Když 
 kopie a auto začne používat ji. Preset se pamatuje pro každé auto. Ruční animace z Editoru jsou vázané na počet
 diod: na autě s jiným počtem se přepočítají, nebo (když přepočet vypnete) se scénář vypne s upozorněním.
 
-Sdílení: **Nastavení → Kopírovat aktuální preset do schránky** dá jeden řádek textu začínající `LEDCONTROL-PRESET 1`.
-**Vložit preset ze schránky** ho načte jako nový preset.
+Sdílení: **Nastavení → Kopírovat preset** dá do schránky jeden řádek textu začínající `LEDCONTROL-PRESET 1`.
+**Vložit preset** ho načte jako nový preset.
 
 ### Světla
 
@@ -132,7 +133,7 @@ Fungují i se zavřeným oknem.
 
 ## Když něco nefunguje
 
-V kartě Diody je **Kopírovat diagnostiku** (také v Nastavení). Text obsahuje nalezené diody a jejich polohu,
+V kartě Diody (sekce Diagnostika) je **Kopírovat diagnostiku**, diagnostika světel je v kartě Světla. Text obsahuje nalezené diody a jejich polohu,
 odmítnuté kandidáty s důvodem, sekce `[LED_n]` z auta, stav převzetí a scénářů. Pošlete ho autorovi.
 
 Uložená data jsou ve složce `Documents/Assetto Corsa/cfg/extension/state/lua/app/LedControl` (CSP `ScriptConfig`): `car_<auto>.lon`

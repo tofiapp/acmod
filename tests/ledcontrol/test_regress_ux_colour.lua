@@ -214,6 +214,8 @@ env.car.speedKmh = 120
 loadApp()
 frame(5)
 drawTab()
+clickTab('Palubní deska a kabina##lx_backlight')     -- the colour field shows when the row is expanded
+local before = L.byId.backlight.colour
 local calls = 0
 local baseStr = stringify
 stringify = setmetatable({ parse = baseStr.parse, tryParse = baseStr.tryParse }, { __call = function (_, v, ...) calls = calls + 1; return baseStr(v, ...) end })
@@ -227,4 +229,7 @@ end
 U.pick = nil
 print('stringify calls (ac.storage scen writes) during a 60-frame colour drag:', calls, ' version bumps:', L.version - v0)
 check(calls <= 2, 'colour drag saves at most once or twice, got ' .. calls)
+check(L.byId.backlight.colour ~= before, 'the colour button is drawn and the drag reaches the scenario')
+frame(40)
+check(calls >= 1, 'the dragged colour is saved once it rests (' .. calls .. ')')
 return H.finish('test_regress_ux_colour')
