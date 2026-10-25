@@ -112,11 +112,13 @@ extension/lua/joypad-assist/KeyDrive/
                                [HANDBRAKE] KEY; CM writes hex "0x53"), ac.isKeyDown. In gamepad mode AC does not
                                forward keyboard gear keys (user report), so assist.lua sets state.gearUp/gearDown/handbrake
   src/traction.lua             throttle traction "remembering foot": load-weighted ndSlip of the driven wheels (1 = tyre
-                               peak; fallback wheel speed ratio), filtered 30 ms; absolute cap A; at a crossing caused by
-                               real throttle (> 30 %) remembers 95 % of the sent level per gear, pulls A to 85 % of it
-                               (to the 0.3 floor only if the slip persists 0.4 s), holds still between 80-100 % of the
-                               target, returns quickly to 92 % of the memory, then creeps 0.08/s. Memory recovers
-                               0.02/s; a new press or gear starts at the memory. Target must stay <= 1.
+                               peak; fallback wheel speed ratio), filtered 30 ms; absolute cap A; memory per gear AND
+                               500 rpm band (lazy recovery 0.015/s); limit = lower of the current and next band, cap
+                               eases down K_PRE 1.2/s before the revs get there. Crossing (throttle > 30 %): 95 % of
+                               the level; when the wheels grip again: middle of start and end level. Pull to 85 % of
+                               the memory (0.3 floor after 0.4 s), hold between 80-100 % of the target, quick return
+                               to 92 %, memory creeps 0.08/s with spare grip. Target must stay <= 1. Memory survives
+                               teleports (reset only on script reload).
   src/brake.lua                brake lock limiter on LONGITUDINAL slip only: max -slipRatio / peakRatio over grounded wheels
                                (peakRatio learned from straight-running wheels: |slipRatio| / ndSlip, default 0.13),
                                predicted 0.04 s; multiplier k on the ramped brake (K_UP 4, K_DOWN 15, floor 0.15);
@@ -177,4 +179,7 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
 - v0.7 user: steering "feels completely different from plain keyboard". v0.7.1: STEER_STYLE 0 (default) uses AC's
   own keyboard rates from controls.ini [KEYBOARD] STEERING_SPEED (1.75), STEERING_OPPOSITE_DIRECTION_SPEED (2.5),
   STEER_RESET_SPEED (1.8) (names from Content Manager's ControlsSettings.cs); STEER_STYLE 1 = KeyDrive's speed curve.
-Next: user test of v0.7.1, then phase 6 (modes, tyre temperature).
+- logs sent after v0.7.1 were still v0.6 (old columns, script folder): spins in 1st/2nd always started at
+  5000-5600 rpm (torque peak) with ~75 % throttle; more throttle was fine below. v0.8: memory per gear and rpm band,
+  easing off before the band. Torque-peak model in tests: second launch spins less and is faster.
+Next: user test of v0.8 (logs now in Documents/Assetto Corsa/logs/keydrive, columns tc_cap/tc_memory), then phase 6.

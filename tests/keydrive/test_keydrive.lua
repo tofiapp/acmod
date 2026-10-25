@@ -627,5 +627,56 @@ do
   mock.keys[VK_LEFT] = nil
 end
 
+-- 21. Torque peak at 5300 rpm (like the user's car): the memory per gear and rpm band makes the second launch
+-- spin much less than the first, by easing off just before the revs reach the band where it spun.
+do
+  local s = fresh()
+  local c = mock.car
+  local m, r, J, N, mu, G = 1300, 0.32, 8, 3500, 1.1, 18
+  local function torque(rpm)
+    if rpm > 7500 then return 0 end
+    return 1700 + 2200 * math.exp(-((rpm - 5300) / 900) ^ 2)
+  end
+  local function launch()
+    local v, w, spin, n, maxNd = 0, 0, 0, 0, 0
+    mock.keys[VK_UP] = nil
+    for _ = 1, 60 do s.update(0.003) end
+    mock.keys[VK_UP] = true
+    for _ = 1, 1000 do
+      c.rpm = math.max(900, w * G * 60 / (2 * math.pi))
+      c.localVelocity.z, c.speedKmh = v, v * 3.6
+      s.update(0.003)
+      local g = mock.joypad.gas
+      for _ = 1, 20 do
+        local rpm = math.max(900, w * G * 60 / (2 * math.pi))
+        local sr = (w * r - v) / math.max(v, 3)
+        local F = mu * N * math.sin(1.6 * math.atan(9 * sr))
+        v = v + 2 * F / m * 0.00015
+        w = w + (g * torque(rpm) / 2 - F * r) / J * 0.00015
+        if w < 0 then w = 0 end
+      end
+      local nd = math.abs((w * r - v) / math.max(v, 3)) / 0.166
+      for i = 2, 3 do c.wheels[i].angularSpeed = w; c.wheels[i].ndSlip = nd end
+      for i = 0, 1 do c.wheels[i].angularSpeed = v / r end
+      n = n + 1
+      if nd > 1.3 then spin = spin + 1 end
+      if nd > maxNd then maxNd = nd end
+      if os.getenv('KD_TRACE') and n % 25 == 0 then
+        local l = mock.connected['KeyDrive.Live.v7']
+        print(string.format('  t %.2f rpm %4.0f gas %.2f cap %.2f mem %.2f nd %.2f', n * 0.003, c.rpm, g, l.tcLimit, l.tcMemory, nd))
+      end
+    end
+    mock.keys[VK_UP] = nil
+    return spin / n, maxNd, v
+  end
+  local s1, m1, v1 = launch()
+  local s2, m2, v2 = launch()
+  if os.getenv('KD_VERBOSE') then
+    print(string.format('rpm launch 1: spin %.2f max %.1f v %.1f | 2: spin %.2f max %.1f v %.1f', s1, m1, v1, s2, m2, v2))
+  end
+  check('second launch spins less (memory per rpm band)', s2 < s1 * 0.7, string.format('%.2f vs %.2f', s2, s1))
+  check('second launch not slower', v2 > v1 * 0.97, string.format('%.1f vs %.1f', v2, v1))
+end
+
 print(string.format('KeyDrive: %d passed, %d failed', passed, failed))
 return failed > 0
