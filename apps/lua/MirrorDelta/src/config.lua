@@ -34,18 +34,6 @@ local defaults = {
   pitBlink = true,            -- in the pit lane the delta line and mini sectors show the pit lights
   pitStyle = 1,               -- pit lights: 1 scanner, 2 waves from the centre, 3 breathing, 4 halves in turn
   pitColor = 1,               -- 1 blue, 2 orange, 3 white, 4 yellow
-  carLedsPit = true,          -- in the pit lane a light runs over the car's own shift LEDs
-  carLedsColor = 2,           -- their colour: 1 blue, 2 orange, 3 white, 4 yellow
-  carLedsStyle = 1,           -- 1 a light running from side to side, 2 every other LED in turn
-  carLedsBrightness = 2,      -- glow strength (x the white point); much more turns the colour white
-  carLedsCars = '',           -- per car override of the automatic check: "carId=1;carId=2" (1 always on, 2 off)
-  carLedsVirtual = 1,         -- virtual LED bar: 1 when the car's LEDs do not fit, 2 always (car's LEDs never), 3 never
-  carLedsVirtualCount = 10,   -- discs
-  carLedsVirtualWidth = 28,   -- cm
-  carLedsVirtualDist = 55,    -- cm in front of the driver's eyes
-  carLedsVirtualDrop = 14,    -- cm below the driver's eyes
-  pitHeadlights = true,       -- in the pit lane the headlights blink
-  pitHazards = false,         -- ... and the hazard lights
   pitSectorPattern = 1,       -- halves style: 1 every other mini sector, 2 the half under the lit half of the line
   pitBox = true,              -- in the pit lane the timing window shows BOX instead of the lap time
   standingsCount = 7,         -- standings window: cars shown (the player in the middle)
@@ -155,7 +143,7 @@ for key, default in pairs(defaults) do
   S[key] = copy(value)
 end
 
-local M = { S = S, defaults = defaults, VERSION = '1.27.0' }
+local M = { S = S, defaults = defaults, VERSION = '1.28.0' }
 
 function M.set(key, value)
   S[key] = value

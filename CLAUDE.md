@@ -95,32 +95,8 @@ build.sh / build.ps1      one ZIP per app: dist/<App>-<version>.zip with apps/lu
 - Pit lane (`car.isInPitlane`): `src/pit_lights.lua` gives a brightness 0..1 per place on the delta line and per mini
   sector (`S.pitStyle`: 1 scanner, 2 waves from the centre, 3 breathing, 4 halves in turn with `S.pitSectorPattern`),
   colour `S.pitColor` (blue default, orange, white, yellow); the timing window shows BOX in that colour (`S.pitBox`).
-  `src/car_leds.lua` runs a light over the car's own shift LEDs (`S.carLedsPit`, `S.carLedsStyle` scanner / every other,
-  `S.carLedsColor` orange): digital_instruments.ini `[LED_n] OBJECT_NAME` (power from EMISSIVE) found with
-  `ac.findNodes('carRoot:0'):findMeshes(name)`, else `{ actsAsLED:yes }` (CSP's show_important_wheels filter) split with
-  `:at(k)`; position = `:boundingSphere()` taken to world space every frame by multiplying the live
-  `:getTransformationRaw()` references up the node chain (kept from the pit entry; CSP's vr_rig_base getActualTransform).
-  Not the kept `getWorldTransformationRaw()` (stale, discs stayed behind) nor car.worldToLocal/car.transform (model is
-  offset from the physics body: discs above the LEDs); `S.carLedsOffset` cm nudge; ordered left to right;
-  drawn in `render.on('main.root.transparent')`: each LED mesh again with `render.mesh{ mesh = ref, transform = m }`
-  (as CSP's Radar draws brake light / tyre meshes; LOD A first), `M.drawMode` 1 = own matrix: T(-c)·S(1.08)·T(c) about the
-  mesh centre × the live node chain × 3 mm towards the camera (row-vector convention, `mat4x4.position:set`), so it covers
-  AC's LED without depth fighting; 2 = `'original'`; 3 = `render.circle` discs like CSP's Traffic virtual lights (each
-  way falls to the next on an error). OpaqueForced + LessEqual depth, shader colour x gWhiteRefPoint: lit in the pit
-  colour x `S.carLedsBrightness`, the rest dark, so AC's RPM lights are covered until the pit exit and the shape fits.
-  Third LED source: cockpit meshes `'{ (?LED?, ?RPM?, ?SHIFT?) & lod:A }'`. `M.test(s)` runs the lights off the pit lane
-  (settings button). `src/pit_car_lights.lua`: headlights (`S.pitHeadlights`) / hazards (`S.pitHazards`) blink at 0.4 s via
-  `ac.setHeadlights` / `ac.setTurningLights(ac.TurningLights.Hazards)` (Unbound), state restored at the pit exit.
-  Writing the LEDs' ksEmissive flickered (AC writes it by RPM every frame), so the material is never touched.
-  Meshes found once per session (`load`), the check at every pit entry (`evaluate`; at the session start another
-  camera / LOD may be active: `M.fits`, `M.reason`, `M.dropped`): off when the CSP car config
-  (`ac.INIConfig.carConfig(0).sections`) has `SCRIPTABLE_DISPLAY_*`; LED meshes dropped when `:isVisible()` is false
-  (unless all are hidden = inactive LOD), bounding radius > 6 cm or > 1.8 m from the eyes (car.transform x
-  driverEyesPosition); < 2 left = the car's LEDs are not used. Per car override `S.carLedsCars` "carId=1;carId=2"
-  (1 always the car's LEDs, all found, 2 never) from the settings. Virtual LED bar (`S.carLedsVirtual` 1 when the car's
-  LEDs do not fit, 2 always, 3 never; `S.carLedsVirtualCount/Width/Dist/Drop`): `render.circle` discs at
-  driverEyesPosition + (−x, −drop, +dist) through car.transform, DepthMode.Off, same pattern. Mesh geometry (centre,
-  radius) is read at the session start.
+  MirrorDelta does not touch the car's LEDs or lights (the pit LED / headlight blinking was removed in 1.28.0,
+  LedControl does that).
 - Mini sectors are boundaries at `j / N` in `u`; times are interpolated; purple needs a clean lap and an
   existing best; best sector lists are kept per sector count.
 - Deleted laps (cut on track, or AC's callback says invalid) flash red (`flashKind 5`), never become the flash best,

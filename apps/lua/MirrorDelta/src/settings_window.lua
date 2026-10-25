@@ -11,8 +11,6 @@ local setupLine = require('src/setup_line')
 local pitLights = require('src/pit_lights')
 local mirror = require('src/mirror_window')
 local carData = require('src/car_data')
-local carLeds = require('src/car_leds')
-local pitCarLights = require('src/pit_car_lights')
 local D = require('src/draw')
 local S = config.S
 
@@ -104,54 +102,6 @@ local function tabDelta()
     if S.pitStyle == 4 then
       combo('pitSectorPattern', 'Mini sektory v boxech', { 'Střídavě jednotlivé', 'Po polovinách s čárou' })
     end
-  end
-  checkbox('carLedsPit', 'V boxech světla i v kokpitu (diody otáček auta nebo virtuální lišta)')
-  if S.carLedsPit then
-    combo('carLedsStyle', 'Světla v kokpitu', { 'Světlo přejíždí ze strany na stranu', 'Každá druhá na střídačku' })
-    combo('carLedsColor', 'Barva světel v kokpitu', pitLights.NAMES)
-    slider('carLedsBrightness', 'Jas světel v kokpitu', 0.3, 6, '%.1f', 0.1)
-    combo('carLedsVirtual', 'Virtuální lišta diod před řidičem', {
-      'Jen když diody auta nesedí (podle kontroly při vjezdu do boxů)',
-      'Vždy (stejná u každého auta, diody auta se nepoužijí)',
-      'Nikdy (jen diody auta)' })
-    if S.carLedsVirtual ~= 3 then
-      slider('carLedsVirtualCount', 'Lišta: počet diod', 4, 16, '%.0f', 1)
-      slider('carLedsVirtualWidth', 'Lišta: šířka', 10, 60, '%.0f cm', 1)
-      slider('carLedsVirtualDist', 'Lišta: vzdálenost od očí', 25, 120, '%.0f cm', 1)
-      slider('carLedsVirtualDrop', 'Lišta: níž než oči', -20, 40, '%.0f cm', 1)
-    end
-    gap()
-    ui.header('Diody tohoto auta')
-    local modes = { 'vlastní matice', 'původní poloha', 'tečky' }
-    if carLeds.found == 0 then
-      ui.textWrapped('Nenalezeny (auto nemá diody otáček jako díly modelu).')
-    elseif carLeds.reason == '' and not carLeds.fits then
-      ui.textWrapped(string.format('Nalezeno %d (%s); jestli sedí, se zjistí při vjezdu do boxů nebo zkouškou.',
-        carLeds.found, carLeds.source))
-    elseif carLeds.fits then
-      ui.textWrapped(string.format('Sedí: %d z %d (%s)%s. Kreslení: %s%s.', carLeds.count, carLeds.found, carLeds.source,
-        carLeds.dropped ~= '' and '; vynecháno ' .. carLeds.dropped or '', modes[carLeds.drawMode] or '?',
-        carLeds.meshError and ' (předchozí způsob selhal: ' .. carLeds.meshError .. ')' or ''))
-    else
-      ui.textWrapped('Nesedí: ' .. carLeds.reason .. '. Místo nich svítí virtuální lišta (pokud není vypnutá).')
-    end
-    local choice = carLeds.carChoice()
-    ui.text('Pro toto auto')
-    ui.setNextItemWidth(ui.availableSpaceX())
-    local names = { 'Podle automatické kontroly', 'Vždy diody auta', 'Nikdy diody auta' }
-    ui.combo('##carLedsCar', names[choice + 1], ui.ComboFlags.None, function ()
-      for i = 1, 3 do
-        if ui.selectable(names[i], choice == i - 1) then carLeds.setCarChoice(i - 1) end
-      end
-    end)
-    ui.textWrapped('Teď: ' .. (carLeds.active and (carLeds.useMeshes and 'diody auta' or 'virtuální lišta')
-      or 'nic (mimo boxy)') .. '.')
-  end
-  checkbox('pitHeadlights', 'V boxech blikat předními světly')
-  checkbox('pitHazards', 'V boxech blikat výstražnými světly')
-  if ui.button(carLeds.testing and 'Zkouška běží…' or 'Vyzkoušet teď (8 s, i mimo boxy)') then
-    carLeds.test(8)
-    pitCarLights.test(8)
   end
   checkbox('intensityByDelta', 'Intenzita barvy podle velikosti delty')
   if S.intensityByDelta then
