@@ -36,6 +36,7 @@ end
 -- Tabs are loaded on first use under pcall, so a broken tab shows its error instead of stopping the window.
 local TABS = {
   { 'Diody', 'src/ui/tab_leds' },
+  { 'Otáčky', 'src/ui/tab_rpm' },
   { 'Scénáře', 'src/ui/tab_scenarios' },
   { 'Editor', 'src/ui/tab_editor' },
   { 'Světla', 'src/ui/tab_lights' },

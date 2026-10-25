@@ -522,7 +522,41 @@ JSON = {
 local U = M.ui
 local function rec(s) if U.record then U.texts[#U.texts + 1] = s end end
 ui = {
-  ColorPickerFlags = { PickerHueBar = 1 },
+  ColorPickerFlags = { PickerHueBar = 1, NoPicker = 4, NoTooltip = 64, NoAlpha = 2, NoInputs = 32 },
+  TreeNodeFlags = { None = 0, Framed = 2, DefaultOpen = 32 },
+  StyleColor = { Text = 0, Button = 21 },
+  Font = { Main = 0, Small = 1, Title = 2, Huge = 3, Tiny = 4 },
+  ButtonFlags = { None = 0, Disabled = 0x100 },
+  Icons = setmetatable({}, { __index = function (_, k) return 'icon:' .. k end }),
+  -- collapsible sections are always drawn open in the tests (their label is recorded)
+  treeNode = function (label, flags, content)
+    if content == nil then flags, content = nil, flags end
+    U.last = label
+    rec(label)
+    if content then content() end
+  end,
+  textDisabled = function (t) rec(t) end,
+  pushFont = function () end,
+  popFont = function () end,
+  pushStyleColor = function () end,
+  popStyleColor = function () end,
+  pushID = function (id) U.idStack = U.idStack or {}; U.idStack[#U.idStack + 1] = id end,
+  popID = function () U.idStack[#U.idStack] = nil end,
+  -- an icon button is clicked by the id pushed before it (kit.iconButton): env.ui.click = 'id'
+  iconButton = function (icon)
+    local id = U.idStack and U.idStack[#U.idStack]
+    U.last = id
+    return U.click ~= nil and U.click == id
+  end,
+  dummy = function () end,
+  getCursor = function () return vec2(0, 0) end,
+  getCursorX = function () return 0 end,
+  getCursorY = function () return 0 end,
+  drawCircleFilled = function () end,
+  drawRectFilled = function () end,
+  drawRect = function () end,
+  progressBar = function () end,
+  itemClicked = function () return false end,
   ComboFlags = { None = 0 },
   setNextItemWidth = function () end,
   header = function (t) rec(t) end,
