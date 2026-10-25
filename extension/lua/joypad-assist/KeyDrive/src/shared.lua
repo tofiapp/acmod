@@ -5,7 +5,7 @@ local M = {}
 
 function M.connect()
   return ac.connect({
-    ac.StructItem.key('KeyDrive.Live.v7'),
+    ac.StructItem.key('KeyDrive.Live.v8'),
     alive = ac.StructItem.int32(),      -- physics update counter, wraps at 1e6
     keyMask = ac.StructItem.int32(),    -- bit 0 gas, 1 brake, 2 left, 3 right, 4 gear up, 5 gear down
     inGas = ac.StructItem.double(),     -- joypad state as it arrived, before KeyDrive
@@ -38,6 +38,8 @@ function M.connect()
     alphaPeak = ac.StructItem.double(), -- learned peak front slip angle, deg
     betaF = ac.StructItem.double(),     -- front axle travel direction, deg
     degPerUnit = ac.StructItem.double(), -- road wheel degrees per steering unit
+    steerFromAC = ac.StructItem.boolean(), -- AC computes the keyboard steering itself, KeyDrive leaves it alone
+    acSteerVotes = ac.StructItem.int32(),
     steerState = ac.StructItem.int32(), -- 0 no data, 1 low speed (no window), 2 free, 3 limiting, 4 countersteer
     recordLog = ac.StructItem.boolean(),
     tcState = ac.StructItem.int32(),    -- 0 no wheel data, 1 off, 2 wheels in the air, 3 ready, 4 limiting

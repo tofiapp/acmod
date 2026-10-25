@@ -45,7 +45,9 @@ local COLUMNS = {
   { 'nd_fl', '%.2f' }, { 'nd_fr', '%.2f' }, { 'nd_rl', '%.2f' }, { 'nd_rr', '%.2f' },
   { 'ratio_fl', '%.3f' }, { 'ratio_fr', '%.3f' }, { 'ratio_rl', '%.3f' }, { 'ratio_rr', '%.3f' },
   { 'angle_fl', '%.1f' }, { 'angle_fr', '%.1f' }, { 'angle_rl', '%.1f' }, { 'angle_rr', '%.1f' },
-  { 'collision_depth', '%.3f' }, { 'wheels_out', '%d' }, { 'events', '%d' },
+  { 'collision_depth', '%.3f' }, { 'wheels_out', '%d' },
+  { 'in_gas', '%.3f' }, { 'in_brake', '%.3f' }, { 'in_steer', '%.3f' }, { 'steer_from_ac', '%d' }, { 'ac_votes', '%d' },
+  { 'events', '%d' },
 }
 local NC = #COLUMNS
 local EVENTS_COL = NC
@@ -144,6 +146,8 @@ local function sample(live, c)
   v[44][head] = w0.slipRatio; v[45][head] = w1.slipRatio; v[46][head] = w2.slipRatio; v[47][head] = w3.slipRatio
   v[48][head] = w0.slipAngle; v[49][head] = w1.slipAngle; v[50][head] = w2.slipAngle; v[51][head] = w3.slipAngle
   v[52][head] = c.collisionDepth; v[53][head] = out
+  v[54][head] = live.inGas; v[55][head] = live.inBrake; v[56][head] = live.inSteer
+  v[57][head] = live.steerFromAC and 1 or 0; v[58][head] = live.acSteerVotes
   v[EVENTS_COL][head] = flags
   return flags
 end

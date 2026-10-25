@@ -68,8 +68,9 @@ function script.update(dt)
     lines[7] = string.format('Brzda: %s  podélný prokluz %.0f %% vrcholu (vrchol %.0f %%)  brzda ×%.2f  paměť %.0f %%',
       BRAKE_TEXT[live.brakeState] or '?', live.brakeSlip * 100, live.brakePeakRatio * 100, live.brakeK,
       live.brakeMemory * 100)
-    lines[8] = string.format('Řízení: %s  skluz předních %.1f° (vrchol %.1f°)  kola %.1f°/jednotku',
-      STEER_TEXT[live.steerState] or '?', live.frontAlpha, live.alphaPeak, live.degPerUnit)
+    lines[8] = string.format('Řízení: %s  (z AC %.0f %%, hlasy %d)  skluz předních %.1f° (vrchol %.1f°)',
+      live.steerFromAC and 'AC, beze změny' or 'KeyDrive', live.inSteer * 100, live.acSteerVotes, live.frontAlpha,
+      live.alphaPeak)
     lines[6] = live.leak and 'POZOR: auto jede s větším plynem, než KeyDrive posílá (AC přimíchává klávesnici)' or ''
   end
 end

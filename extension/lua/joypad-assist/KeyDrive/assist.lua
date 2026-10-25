@@ -63,7 +63,8 @@ local P = {
   brakeTargetSlip = math.clamp(S.BRAKE_TARGET_SLIP / 100, 0.3, 3),
   brakeUseGameAbs = flag(S.BRAKE_USE_GAME_ABS), -- car's ABS switched on: leave the regulation to it
   trailBrakeRelease = math.clamp(S.TRAIL_BRAKE_RELEASE / 100, 0, 1),
-  steerStyleAC = S.STEER_STYLE ~= 1, -- 0: AC's own keyboard steering rates from controls.ini, 1: KeyDrive's curve
+  steerStyle = tonumber(S.STEER_STYLE) or 0, -- 0 auto: AC's own steering if AC sends it, 2 emulation of AC rates
+  steerStyleAC = S.STEER_STYLE ~= 1,         -- emulation uses AC's keyboard rates (0 and 2), 1: KeyDrive's curve
   steerCurve = curve.parse(S.STEER_SPEED_CURVE, '0:250 60:160 120:100 200:70'), -- km/h -> % of full lock per s
   steerReturn = math.clamp(S.STEER_RETURN_SPEED / 100, 0.2, 5),
   steerBothReturn = S.STEER_BOTH_KEYS == 1 or S.STEER_BOTH_KEYS == true, -- false: hold the angle
@@ -172,6 +173,10 @@ local function brakeInput(dt, kBrake)
 end
 
 local counterHold = 0
+-- STEER_STYLE 0: if AC itself computes the keyboard steering in gamepad mode (Combine with keyboard), it arrives in
+-- the joypad state before KeyDrive writes it. Votes decide: a steering key held while the incoming value points the
+-- same way (and differs from what KeyDrive wrote last step, so it is not our own value echoed back) means AC steers.
+local acSteerVotes, lastWrittenSteer, steerFromAC = 0, 0, false
 
 local function steerInput(dt, kLeft, kRight)
   local target
@@ -227,11 +232,26 @@ function script.update(dt)
   gas = throttle(dt, kGas, state)
   brake = brakeInput(dt, kBrake)
 
-  steer = steerInput(dt, kLeft, kRight)
+  if P.steerStyle == 0 and (kLeft ~= kRight) and math.abs(car.speedKmh) > 5 then
+    local dir = kRight and 1 or -1
+    if math.abs(inSteer - lastWrittenSteer) > 1e-4 and inSteer * dir > 0.03 then
+      acSteerVotes = math.min(acSteerVotes + 1, 300)
+    elseif math.abs(inSteer) < 0.005 or math.abs(inSteer - lastWrittenSteer) <= 1e-4 then
+      acSteerVotes = math.max(acSteerVotes - 1, -300)
+    end
+  end
+  steerFromAC = P.steerStyle == 0 and acSteerVotes > 100
+  if steerFromAC then
+    steer = inSteer          -- AC's own keyboard steering, untouched
+    steerRequest = inSteer   -- so a later switch to KeyDrive's steering does not jump
+  else
+    steer = steerInput(dt, kLeft, kRight)
+  end
 
   state.gas = gas
   state.brake = brake
-  state.steer = steer
+  if not steerFromAC then state.steer = steer end
+  lastWrittenSteer = steerFromAC and 1e9 or steer
   lastWritten = gas
 
   -- Buttons AC does not forward from the keyboard in gamepad mode. Held state, AC detects the press itself.
@@ -247,6 +267,8 @@ function script.update(dt)
   live.keyMask = (kGas and 1 or 0) + (kBrake and 2 or 0) + (kLeft and 4 or 0) + (kRight and 8 or 0)
     + (kUp and 16 or 0) + (kDown and 32 or 0)
   live.inGas, live.inBrake, live.inSteer = inGas, inBrake, inSteer
+  live.steerFromAC = steerFromAC
+  live.acSteerVotes = acSteerVotes
   live.outGas, live.outBrake, live.outSteer = gas, brake, steer
   live.gasRequest = gasRequest
   live.slip = traction.slip

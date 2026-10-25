@@ -115,7 +115,7 @@ do
   mock.keys[87] = true
   run(s, 0.2, 0.003)
   check('rebound gas key', mock.joypad.gas > 0.2, mock.joypad.gas)
-  check('binds published', mock.connected['KeyDrive.Live.v7'].bindGas == 87)
+  check('binds published', mock.connected['KeyDrive.Live.v8'].bindGas == 87)
 end
 
 -- 7b. Gear and handbrake keys from their own sections, hex values as Content Manager writes them.
@@ -143,7 +143,7 @@ do
   mock.keys[0x57] = true
   run(s, 0.1, 0.003)
   check('hex GAS bind', mock.joypad.gas > 0.1, mock.joypad.gas)
-  local live = mock.connected['KeyDrive.Live.v7']
+  local live = mock.connected['KeyDrive.Live.v8']
   check('gear binds published', live.bindGearUp == 0x53 and live.bindGearDown == 0x46)
 end
 
@@ -161,13 +161,13 @@ do
   mock.keys[VK_UP] = true
   mock.joypad.gas = 1 -- pretend AC sent raw keyboard gas
   s.update(0.003)
-  local live = mock.connected['KeyDrive.Live.v7']
+  local live = mock.connected['KeyDrive.Live.v8']
   check('incoming value published', live.inGas == 1, live.inGas)
   check('key mask', live.keyMask == 1, live.keyMask)
   check('render module requested', mock.renderModules[1] == 'module_render')
   local core = CORE
   local r = mock.load(core, 'module_render.lua')
-  mock.connected['KeyDrive.Live.v7'] = live
+  mock.connected['KeyDrive.Live.v8'] = live
   r.update(0.016)
   r.drawUI()
   check('render module draws', (mock.calls.drawRectFilled or 0) > 5 and (mock.calls.text or 0) >= 6)
@@ -273,7 +273,7 @@ do
   mock.keys[VK_UP] = true
   run(s, 0.5, 0.003)
   check('reverse: no traction limit', near(mock.joypad.gas, 0.6, 0.01), mock.joypad.gas)
-  check('reverse: traction state ready/off', mock.connected['KeyDrive.Live.v7'].tcState ~= 4)
+  check('reverse: traction state ready/off', mock.connected['KeyDrive.Live.v8'].tcState ~= 4)
 
   s = fresh()
   for i = 0, 3 do mock.car.wheels[i].tyreRadius = 0 end
@@ -281,14 +281,14 @@ do
   mock.keys[VK_UP] = true
   run(s, 0.5, 0.003)
   check('no wheel data: plain ramp', near(mock.joypad.gas, 0.6, 0.01), mock.joypad.gas)
-  check('no wheel data: state 0', mock.connected['KeyDrive.Live.v7'].tcState == 0)
+  check('no wheel data: state 0', mock.connected['KeyDrive.Live.v8'].tcState == 0)
 
   s = fresh()
   mock.keys[VK_UP] = true
   run(s, 0.3, 0.003)
   for i = 2, 3 do mock.car.wheels[i].load = 0; mock.car.wheels[i].angularSpeed = 200 end
   run(s, 0.2, 0.003)
-  check('airborne: state 2', mock.connected['KeyDrive.Live.v7'].tcState == 2)
+  check('airborne: state 2', mock.connected['KeyDrive.Live.v8'].tcState == 2)
   check('airborne: throttle not cut', mock.joypad.gas > 0.4, mock.joypad.gas)
 
   s = fresh({ CORNER_THROTTLE_REDUCTION = 25 })
@@ -301,11 +301,11 @@ do
   mock.keys[VK_UP] = true
   s.update(0.003)
   for _ = 1, 200 do mock.car.gas = 1; s.update(0.003) end
-  check('leak detected', mock.connected['KeyDrive.Live.v7'].leak == true)
+  check('leak detected', mock.connected['KeyDrive.Live.v8'].leak == true)
   s = fresh()
   mock.keys[VK_UP] = true
   for _ = 1, 200 do s.update(0.003); mock.car.gas = mock.joypad.gas end
-  check('no false leak', mock.connected['KeyDrive.Live.v7'].leak == false)
+  check('no false leak', mock.connected['KeyDrive.Live.v8'].leak == false)
 end
 
 -- 13. Fast corner: 200 km/h, rear axle already at the limit sideways (ndSlip from cornering, wheels turning at road
@@ -426,7 +426,7 @@ local function stop(dt, settings, seconds, abs)
   mock.keys[VK_DOWN] = nil
   local sum = 0
   for _, x in ipairs(slips) do sum = sum + x end
-  local live = mock.connected['KeyDrive.Live.v7']
+  local live = mock.connected['KeyDrive.Live.v8']
   return { t = t, dist = dist, slipMean = sum / math.max(1, #slips), lockedShare = locked / math.max(1, #slips),
     memory = live.brakeMemory, state = live.brakeState, peak = live.brakePeakRatio }
 end
@@ -530,7 +530,7 @@ local function corner(settings, seconds, init, keys)
   local sum = 0
   for _, x in ipairs(fronts) do sum = sum + x end
   return { front = sum / #fronts, lat = latSum / n, r = r, vy = vy, maxR = maxR,
-    live = mock.connected['KeyDrive.Live.v7'] }
+    live = mock.connected['KeyDrive.Live.v8'] }
 end
 
 do
@@ -662,7 +662,7 @@ do
       if nd > 1.3 then spin = spin + 1 end
       if nd > maxNd then maxNd = nd end
       if os.getenv('KD_TRACE') and n % 25 == 0 then
-        local l = mock.connected['KeyDrive.Live.v7']
+        local l = mock.connected['KeyDrive.Live.v8']
         print(string.format('  t %.2f rpm %4.0f gas %.2f cap %.2f mem %.2f nd %.2f', n * 0.003, c.rpm, g, l.tcLimit, l.tcMemory, nd))
       end
     end
@@ -676,6 +676,32 @@ do
   end
   check('second launch spins less (memory per rpm band)', s2 < s1 * 0.7, string.format('%.2f vs %.2f', s2, s1))
   check('second launch not slower', v2 > v1 * 0.97, string.format('%.1f vs %.1f', v2, v1))
+end
+
+-- 22. STEER_STYLE 0: when AC computes the keyboard steering itself, KeyDrive passes it through untouched.
+do
+  local s = fresh()
+  mock.car.speedKmh, mock.car.localVelocity.z = 100, 28
+  mock.keys[VK_RIGHT] = true
+  local acSteer = 0
+  for _ = 1, 200 do
+    acSteer = math.min(1, acSteer + 0.004)   -- AC's own (different) steering curve
+    mock.joypad.steer = acSteer              -- AC fills the joypad state before the script runs
+    s.update(0.003)
+  end
+  local live = mock.connected['KeyDrive.Live.v8']
+  check('AC steering detected', live.steerFromAC == true, live.acSteerVotes)
+  check('AC steering passed through untouched', mock.joypad.steer == acSteer, mock.joypad.steer)
+  mock.keys[VK_RIGHT] = nil
+
+  -- AC sends nothing (the state keeps what KeyDrive wrote): KeyDrive steers.
+  s = fresh()
+  mock.car.speedKmh, mock.car.localVelocity.z = 100, 28
+  mock.keys[VK_RIGHT] = true
+  run(s, 0.6, 0.003)
+  check('no AC steering: KeyDrive steers', mock.connected['KeyDrive.Live.v8'].steerFromAC == false and mock.joypad.steer > 0.5,
+    mock.joypad.steer)
+  mock.keys[VK_RIGHT] = nil
 end
 
 print(string.format('KeyDrive: %d passed, %d failed', passed, failed))

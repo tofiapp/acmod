@@ -135,7 +135,7 @@ extension/lua/joypad-assist/KeyDrive/
                                after SPIN/CRASH/OFF, in Documents/Assetto Corsa/logs/keydrive (fallback: script folder;
                                v0.6 and older wrote into the script folder, which a reinstall wipes). Ask the user for
                                these files instead of guessing.
-  src/shared.lua               ac.connect layout 'KeyDrive.Live.v7' (same layout on every side)
+  src/shared.lua               ac.connect layout 'KeyDrive.Live.v8' (same layout on every side)
 tests/keydrive/                own mock + tests: python tests/keydrive/run_tests.py
 build-keydrive.sh / .ps1       dist/KeyDrive-<version>.zip (extension/... + apps/lua/KeyDriveConfig/...)
 ```
@@ -182,4 +182,9 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
 - logs sent after v0.7.1 were still v0.6 (old columns, script folder): spins in 1st/2nd always started at
   5000-5600 rpm (torque peak) with ~75 % throttle; more throttle was fine below. v0.8: memory per gear and rpm band,
   easing off before the band. Torque-peak model in tests: second launch spins less and is faster.
-Next: user test of v0.8 (logs now in Documents/Assetto Corsa/logs/keydrive, columns tc_cap/tc_memory), then phase 6.
+- v0.8 user: steering "absolutely not good, something completely different" than plain keyboard even with AC's three
+  rates. Unknown what else AC does. v0.8.1: STEER_STYLE 0 = auto: if AC computes the keyboard steering itself in
+  gamepad mode, the incoming state.steer (differing from KeyDrive's last write, pointing the key's way) wins votes and
+  is passed through untouched; else emulation (STEER_STYLE 2). Recorder logs in_gas/in_brake/in_steer, steer_from_ac,
+  ac_votes: check them in the next log to learn what AC sends.
+Next: user test of v0.8.1 (logs in Documents/Assetto Corsa/logs/keydrive), then phase 6.
