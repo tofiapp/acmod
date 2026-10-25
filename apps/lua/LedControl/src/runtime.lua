@@ -14,11 +14,13 @@ local color = require('src/color')
 local presets = require('src/presets')
 local engine = require('src/engine')
 local lights = require('src/lights')
+local rpm = require('src/rpm')
 
 local S = config.S
 local ST = carState.ST
 
 local M = {
+  rpm = rpm,
   state = 'wait', carId = '', info = nil, layout = nil, profile = { v = 1 },
   fb = {}, manual = {}, n = 0, hover = 0, hoverUntil = 0, healed = 0,
   clock = 0, version = 0, restartReason = 'start', lastRestart = '',
@@ -165,6 +167,7 @@ local function detectCar(car, id)
     if i > n or M.manual[i] == nil then M.manual[i] = color.ORIGINAL end
   end
   carState.fill(0)
+  rpm.init(M.profile, M.info, ST, saveProfile)
   M.presetId = presets.choose(M.profile.preset, S.defaultPreset, M.layout, ST.drsPresent)
   M.compiledVersion = -1
   lights.init(id, M.profile, M.layout, M.info)
@@ -199,7 +202,8 @@ end
 
 function compileIfNeeded()
   local v = presets.version
-  if M.compiled and M.compiledVersion == v then return end
+  if M.compiled and M.compiledVersion == v and M.compiledRpm == rpm.version then return end
+  M.compiledRpm = rpm.version
   local old = M.compiled
   M.compiled = engine.compile(M.preset(), M.layout, ST)
   M.compiledVersion = v
@@ -251,6 +255,7 @@ function M.update(dt)
     if ac.getCarID(0) ~= M.carId then M.restart('car'); return end
   end
   carState.fill(dt)
+  rpm.update(ST, dt)
   if S.master then
     lights.update(dt, ST)
     lightsOn = true
@@ -284,6 +289,7 @@ end
 
 -- Error boundary restorer and app unload: everything back to the car.
 function M.halt()
+  pcall(rpm.flush)
   pcall(takeover.dispose)
   pcall(lights.release)
   lightsOn = false

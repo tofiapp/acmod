@@ -162,7 +162,7 @@ function M.eval(cl, buf, n, t, u, thr, rpm, frames)
     end
   elseif kind == FILL then
     local dir = cl.dir
-    if thr and cl.src == 'car' then
+    if thr then                       -- RPM per LED (the car's files or the car's own values in tab Otáčky)
       for k = 1, n do
         local tk = thr[k]
         buf[k] = (tk and rpm >= tk) and zoneColour(cl, thr.rank[k]) or cl.c2

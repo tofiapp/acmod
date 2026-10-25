@@ -7,6 +7,7 @@ local color = require('src/color')
 local patterns = require('src/patterns')
 local conditions = require('src/conditions')
 local presets = require('src/presets')
+local rpm = require('src/rpm')
 
 local M = {}
 
@@ -71,8 +72,19 @@ function M.compile(preset, layout, ST)
               f.srcN, g.name, grp.n)
           end
         end
-        if sc.cl.p == 'fill' and sc.cl.src == 'car' then
-          local thr = thresholdsOf(layout, g.leds)
+        if sc.cl.p == 'fill' then
+          -- RPM per LED: the car's own values from tab Otáčky (main row, shift lights), else with source 'car'
+          -- the thresholds from the car's files
+          local thr = nil
+          if sc.id == 'shiftLights' and g.role == 'main' and rpm.ledRpm and #rpm.ledRpm == grp.n then
+            thr = { rank = {} }
+            for k = 1, grp.n do
+              thr[k] = rpm.ledRpm[k]
+              thr.rank[k] = grp.n > 1 and (k - 1) / (grp.n - 1) or 1
+            end
+          elseif sc.cl.src == 'car' then
+            thr = thresholdsOf(layout, g.leds)
+          end
           sc.thr[gi] = thr
           if thr and sc.id == 'shiftLights' then
             for k = 1, #thr do if not sc.carStart or thr[k] < sc.carStart then sc.carStart = thr[k] end end

@@ -11,7 +11,7 @@ local ST = {
   fuel = 100, fuelWarn = 0, pitLimiter = false, inPitlane = false, inPit = false, engineLimiter = false,
   drsPresent = false, drsAvailable = false, drsActive = false, absInAction = false, tcInAction = false,
   hasAbs = false, hasTc = false, engineLife = 1000, damage = 0, flag = 0, timeToStart = -1e9, sessionStarted = true,
-  limiterKnown = false, rain = 0, wetness = 0, timeHours = 12, lap = 0, position = 0, steer = 0,
+  limiterKnown = false, limiterRpm = 8000, shiftStartManual = 0, rain = 0, wetness = 0, timeHours = 12, lap = 0, position = 0, steer = 0,
   headlights = false, lowBeams = false, hazards = false, isOnline = false, replay = false, paused = false,
   standingFor = 0,       -- s below 2 km/h
   engineOff = false,
@@ -50,10 +50,9 @@ local function probe(car, sim)
     simHas[i] = ok and v ~= nil
   end
   hasDamage = pcall(function () return car.damage[0] + car.damage[3] end)
+  -- the car's own value (percentages in conditions); the effective range (limiterRpm, shiftUp) comes from rpm.lua
   local okL, lim = pcall(readField, car, 'rpmLimiter')
-  ST.limiterKnown = okL and tonumber(lim) ~= nil and lim > 0
-  if ST.limiterKnown then ST.rpmLimiter = lim
-  else ST.rpmLimiter = ST.shiftKnown and ST.shiftUp / 0.97 or 8000 end  -- no limiter: a reference for percentages only
+  ST.rpmLimiter = (okL and tonumber(lim) and lim > 0) and lim or 8000
   local okM, mn = pcall(readField, car, 'rpmMinimum')
   ST.rpmMin = okM and tonumber(mn) and mn > 0 and mn or 800
   local okA, abs = pcall(readField, car, 'absModes')
@@ -96,7 +95,6 @@ function M.fill(dt)
     if d[3] > m then m = d[3] end
     ST.damage = m
   end
-  if not ST.shiftKnown then ST.shiftUp = ST.rpmLimiter * 0.97 end
   ST.flag = tonumber(ST.flag) or 0
   if ST.speed < 2 then ST.standingFor = ST.standingFor + dt else ST.standingFor = 0 end
   ST.engineOff = ST.rpm < ST.rpmMin * 0.5

@@ -82,7 +82,7 @@ app = H.loadApp()
 frame(5)
 check(not app.runtime.ST.limiterKnown and not app.engine.find(app.runtime.compiled, 'limiter').active,
   'no limiter: limiter scenario stays off at high rpm')
-check(math.abs(app.runtime.ST.rpmLimiter - 11500 / 0.97) < 1, 'no limiter: reference from the shift point')
+check(math.abs(app.runtime.ST.limiterRpm - 11500 / 0.97) < 1, 'no limiter: reference from the shift point')
 
 -- detection: two close rows become two groups, an arc stays one row
 local function build(fn)

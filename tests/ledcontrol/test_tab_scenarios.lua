@@ -128,7 +128,7 @@ for i = 1, #list do
   end
 end
 check(allRows, 'every row: on/off, up, down, Test, expand')
-check(has(text, 'ai.ini: 11500 ot/min'), 'availability note shown as a hint (shift point from ai.ini)')
+check(has(text, 'při 11500 ot/min (karta Otáčky)'), 'availability note shown as a hint (shift point from ai.ini)')
 check(has(text, 'nedostupné: AC tuto vlajku zatím nehlásí'), 'formula: red flag marked unavailable')
 
 -- live indicator
@@ -590,7 +590,7 @@ check(has(text, 'Preset: GT3 styl (vestavěný)') and has(text, presets.BUILTIN[
 check(has(text, 'nedostupné: auto nemá DRS'), 'gt3: DRS unavailable')
 check(has(text, 'nedostupné: AC tuto vlajku zatím nehlásí'), 'gt3: red flag unavailable')
 check(has(text, 'auto nemá boční diody, svítí hlavní řada'), 'gt3: side scenarios fall back to the main row (hint)')
-check(has(text, 'ai.ini nemá bod řazení'), 'gt3: shift point note without ai.ini')
+check(has(text, 'při 12610 ot/min (karta Otáčky)'), 'gt3: shift point note without ai.ini (97 % of the limiter)')
 
 -- ---------------------------------------------------------------- a car without RPM thresholds
 

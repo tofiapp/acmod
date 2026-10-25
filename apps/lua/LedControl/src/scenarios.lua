@@ -37,7 +37,9 @@ local function flag(id, name, value, look, works)
   }
 end
 
+-- start of the shift lights: the car's own RPM value (tab Otáčky) or the preset's percentage of the shift point
 local function shiftStart(ST, p)
+  if ST.shiftStartManual > 0 then return ST.shiftStartManual end
   return ST.shiftUp * p / 100
 end
 
@@ -59,15 +61,12 @@ M.list = {
 
   { id = 'limiter', name = 'Omezovač otáček', cat = 'Řazení', to = 'main', hold = 0.15,
     look = { p = 'blink', c = { BLUE, '#000000' }, hz = 8 },
-    test = function (ST) return ST.engineLimiter or (ST.limiterKnown and ST.rpm >= ST.rpmLimiter * 0.995) end,
+    test = function (ST) return ST.engineLimiter or (ST.limiterKnown and ST.rpm >= ST.limiterRpm * 0.995) end,
     avail = always },
   { id = 'shiftPoint', name = 'Ideální bod řazení', cat = 'Řazení', to = 'main',
     look = { p = 'solid', c = { PURPLE } },
     test = function (ST) return ST.gear > 0 and ST.rpm >= ST.shiftUp end,
-    avail = function (ST)
-      if ST.shiftKnown then return true, string.format('ai.ini: %d ot/min', ST.shiftUp) end
-      return true, 'ai.ini nemá bod řazení, beru 97 % omezovače'
-    end },
+    avail = function (ST) return true, string.format('při %d ot/min (karta Otáčky)', ST.shiftUp) end },
   { id = 'shiftLights', name = 'Řadicí světla podle otáček', cat = 'Řazení', to = 'main',
     param = { name = 'Začátek', unit = '% bodu řazení', default = 75, min = 30, max = 99 },
     look = { p = 'fill', dir = 'left', src = 'relative', c = { WHITE, '#000000' },

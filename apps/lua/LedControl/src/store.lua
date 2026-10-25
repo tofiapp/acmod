@@ -79,6 +79,7 @@ local function sanitiseCar(t)
   if type(t.preset) == 'string' and #t.preset <= 60 then out.preset = t.preset end
   out.map = sanitiseMap(t.map)
   if type(t.lights) == 'table' then out.lights = M.plain(t.lights) end
+  out.rpm = require('src/rpm').sanitise(t.rpm)
   return out
 end
 M.sanitiseCar = sanitiseCar
