@@ -56,6 +56,28 @@ AC zapisuje barvu svých diod každý snímek. Aby se aplikace s AC „nepřetah
 Když jeden způsob na autě nefunguje, aplikace sama přepne na další a napíše proč. Volba se pamatuje pro každé auto.
 Po pádu nebo restartu skriptu se schované diody samy vrátí.
 
+### Otáčky
+
+Karta **Otáčky** ukazuje živě otáčky a kde řadicí světla začínají, kde jsou plná (bod řazení) a kde bliká omezovač.
+Automaticky:
+
+- **Omezovač** se naučí ve hře: když AC poprvé zapne svůj omezovač, aplikace si otáčky zapamatuje pro toto auto.
+  Jinak vezme omezovač z dat auta.
+- **Plno / řazení** je bod řazení z `ai.ini`, ale jen když leží pod omezovačem. U závodních aut bývá v `ai.ini` stejně
+  vysoko nebo výš než omezovač, a pak by se světla nikdy nedoplnila a omezovač blikal už v půlce. Pak se použije 97 %
+  omezovače.
+- **Začátek** je procento z bodu řazení podle presetu.
+
+Každou hodnotu jde nastavit ručně (vypnout Auto) nebo tlačítkem **Teď** podle aktuálních otáček (např. na neutrál
+vytočit motor do omezovače a kliknout). V sekci **Každá dioda zvlášť** má každá dioda řady vlastní otáčky.
+
+### Jas a barvy
+
+Jas je v kartě Diody: posuvník, předvolby Noc / Den / Slunce a **Auto** podle denní doby (zvlášť jas ve dne a v noci).
+Vestavěné barvy jsou čisté (zelená, modrá, …), takže při vysokém jasu nepřecházejí do jiného odstínu. U vlastních
+barev to hlídá **Ochrana barev** v Nastavení; vedle každého výběru barvy jsou rychlé volby barev, které drží odstín
+při jakémkoli jasu.
+
 ### Scénáře a priorita
 
 Každá skupina diod ukazuje nejvýš postavený aktivní scénář, který na ni míří. Části bez barvy (průhledné) propustí

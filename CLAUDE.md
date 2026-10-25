@@ -225,7 +225,9 @@ apps/lua/LedControl/
                           visible; order = bounding sphere centre through the live node chain on car.side (left sign
                           from wheels[0]-wheels[1]); groups = single-linkage clusters (threshold 2.5 x median spacing,
                           >= 1.5 cm), main = biggest, Levé / Pravé / Další řada; manual map overrides; listMeshes()
-  src/takeover.lua        the only module that changes LED meshes: 1 shadow copy (createMesh of getVertices /
+  src/takeover.lua        brightness M.intensity set by runtime (manual or auto by time of day); emissiveOf() pushes
+                          weaker channels down above 12 (config colourGuard) so hues stay true; the only module that
+                          changes LED meshes: 1 shadow copy (createMesh of getVertices /
                           getIndices in the original's parent, assignMaterialFrom + ensureUniqueMaterials, original
                           hidden), 2 redraw (render.mesh, grow 8 % x live chain x 3 mm lift), 3 direct ksEmissive
                           (materials split only when shared, re-assert in frameBegin when AC writes back); fallback
@@ -236,7 +238,12 @@ apps/lua/LedControl/
                           car thresholds), frames ('.' transparent, '0' off, '1'..'9' palette; nearest-centre rescale),
                           rainbow, off, original; UNSET = transparent (falls through)
   src/conditions.lua      custom condition quantities / operators, compile, eval (no allocation), Czech describe
-  src/scenarios.lua       catalogue (order = default priority) with test / value / avail / param / hold
+  src/scenarios.lua       catalogue (order = default priority) with test / value / avail / param / hold; pure
+                          default colours (a small second channel turns green turquoise once the main one saturates)
+  src/rpm.lua             per car RPM range (profile.rpm): limiter learned from AC's isEngineLimiterOn (rising edge at
+                          high RPM; a flag on at low RPM = unreliable, ignored), else car.rpmLimiter; shift point =
+                          ai.ini UP only below 97 % of the limiter, else 97 %; manual start / shift / limiter and RPM
+                          per main-row LED; writes ST.shiftUp, ST.shiftStartManual, ST.limiterRpm, ST.limiterKnown
   src/presets.lua         built-ins F1 styl, GT3 styl, Minimální (relative); user presets sparse ('from' built-in),
                           copy-on-write editing, move, custom scenarios, export "LEDCONTROL-PRESET 1 " + JSON, import
                           via JSON.parse + sanitise
@@ -258,6 +265,8 @@ apps/lua/LedControl/
   src/online.lua          online state, banner and the optional block of real controls online
   src/hotkeys.lua         ac.ControlButton master / next preset / flash, polled in script.update
   src/diag.lua            "Kopírovat diagnostiku" text
+  src/ui/kit.lua          UI building blocks (label column, (?) help, sections, choice, dot, colour + safe quick picks);
+                          the design rules are docs/ledcontrol-ui.md; tests/ledcontrol/dump_ui.py prints a tab as text
   src/ui/main.lua         header (master, status, preset combo, errors, online / test pattern notes) + tabs loaded
                           lazily under pcall; src/ui/common.lua note() = coloured text that wraps (textColored does not)
   src/ui/tab_leds.lua     Diody (+ led_map.lua: manual order, groups, mesh picker), tab_scenarios.lua, tab_editor.lua,
