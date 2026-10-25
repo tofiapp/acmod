@@ -51,6 +51,8 @@ function M.compile(preset, layout, ST)
       param = tonumber(e.param) or 0, cl = patterns.compile(e.look), cond = e.custom and conditions.compile(e.when) or nil,
       avail = okAvail, note = note, active = false, since = 0, holdUntil = -1, forceUntil = -1, u = 1, frames = {},
       thr = {}, hold = e.def and e.def.hold or 0, layoutOk = true }
+    -- shift lights reach a full row one step before the shift point, so the full row shows before its blink
+    if e.id == 'shiftLights' then sc.cl.lead = true end
     C.scen[i] = sc
   end
   for gi = 1, #layout.groups do

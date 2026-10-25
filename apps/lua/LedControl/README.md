@@ -69,6 +69,9 @@ Automaticky:
   omezovače.
 - **Začátek** je procento z bodu řazení podle presetu.
 
+První dioda se rozsvítí hned na začátku a řada je plná o jeden krok před bodem řazení, takže je plná řada chvíli
+vidět, než začne blikání pro řazení.
+
 Každou hodnotu jde nastavit ručně (vypnout Auto) nebo tlačítkem **Teď** podle aktuálních otáček (např. na neutrál
 vytočit motor do omezovače a kliknout). V sekci **Každá dioda zvlášť** má každá dioda řady vlastní otáčky.
 

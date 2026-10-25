@@ -220,8 +220,8 @@ slide('##rpmStart', 7012)
 check(rpm.start == 7000, 'start slider snapped to 50 rpm (' .. rpm.start .. ')')
 setRpm(6990)
 check(litCount() == 0, 'manual start 7000: dark at 6990')
-setRpm(7400)
-check(litCount() == 1, 'manual start 7000: first LED at 7400 (' .. litCount() .. ')')
+setRpm(7100)
+check(litCount() == 1, 'manual start 7000: first LED at 7100 (' .. litCount() .. ')')
 click('Auto##rpmAutoStart')
 check(rpm.start == 0 and rt.ST.shiftStartManual == 0, 'start Auto on again')
 setRpm(7400)
@@ -299,8 +299,8 @@ local mainLeds = lay.groups[1].leds
 check(lay.groups[1].role == 'main' and #mainLeds == 15, 'formula: main row of 15')
 setRpm(8000)
 click('Zapnout##rpmLeds')
-check(rpm.ledRpm and #rpm.ledRpm == 15 and rpm.ledRpm[1] == 8625 and rpm.ledRpm[15] == 11500,
-  'Zapnout: spread evenly from the effective start to the shift point')
+check(rpm.ledRpm and #rpm.ledRpm == 15 and rpm.ledRpm[1] == 8625 and rpm.ledRpm[15] == 11308,
+  'Zapnout: spread evenly from the effective start to one step before the shift point')
 local v = {}
 for k = 1, 15 do v[k] = rpm.ledRpm[k] end
 setRpm(v[8] + 5)
@@ -351,7 +351,7 @@ check(rpm.ledRpm[4] == v[4], 'Teď on an LED with the engine off changes nothing
 
 -- spread again
 click('Rozložit rovnoměrně##rpmSpread')
-check(rpm.ledRpm[3] == v[3] and rpm.ledRpm[15] == 11500, 'Rozložit rovnoměrně: even values again')
+check(rpm.ledRpm[3] == v[3] and rpm.ledRpm[15] == 11308, 'Rozložit rovnoměrně: even values again')
 
 -- the car's own values
 click('Podle auta##rpmFromCar')
@@ -374,8 +374,10 @@ check(rpm.ledRpm == nil, 'per LED values switched off')
 text = capture()
 check(not drawn['##rpmLed1'] and sliderValue['Zapnout##rpmLeds'] == false, 'per LED rows gone')
 check(not has(text, 'Některé diody'), 'LED hint gone')
+setRpm(8600)
+check(litCount() == 0, 'back to the relative fill: dark just below the start')
 setRpm(8700)
-check(litCount() == 0, 'back to the relative fill: dark just above the start')
+check(litCount() == 1, 'back to the relative fill: first LED just above the start')
 
 -- values stored for another LED count
 rpm.setLeds({ 7000, 7500, 8000, 8500, 9000, 9500, 10000, 10500, 11000, 11400 }, rt.ST)

@@ -73,7 +73,7 @@ frame(2)
 check(litCount() == 0, 'manual start: dark below 7000')
 env.car.rpm = 8000
 frame(2)
-check(litCount() == 7, 'manual range: half way = 7 of 15 (' .. litCount() .. ')')
+check(litCount() == 8, 'manual range: half way = 8 of 15, first LED right at the start (' .. litCount() .. ')')
 env.car.rpm = 9100
 frame(2)
 check(not limiterActive(app), 'manual limiter: not at 9100')
@@ -85,7 +85,8 @@ check(rpm.limiter == 13000, 'limiter back to automatic')
 
 -- RPM per LED
 rpm.spread(15, 7000, rt.ST)
-check(#rpm.ledRpm == 15 and rpm.ledRpm[1] == 7000 and rpm.ledRpm[15] == 9000, 'spread evenly from start to shift point')
+check(#rpm.ledRpm == 15 and rpm.ledRpm[1] == 7000 and rpm.ledRpm[15] == 8867,
+  'spread evenly from start to one step before the shift point')
 rpm.setLed(15, 9800, rt.ST)
 rpm.set('shift', 9900, rt.ST)       -- shift point above the LEDs, so the whole-row shift point does not cover them
 env.car.rpm = 9500
@@ -100,7 +101,7 @@ check(litCount() == 0, 'below the first LED value: dark')
 rpm.setLeds(nil, rt.ST)
 check(rpm.ledRpm == nil, 'per LED values switched off')
 rpm.spread(15, 7000, rt.ST, 'edges')
-check(rpm.ledRpm[1] == 7000 and rpm.ledRpm[15] == 7000 and rpm.ledRpm[8] == rpm.shift and rpm.ledRpm[2] == rpm.ledRpm[14],
+check(rpm.ledRpm[1] == 7000 and rpm.ledRpm[15] == 7000 and rpm.ledRpm[8] < rpm.shift and rpm.ledRpm[8] > rpm.ledRpm[7] and rpm.ledRpm[2] == rpm.ledRpm[14],
   'spread edges to centre: pairs from both edges')
 check(rpm.manual.start and rpm.manual.shift and not rpm.manual.limiter, 'manual flags')
 rpm.setLeds(nil, rt.ST)

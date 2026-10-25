@@ -35,8 +35,8 @@ local anyLit = false
 for slot = 1, 15 do if lit(slotColour(slot)) then anyLit = true end end
 check(not anyLit, 'below the shift lights start: main row dark (base off) although AC lights it')
 
--- 60 % of the fill: 9 of 15 from the left, 1-5 green, 6-9 red
-car.rpm = 8625 + 0.6 * 2875
+-- 55 % of the fill: 9 of 15 from the left (first LED at the start, full row one step before the shift point)
+car.rpm = 8625 + 0.55 * 2875
 frame(2)
 local fillOk = true
 for slot = 1, 15 do
@@ -275,12 +275,19 @@ rt = app.runtime
 check(rt.presetId == 'builtin:gt3', 'gt3: auto preset GT3')
 local function gtColour(k) return env.seen(rt.layout.leds[k].inst[1].ref[1]) end
 -- 80 % start of shift point (97 % of limiter 13000 = 12610): half way -> 3 LEDs from each edge? 10 LEDs: half 5
-env.car.rpm = 12610 * 0.8 + 0.6 * (12610 * 0.2)
+env.car.rpm = 12610 * 0.8 + 0.5 * (12610 * 0.2)
 frame(2)
 local litCount = 0
 for k = 1, 10 do if lit(gtColour(k)) then litCount = litCount + 1 end end
 check(litCount == 6 and lit(gtColour(1)) and lit(gtColour(10)) and not lit(gtColour(5)),
   'gt3: fill from the edges (' .. litCount .. ' lit)')
+-- just below the shift point the row is already full in the fill colours, the shift point blink comes after it
+env.car.rpm = 12610 * 0.99
+frame(2)
+litCount = 0
+for k = 1, 10 do if lit(gtColour(k)) then litCount = litCount + 1 end end
+check(litCount == 10 and rt.compiled.groups[1].activeName == 'Řadicí světla podle otáček',
+  'gt3: full row before the shift point (' .. litCount .. ' lit, ' .. tostring(rt.compiled.groups[1].activeName) .. ')')
 env.sim.raceFlagType = 2
 local yellowMain = false
 for _ = 1, 30 do frame(1); local rr, gg = gtColour(5); if rr > 20 and gg > 15 then yellowMain = true end end

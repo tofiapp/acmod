@@ -172,9 +172,13 @@ function M.eval(cl, buf, n, t, u, thr, rpm, frames)
       end
     else
       if u < 0 then u = 0 end
+      local lead = cl.lead
       for k = 1, n do
         local r, len = rank(dir == 'bounce' and 'left' or dir, k, n)
         local m = floor(u * len + 1e-4)
+        -- lead (shift lights): the first step lights as soon as u > 0 and the row is full one step before
+        -- u = 1, so the full row is seen before the shift point blink starts there
+        if lead and u > 0 then m = m + 1; if m > len then m = len end end
         if r <= m then
           buf[k] = zoneColour(cl, len > 1 and (r - 1) / (len - 1) or 1)
         else

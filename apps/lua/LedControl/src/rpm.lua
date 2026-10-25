@@ -155,7 +155,7 @@ function M.setLed(k, value, ST)
   saveDue = clock + 0.5
 end
 
--- n values spread evenly from the start of the shift lights to the shift point, in the order the preset's fill
+-- n values spread evenly from the start of the shift lights to one step before the shift point, in the order the preset's fill
 -- lights the row: dir 'left' (default), 'right', 'edges' (pairs from both edges to the centre), 'centre'.
 function M.spread(n, startRpm, ST, dir)
   local list = {}
@@ -168,7 +168,7 @@ function M.spread(n, startRpm, ST, dir)
       r, len = math.min(k, n - k + 1), half
       if dir == 'centre' then r = half - r + 1 end
     end
-    list[k] = len > 1 and math.floor(a + (b - a) * (r - 1) / (len - 1) + 0.5) or b
+    list[k] = math.floor(a + (b - a) * (r - 1) / len + 0.5)   -- last step one step before the shift point
   end
   M.setLeds(list, ST)
 end
