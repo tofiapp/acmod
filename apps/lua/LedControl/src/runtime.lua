@@ -76,9 +76,29 @@ function M.setManual(i, p)
   M.manual[i] = p
 end
 
+-- Brightness the LEDs use now: the manual value, or with automatic brightness between the night and the day value
+-- by the time of day (day 8-17 h, night until 6 h and from 20 h, linear in between).
+function M.effectiveIntensity()
+  if not S.autoBrightness then return S.intensity end
+  local h = ST.timeHours or 12
+  local f
+  if h >= 8 and h <= 17 then f = 1
+  elseif h <= 6 or h >= 20 then f = 0
+  elseif h < 8 then f = (h - 6) / 2
+  else f = (20 - h) / 3 end
+  return S.intensityNight + (S.intensityDay - S.intensityNight) * f
+end
+
 function M.setIntensity(v)
   config.set('intensity', v)
-  takeover.invalidate()
+  takeover.setIntensity(M.effectiveIntensity())
+end
+
+-- key: 'autoBrightness' | 'intensityDay' | 'intensityNight' | 'colourGuard'
+function M.setBrightness(key, v)
+  config.set(key, v)
+  if key == 'colourGuard' then takeover.invalidate() end
+  takeover.setIntensity(M.effectiveIntensity())
 end
 
 -- The window marks an LED under the mouse; it blinks on the car while marked (the preview keeps its colour).
@@ -280,6 +300,7 @@ function M.update(dt)
   else
     fillTest(M.clock, mode)
   end
+  takeover.setIntensity(M.effectiveIntensity())
   local fb, h = M.fb, M.hover
   if not (h > 0 and h <= M.n and M.clock < M.hoverUntil) then h = 0 end
   local blink = floor(M.clock * 6) % 2 == 0 and color.WHITE or color.OFF

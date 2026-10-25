@@ -52,7 +52,7 @@ local HOVER_DRAG = ui.HoveredFlags and ui.HoveredFlags.AllowWhenBlockedByActiveI
 local PICKER = ui.ColorPickerFlags.PickerHueBar
 local TEXT_COLOUR = ui.StyleColor and ui.StyleColor.Text
 
-local DEFAULT_PALETTE = { '#FF0000', '#00FF40', '#0050FF', '#FFD000', '#FFFFFF', '#FF8000', '#A000FF', '#00C8FF',
+local DEFAULT_PALETTE = { '#FF0000', '#00FF00', '#0000FF', '#FFC800', '#FFFFFF', '#FF5000', '#A000FF', '#00C8FF',
   '#FF40A0' }
 
 local L = {

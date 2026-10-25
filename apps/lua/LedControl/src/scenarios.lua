@@ -9,8 +9,9 @@ local color = require('src/color')
 
 local M = {}
 
+-- pure colours: a small second channel (e.g. #00FF40) turns green into turquoise once the main channel saturates
 local ORANGE, BLUE, GREEN, RED, YELLOW, WHITE, PURPLE, CYAN =
-  '#FF8000', '#0050FF', '#00FF40', '#FF0000', '#FFD000', '#FFFFFF', '#A000FF', '#00C8FF'
+  '#FF5000', '#0000FF', '#00FF00', '#FF0000', '#FFC800', '#FFFFFF', '#A000FF', '#00C8FF'
 
 local function always() return true end
 

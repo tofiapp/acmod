@@ -328,7 +328,7 @@ U.pick = nil
 rt.setPreset('builtin:gt3')
 show(30)
 check(rt.presetId == 'builtin:gt3' and #presets.user == nUser
-  and presets.BUILTIN[1].scenarios.limiter.look.c[1] == '#0050FF',
+  and presets.BUILTIN[1].scenarios.limiter.look.c[1] == '#0000FF',
   'preset switch from a built-in preset: the pending colour is dropped, no copy made')
 rt.setPreset(userId)
 show(2)

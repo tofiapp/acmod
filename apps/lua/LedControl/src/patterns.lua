@@ -23,7 +23,10 @@ M.USES = {
   fill = { zones = true, c2 = true, dir = true }, frames = { frames = true }, rainbow = { hz = true }, off = {}, original = {},
 }
 
-M.DEFAULT_ZONES = { 0, '#00FF00', 0.4, '#FF0000', 0.75, '#0050FF' }
+M.DEFAULT_ZONES = { 0, '#00FF00', 0.4, '#FF0000', 0.75, '#0000FF' }
+
+-- Colours that stay true at any brightness (one or two full channels), offered as quick picks next to colour pickers.
+M.SAFE_COLOURS = { '#FF0000', '#FF5000', '#FFC800', '#00FF00', '#00C8FF', '#0000FF', '#A000FF', '#FFFFFF' }
 
 local KIND_INDEX = {}
 for i = 1, #M.KINDS do KIND_INDEX[M.KINDS[i]] = i end

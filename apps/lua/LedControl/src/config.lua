@@ -5,6 +5,10 @@ local defaults = {
   master = true,       -- master switch: false gives the car its own LEDs back
   method = 1,          -- default takeover method for cars without a profile: 1 shadow copy, 2 redraw, 3 direct write
   intensity = 25,      -- emissive strength of a full colour (AC's own LED configs use roughly 10..60)
+  colourGuard = 0.7,   -- 0..1: keeps hues true at high brightness (the weaker channels are pushed down)
+  autoBrightness = false, -- brightness follows the time of day between intensityNight and intensityDay
+  intensityDay = 35,
+  intensityNight = 12,
   testMode = 0,        -- 0 = normal operation (scenarios), 1..6 = test pattern of the Diody tab (runtime.MODES)
   defaultPreset = 'auto', -- preset for cars without their own choice ('auto': F1 styl for long rows / DRS, else GT3)
   showDiag = false,    -- Diody tab: show the diagnostics block

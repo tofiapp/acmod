@@ -33,6 +33,32 @@ M.SHADOW, M.REDRAW, M.DIRECT = 1, 2, 3
 M.NAMES = { 'A – stínová kopie', 'B – překreslení', 'C – přímý zápis' }
 
 local UNSET = -2
+M.intensity = S.intensity     -- effective brightness (runtime sets it: manual, or by the time of day)
+
+local pow = math.pow or function (a, b) return a ^ b end
+
+-- Emissive of packed colour p at brightness k into col. Above k = 12 the weaker channels are pushed down
+-- (c = max * (c / max) ^ gamma), so a colour keeps its hue when its main channel saturates in the HDR image.
+local function emissiveOf(p, k, col)
+  local r, g, b = color.unpack(p)
+  local guard = S.colourGuard or 0
+  if guard > 0 and k > 12 then
+    local m = r > g and (r > b and r or b) or (g > b and g or b)
+    if m > 0 then
+      local gamma = 1 + guard * math.log(k / 12) / math.log(2)
+      r, g, b = m * pow(r / m, gamma), m * pow(g / m, gamma), m * pow(b / m, gamma)
+    end
+  end
+  col:set(r * k, g * k, b * k)
+end
+M.emissiveOf = emissiveOf
+
+-- Brightness change: every LED is written again on the next set().
+function M.setIntensity(k)
+  if math.abs(k - M.intensity) < 0.25 then return end
+  M.intensity = k
+  for i = 1, M.n do M.items[i].cur = UNSET end
+end
 local layoutRef = nil
 local carId = ''
 local guardTimer = 0
@@ -240,9 +266,8 @@ local function showOriginal(it)
 end
 
 local function showColour(it, p)
-  local r, g, b = color.unpack(p)
-  local k = S.intensity
-  it.col:set(r * k, g * k, b * k)
+  local k = M.intensity
+  emissiveOf(p, k, it.col)
   local m = M.method
   if m == M.SHADOW then
     if not it.taken and not guardWritten then writeGuard(); guardWritten = true end
@@ -266,9 +291,11 @@ local function showColour(it, p)
     end
   else
     -- redraw: shader colour in display units (1 = white reference); an unlit LED is drawn dark to cover AC's light
-    local br = k / 25
     if p == 0 then it.draw.r, it.draw.g, it.draw.b = 0.025, 0.025, 0.03
-    else it.draw.r, it.draw.g, it.draw.b = r * br, g * br, b * br end
+    else
+      local c = it.col
+      it.draw.r, it.draw.g, it.draw.b = c.r / 25, c.g / 25, c.b / 25
+    end
   end
   it.taken = true
   M.stats.writes = M.stats.writes + 1
