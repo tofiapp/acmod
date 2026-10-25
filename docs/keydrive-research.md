@@ -86,3 +86,22 @@ script (AGA). Plan: the core owns persistence (per car, per mode), the app edits
    and the final `car.gas` so this can be read directly.
    Fallback if keys leak in: bind AC's GAS/BRAKE/LEFT/RIGHT to unused keys and give KeyDrive its own
    `ac.ControlButton` driving keys.
+
+## AC's own keyboard filter (measured, v0.9)
+
+Recorded with the KeyDriveConfig "KeyDrive Reference" window in the normal keyboard input mode (120 s, Supercars Gen3
+Supra, controls.ini [KEYBOARD] STEERING_SPEED 1.75, STEERING_OPPOSITE_DIRECTION_SPEED 2.5, STEER_RESET_SPEED 1.8).
+Steering in units of full lock (270 deg of steering wheel for that car):
+
+- Outwards (key held, wheel on the key's side or centred): STEERING_SPEED x factor(speed), independent of the wheel
+  position and of lateral g. Factor: 0.60 at 55 km/h, 0.50 at 95, 0.37 at 105, 0.30 at 125, 0.24 at 145, 0.18 at
+  165, 0.14 at 185, 0.11 at 205, 0.10 from 215 km/h (extrapolated 0.74 at standstill).
+- Back to the centre with no key: STEER_RESET_SPEED x STEERING_SPEED = 3.15 /s, not speed dependent.
+- Towards the other side while the wheel still points the other way: STEERING_OPPOSITE_DIRECTION_SPEED x
+  STEERING_SPEED = 4.4 /s (few samples).
+- In gamepad mode with Combine with keyboard, AC sends no keyboard steering to the joypad state (v0.8.1 detection).
+
+Pedals in keyboard mode (for later):
+- Throttle rises ~4.5 /s (0 -> 0.9 in 0.22 s); with rear ndSlip around 1 it dips quickly (0.90 -> 0.71 in 0.07 s) and
+  returns, never below ~0.35-0.45 while the key is held, and still lets the rear reach ndSlip ~2 at full throttle.
+- Brake never goes to 1: it settles at 0.55-0.70 with small modulation, fronts at ndSlip ~0.65-0.75, no locking.

@@ -173,6 +173,9 @@ local function brakeInput(dt, kBrake)
 end
 
 local counterHold = 0
+-- Outward steering speed factor of AC's keyboard filter against km/h (measured, see steerInput).
+local AC_SPEED_CURVE = curve.parse('0:0.74 55:0.60 95:0.50 105:0.366 125:0.302 145:0.236 165:0.184 185:0.142 ' ..
+  '205:0.108 215:0.10 400:0.10')
 -- STEER_STYLE 0: if AC itself computes the keyboard steering in gamepad mode (Combine with keyboard), it arrives in
 -- the joypad state before KeyDrive writes it. Votes decide: a steering key held while the incoming value points the
 -- same way (and differs from what KeyDrive wrote last step, so it is not our own value echoed back) means AC steers.
@@ -187,17 +190,19 @@ local function steerInput(dt, kLeft, kRight)
   end
   local rate
   if P.steerStyleAC then
-    -- Same as AC's keyboard steering: STEERING_SPEED towards a side, STEERING_OPPOSITE_DIRECTION_SPEED while the
-    -- wheels still point the other way, STEER_RESET_SPEED back to the centre with no key.
-    local cur = steerRequest
+    -- AC's own keyboard steering, measured in the normal keyboard mode (ac-reference.csv, Supercars Gen3 Supra,
+    -- STEERING_SPEED 1.75, OPPOSITE 2.5, RESET 1.8): outwards it turns at STEERING_SPEED times a factor that falls
+    -- with the car's speed (AC_KEYBOARD_SPEED_CURVE), independent of the wheel position and lateral g; back to the
+    -- centre at STEER_RESET_SPEED * STEERING_SPEED (3.15 /s measured); towards the other side while the wheels still
+    -- point the other way at STEERING_OPPOSITE_DIRECTION_SPEED * STEERING_SPEED (4.4 /s measured).
     local back
     if target == 0 or (kLeft and kRight) then
-      back = keys.steerResetSpeed
+      back = keys.steerResetSpeed * keys.steerSpeed
     else
-      back = keys.steerOppositeSpeed
+      back = keys.steerOppositeSpeed * keys.steerSpeed
     end
-    rate = keys.steerSpeed
-    steerRequest = ramp.stepSigned(cur, target, rate, back, dt)
+    rate = keys.steerSpeed * curve.eval(AC_SPEED_CURVE, math.abs(car.speedKmh))
+    steerRequest = ramp.stepSigned(steerRequest, target, rate, back, dt)
     if back > rate then rate = back end
   else
     rate = curve.eval(P.steerCurve, math.abs(car.speedKmh)) / 100

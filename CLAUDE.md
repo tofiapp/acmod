@@ -194,4 +194,7 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
 - v0.8.1 user: panel says "KeyDrive" (AC sends no keyboard steering in gamepad mode); steering "steers like a
   joystick, not like normal". v0.8.2 adds the reference recorder app; next step: fit AC's keyboard steering (and its
   hidden throttle/brake help) from ac-reference.csv, then copy it in STEER_STYLE 0.
-Next: get ac-reference.csv from the user, then phase 6.
+- ac-reference.csv received: AC's keyboard steering = outward STEERING_SPEED x speed factor (1.05 /s at 55 km/h ...
+  0.17 /s from 215 km/h), reset 3.15 /s, opposite 4.4 /s (details in docs/keydrive-research.md, also AC's keyboard
+  throttle/brake help). v0.9: STEER_STYLE 0 copies it exactly (AC_SPEED_CURVE in assist.lua).
+Next: user test of v0.9 steering, then decide whether the pedals should copy AC's keyboard help as a base, then phase 6.
