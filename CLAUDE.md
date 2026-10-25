@@ -246,7 +246,16 @@ apps/lua/LedControl/
   src/runtime.lua         states wait -> run | off | noleds | failed; restart on session, car change, method, map;
                           per frame car_state.fill -> engine.step or a test pattern -> takeover.set (hover blink only
                           on the car, never in fb); preset per car; lights.update while the master switch is on
-  src/lights.lua          lights of the car (tab Světla), see that file
+  src/lights.lua          lights (tab Světla): outputs rain / headlights / hazards / flash (real controls via
+                          ac.setHeadlights, setHighBeams, setTurningLights, overrideCarControls().headlightsFlash,
+                          simulateCustomHotkeyPress('__EXT_LIGHT_x') as Unbound) and brake / backlight (visual);
+                          per output the highest active scenario wins; commands only on change, >= 0.25 s apart,
+                          read back, 2 retries; driver change = scenario lets go; the driver's state is given back;
+                          held states in lcl_realGuard (healed at init), LED-only restarts keep held lights, nothing
+                          commanded while paused, replay parks; scenario settings global (ac.storage 'lcl_', saves
+                          deferred 0.5 s), rain mode / meshes / cabin light per car in profile.lights
+  src/light_meshes.lua    shadow copies of light meshes (same approach as takeover), marker lcl_meshGuard
+  src/online.lua          online state, banner and the optional block of real controls online
   src/hotkeys.lua         ac.ControlButton master / next preset / flash, polled in script.update
   src/diag.lua            "Kopírovat diagnostiku" text
   src/ui/main.lua         header (master, status, preset combo, errors) + tabs loaded lazily under pcall
