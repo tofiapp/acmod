@@ -202,7 +202,11 @@ local function resample(s, n)
   if len == 0 then return string.rep('0', n) end
   local out = {}
   for k = 1, n do
-    local src = floor((k - 0.5) * len / n) + 1
+    -- same rule as patterns.framesFor: mirrored halves, a tie goes to the outer cell
+    local m = (2 * k <= n) and k or (n + 1 - k)
+    local src = floor((m - 0.5) * len / n + 1 - 1e-6)
+    if src < 1 then src = 1 end
+    if m ~= k then src = len + 1 - src end
     out[k] = s:sub(src, src)
   end
   return table.concat(out)

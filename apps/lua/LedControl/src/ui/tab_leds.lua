@@ -17,7 +17,7 @@ local GREY = rgbm(0.6, 0.6, 0.6, 1)
 local CELL = vec2(24, 24)
 local CELL_STEP = 28
 
-local LABELS, PREVIEW = {}, {}
+local LABELS, PREVIEW, SHOWN = {}, {}, {}
 for i = 1, detect.MAX_LEDS do
   LABELS[i] = '##led' .. i
   PREVIEW[i] = rgbm(0, 0, 0, 1)
@@ -104,11 +104,17 @@ local function preview()
       local i = g.leds[k]
       local c = PREVIEW[i]
       local p = running and fb[i] or color.ORIGINAL
-      if p < 0 then c.r, c.g, c.b = 0.22, 0.22, 0.24
-      else c.r, c.g, c.b = color.unpack(p) end
+      -- refreshed only when the LED changed from elsewhere: the picker gets its own (unquantised) value back
+      if p ~= SHOWN[i] then
+        if p < 0 then c.r, c.g, c.b = 0.22, 0.22, 0.24
+        else c.r, c.g, c.b = color.unpack(p) end
+        SHOWN[i] = p
+      end
       if k > 1 and (k - 1) % perRow ~= 0 then ui.sameLine() end
       if ui.colorButton(LABELS[i], c, ui.ColorPickerFlags.PickerHueBar, CELL) then
-        runtime.setManual(i, color.pack(c.r, c.g, c.b))
+        local q = color.pack(c.r, c.g, c.b)
+        SHOWN[i] = q
+        runtime.setManual(i, q)
       end
       if ui.itemHovered() then
         runtime.markHover(i)

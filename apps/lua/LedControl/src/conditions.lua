@@ -50,8 +50,8 @@ function M.sanitise(rows)
   if type(rows) ~= 'table' then return out end
   for i = 1, math.min(#rows, 8) do
     local r = rows[i]
-    if type(r) == 'table' and BY_ID[r.q] and OP_INDEX[r.op] and tonumber(r.v) then
-      local v = tonumber(r.v)
+    local v = type(r) == 'table' and tonumber(r.v)
+    if v and v == v and v > -1e9 and v < 1e9 and BY_ID[r.q] and OP_INDEX[r.op] then
       if BY_ID[r.q].bool then
         out[#out + 1] = { q = r.q, op = '=', v = holds(r.op, 1, v) and 1 or 0 }
       else

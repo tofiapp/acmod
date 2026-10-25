@@ -32,6 +32,7 @@ local function read()
   end
 
   local ok2, cfg = pcall(ac.INIConfig.carConfig, 0)
+  info.cspConfig = ok2 and cfg or false
   if ok2 and cfg and cfg.sections then
     for name, keys in pairs(cfg.sections) do
       info.cspSections = info.cspSections + 1
@@ -66,9 +67,17 @@ local function read()
   return info
 end
 
+-- Cached per car id: the car's files do not change during a session, and CSP's car config can be slow to parse.
+local cache = { id = nil, info = nil }
+
 function M.read()
+  local id = ac.getCarID(0)
+  if cache.info and cache.id == id then return cache.info end
   local ok, info = pcall(read)
-  if ok then return info end
+  if ok then
+    cache.id, cache.info = id, info
+    return info
+  end
   return { carId = '', leds = {}, cspRpm = {}, generators = {}, cspSections = 0, shiftUp = 0, fuelWarn = 0,
     errors = { tostring(info) } }
 end

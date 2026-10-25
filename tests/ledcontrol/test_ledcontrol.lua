@@ -211,7 +211,7 @@ loadApp()
 frame(3)
 rt, tk = app.runtime, app.takeover
 check(tk.method == 3, 'direct: method C active')
-check(tk.stats.split and tk.stats.materialsAfter > tk.stats.materialsBefore, 'direct: shared materials split')
+check(tk.stats.split and not tk.stats.noHolders, 'direct: shared materials split through hidden holders')
 frame(90)
 check(tk.stats.fights > 0 and tk.fightMode, 'direct: AC writing back detected')
 check(near(seenOf('RPM_LED_1'), 25), 'direct: colour re-asserted before rendering')

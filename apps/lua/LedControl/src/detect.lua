@@ -180,7 +180,61 @@ local function cluster(leds)
     c.minH, c.maxH = math.min(c.minH, led.height), math.max(c.maxH, led.height)
     c.sumH = c.sumH + led.height
   end
-  return list, th
+  return list, th, median
+end
+
+local function newCluster(leds)
+  local c = { leds = leds, minL = math.huge, maxL = -math.huge, minH = math.huge, maxH = -math.huge, sumH = 0 }
+  for i = 1, #leds do
+    local led = leds[i]
+    c.minL, c.maxL = math.min(c.minL, led.lateral), math.max(c.maxL, led.lateral)
+    c.minH, c.maxH = math.min(c.minH, led.height), math.max(c.maxH, led.height)
+    c.sumH = c.sumH + led.height
+  end
+  return c
+end
+
+-- A horizontal cluster holding two or more rows (closer than the cluster threshold) is split where the heights jump,
+-- so each row is its own group in left-to-right order. Kept only when every row has at least 2 LEDs.
+local function splitRows(list, median)
+  local out = {}
+  local gap = math.max(0.008, 0.6 * (median or 0))
+  for i = 1, #list do
+    local c = list[i]
+    local rows = nil
+    if #c.leds >= 4 and c.maxL - c.minL >= c.maxH - c.minH then
+      local byH = {}
+      for k = 1, #c.leds do byH[k] = c.leds[k] end
+      table.sort(byH, function (a, b) return a.height > b.height end)
+      rows = { { byH[1] } }
+      for k = 2, #byH do
+        if byH[k - 1].height - byH[k].height > gap then rows[#rows + 1] = {} end
+        local r = rows[#rows]
+        r[#r + 1] = byH[k]
+      end
+      -- each row must be a real row: at least 2 LEDs and no lateral hole bigger than 2.5 x the LED spacing
+      -- (an arc sliced by height gives pairs far apart: not rows)
+      local maxHole = 2.5 * math.max(median or 0, 0.004)
+      for k = 1, #rows do
+        local r = rows[k]
+        if #r < 2 then rows = nil; break end
+        local byL = {}
+        for j = 1, #r do byL[j] = r[j].lateral end
+        table.sort(byL)
+        for j = 2, #byL do
+          if byL[j] - byL[j - 1] > maxHole then rows = nil; break end
+        end
+        if not rows then break end
+      end
+      if rows and #rows < 2 then rows = nil end
+    end
+    if rows then
+      for k = 1, #rows do out[#out + 1] = newCluster(rows[k]) end
+    else
+      out[#out + 1] = c
+    end
+  end
+  return out
 end
 
 local function orderCluster(c)
@@ -194,7 +248,8 @@ local function orderCluster(c)
 end
 
 local function makeGroups(leds)
-  local list, th = cluster(leds)
+  local list, th, median = cluster(leds)
+  list = splitRows(list, median)
   local main = nil
   for i = 1, #list do
     local c = list[i]

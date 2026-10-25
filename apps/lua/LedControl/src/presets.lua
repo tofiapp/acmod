@@ -141,7 +141,8 @@ local function sanitiseEntry(id, e)
   if type(e.on) == 'boolean' then out.on = e.on end
   out.prio = num(e.prio, 1, 999)
   out.to = TARGET_OK[e.to] and e.to or nil
-  out.param = num(e.param, -1e6, 1e6)
+  local d = scenarios.byId[id]
+  if d and d.param then out.param = num(e.param, d.param.min, d.param.max) else out.param = nil end
   out.look = M.sanitiseLook(e.look)
   if scenarios.isCustom(id) then
     out.name = str(e.name, 40) or 'Vlastní podmínka'
@@ -326,7 +327,10 @@ function M.setScenario(presetId, scId, field, value)
   if field == 'when' then value = conditions.sanitise(value) end
   if field == 'name' then value = str(value, 40) or 'Vlastní podmínka' end
   if field == 'to' then value = TARGET_OK[value] and value or nil end
-  if field == 'param' then value = num(value, -1e6, 1e6) end
+  if field == 'param' then
+    local d = scenarios.byId[scId]
+    value = (d and d.param) and num(value, d.param.min, d.param.max) or nil
+  end
   if field == 'prio' then value = num(value, 1, 999) end
   if field == 'on' then value = value == true end
   e[field] = value
@@ -367,7 +371,10 @@ function M.addCustom(presetId)
   local n = 1
   while p.scenarios['custom:' .. n] do n = n + 1 end
   local scId = 'custom:' .. n
-  p.scenarios[scId] = { name = 'Vlastní podmínka ' .. n, on = true, prio = 100 + n, to = 'all',
+  local last = 0
+  local list = M.effective(p)
+  for i = 1, #list do if list[i].prio > last then last = list[i].prio end end
+  p.scenarios[scId] = { name = 'Vlastní podmínka ' .. n, on = true, prio = math.min(999, last + 1), to = 'all',
     look = deepCopy(scenarios.CUSTOM_LOOK), when = { { q = 'speed', op = '<', v = 60 } } }
   M.save()
   return id, scId
@@ -422,12 +429,37 @@ function M.export(id)
   return EXPORT_PREFIX .. JSON.stringify(out)
 end
 
+-- true when text is one complete JSON object: starts with '{' and its brackets close exactly at the end
+-- (counted outside strings). CSP's JSON.parse does not fail on damaged input, so a cut text must be caught here.
+function M.balanced(text)
+  if text:sub(1, 1) ~= '{' then return false end
+  local depth, inString, escaped = 0, false, false
+  for i = 1, #text do
+    local c = text:sub(i, i)
+    if inString then
+      if escaped then escaped = false
+      elseif c == '\\' then escaped = true
+      elseif c == '"' then inString = false end
+    elseif c == '"' then inString = true
+    elseif c == '{' or c == '[' then depth = depth + 1
+    elseif c == '}' or c == ']' then
+      depth = depth - 1
+      if depth < 0 then return false end
+      if depth == 0 and i < #text then return false end
+    end
+  end
+  return depth == 0 and not inString
+end
+
 -- Returns the new preset id, or nil and a Czech reason.
 function M.import(text)
   if type(text) ~= 'string' then return nil, 'Schránka je prázdná.' end
   local at = text:find(EXPORT_PREFIX, 1, true)
   if not at then return nil, 'Ve schránce není preset LedControl (chybí „LEDCONTROL-PRESET 1“).' end
   local body = text:sub(at + #EXPORT_PREFIX):gsub('^%s+', ''):gsub('%s+$', '')
+  if not M.balanced(body) then
+    return nil, 'Preset ve schránce je neúplný (text je useknutý), zkopírujte ho znovu celý.'
+  end
   local ok, data = pcall(JSON.parse, body)
   if not ok or type(data) ~= 'table' then return nil, 'Preset ve schránce nejde přečíst (poškozený JSON).' end
   local p = M.sanitise(data)

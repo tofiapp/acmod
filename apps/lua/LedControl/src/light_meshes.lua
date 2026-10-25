@@ -105,9 +105,9 @@ local function makeCopy(w, ref, k)
   if not parent or #parent == 0 then return nil, 'mesh nemá nadřazený uzel' end
   local copy = parent:createMesh(string.format('%s%s_%d', M.PREFIX, w.role, k), nil, v, ix, false, true)
   if not copy or #copy == 0 then return nil, 'createMesh nevytvořil kopii' end
-  copy:assignMaterialFrom(ref)
-  copy:ensureUniqueMaterials()
   copy:setVisible(false)
+  local ok, err = pcall(function () copy:assignMaterialFrom(ref); copy:ensureUniqueMaterials() end)
+  if not ok then pcall(copy.dispose, copy); return nil, tostring(err) end
   local okS, shadows = pcall(ref.isCastingShadows, ref, 1)
   if okS then pcall(copy.setShadows, copy, shadows == true) end
   local okT, transparent = pcall(ref.isTransparent, ref, 1)

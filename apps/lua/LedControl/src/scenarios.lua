@@ -59,7 +59,8 @@ M.list = {
 
   { id = 'limiter', name = 'Omezovač otáček', cat = 'Řazení', to = 'main', hold = 0.15,
     look = { p = 'blink', c = { BLUE, '#000000' }, hz = 8 },
-    test = function (ST) return ST.engineLimiter or ST.rpm >= ST.rpmLimiter * 0.995 end, avail = always },
+    test = function (ST) return ST.engineLimiter or (ST.limiterKnown and ST.rpm >= ST.rpmLimiter * 0.995) end,
+    avail = always },
   { id = 'shiftPoint', name = 'Ideální bod řazení', cat = 'Řazení', to = 'main',
     look = { p = 'solid', c = { PURPLE } },
     test = function (ST) return ST.gear > 0 and ST.rpm >= ST.shiftUp end,

@@ -90,7 +90,13 @@ function M.framesFor(cl, gi, n, allowRescale)
     for k = 1, n do
       local src
       if len == n then src = k
-      else src = floor((k - 0.5) * len / n) + 1 end
+      else
+        -- nearest centre; the right half mirrors the left half; a tie goes to the outer cell, so edges survive
+        local m = (2 * k <= n) and k or (n + 1 - k)
+        src = floor((m - 0.5) * len / n + 1 - 1e-6)
+        if src < 1 then src = 1 end
+        if m ~= k then src = len + 1 - src end
+      end
       row[k] = code(s:sub(src, src))
     end
     out.rows[fi] = row

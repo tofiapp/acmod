@@ -71,7 +71,13 @@ function M.compile(preset, layout, ST)
               f.srcN, g.name, grp.n)
           end
         end
-        if sc.cl.p == 'fill' and sc.cl.src == 'car' then sc.thr[gi] = thresholdsOf(layout, g.leds) end
+        if sc.cl.p == 'fill' and sc.cl.src == 'car' then
+          local thr = thresholdsOf(layout, g.leds)
+          sc.thr[gi] = thr
+          if thr and sc.id == 'shiftLights' then
+            for k = 1, #thr do if not sc.carStart or thr[k] < sc.carStart then sc.carStart = thr[k] end end
+          end
+        end
       end
     end
     C.groups[gi] = grp
@@ -107,6 +113,7 @@ function M.step(C, ST, fb)
     if sc.forceUntil > t then on = true
     elseif sc.on and ST.ready then
       on = testOf(sc, ST)
+      if not on and sc.carStart and ST.rpm >= sc.carStart then on = true end
       if on then sc.holdUntil = t + sc.hold
       elseif sc.holdUntil > t then on = true end
     end

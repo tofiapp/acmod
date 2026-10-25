@@ -399,7 +399,7 @@ end
 stringify = setmetatable({
   parse = function (s)
     local f = assert(loadstring('return ' .. s))
-    setfenv(f, {})
+    setfenv(f, setmetatable({}, { __index = function (_, k) error('Not available: ' .. tostring(k)) end }))
     return f()
   end,
 }, { __call = function (_, v) local out = {}; ser(v, out); return table.concat(out) end })

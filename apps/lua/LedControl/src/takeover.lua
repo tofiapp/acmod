@@ -107,14 +107,14 @@ local function attachShadow()
       if not v or not ix then return false, 'getVertices/getIndices nevrátily data (' .. inst.name .. ')' end
       local copy = inst.parent:createMesh(string.format('__ledcontrol_%d_%d', i, k), nil, v, ix, false, true)
       if not copy or #copy == 0 then return false, 'createMesh nevytvořil kopii (' .. inst.name .. ')' end
+      inst.copy = copy                -- recorded first: dispose() removes it even when a call below fails
+      copy:setVisible(false)
       copy:assignMaterialFrom(inst.ref)
       copy:ensureUniqueMaterials()
-      copy:setVisible(false)
       local okS, shadows = pcall(inst.ref.isCastingShadows, inst.ref, 1)
       if okS then copy:setShadows(shadows == true) end
       local okT, transparent = pcall(inst.ref.isTransparent, inst.ref, 1)
       if okT and transparent then copy:setTransparent(true) end
-      inst.copy = copy
       made = made + 1
     end
   end
@@ -132,6 +132,12 @@ local function attachRedraw()
       local c = inst.centre
       inst.grow = mat4x4.translation(vec3(-c.x, -c.y, -c.z)):mul(mat4x4.scaling(vec3(GROW, GROW, GROW)))
         :mul(mat4x4.translation(c))
+      inst.nodes = {}
+      local node = inst.parent
+      while node and #node > 0 and #inst.nodes < 32 do
+        inst.nodes[#inst.nodes + 1] = node
+        node = node:getParent()
+      end
     end
   end
   return true
@@ -146,15 +152,51 @@ local function materialCount()
   return all:getMaterialsCount(), all
 end
 
+-- A hidden mesh holding the instance's current material (shared with it).
+local function holderOf(inst, tag)
+  local v, ix = inst.ref:getVertices(), inst.ref:getIndices()
+  if not v or not ix then return nil end
+  local h = inst.parent:createMesh('__ledcontrol_' .. tag, nil, v, ix, false, true)
+  if not h or #h == 0 then return nil end
+  h:setVisible(false)
+  h:assignMaterialFrom(inst.ref)
+  return h
+end
+
 local function attachDirect()
   local before = materialCount()
   M.stats.materialsBefore = before
   local instances = M.stats.instances
   if before < instances then
-    -- LEDs share materials: give every single instance its own (unique relative to the rest of the scene)
+    -- LEDs share materials. Each instance gets two hidden holders: one keeps AC's material, one gets a private copy.
+    -- A taken LED shares the private one, an LED given back to the car shares AC's one again (AC may keep writing
+    -- the material the LED had at load, so a permanent split would freeze the car's own LEDs).
+    local allHeld = true
     for i = 1, M.n do
       local inst = M.items[i].inst
-      for k = 1, #inst do inst[k].ref:ensureUniqueMaterials() end
+      for k = 1, #inst do
+        local x = inst[k]
+        local okA, a = pcall(holderOf, x, string.format('a%d_%d', i, k))
+        local okO, o = pcall(holderOf, x, string.format('o%d_%d', i, k))
+        x.acHold = okA and a or nil
+        x.ownHold = okO and o or nil
+        if x.ownHold then x.ownHold:ensureUniqueMaterials() end
+        if not (x.acHold and x.ownHold) then allHeld = false end
+      end
+    end
+    if not allHeld then
+      -- no holders (createMesh missing): split for good and say that the car's LEDs return after a session restart
+      for i = 1, M.n do
+        local inst = M.items[i].inst
+        for k = 1, #inst do
+          local x = inst[k]
+          if x.acHold then pcall(x.acHold.dispose, x.acHold) end
+          if x.ownHold then pcall(x.ownHold.dispose, x.ownHold) end
+          x.acHold, x.ownHold = nil, nil
+          x.ref:ensureUniqueMaterials()
+        end
+      end
+      M.stats.noHolders = true
     end
     M.stats.split = true
   end
@@ -190,7 +232,8 @@ local function showOriginal(it)
   elseif m == M.DIRECT then
     for k = 1, #it.inst do
       local inst = it.inst[k]
-      if inst.orig then setEmissive(inst.ref, inst.orig) end
+      if inst.acHold then inst.ref:assignMaterialFrom(inst.acHold)
+      elseif inst.orig then setEmissive(inst.ref, inst.orig) end
     end
   end
   it.taken = false
@@ -216,7 +259,11 @@ local function showColour(it, p)
       end
     end
   elseif m == M.DIRECT then
-    for j = 1, #it.inst do setEmissive(it.inst[j].ref, it.col) end
+    for j = 1, #it.inst do
+      local inst = it.inst[j]
+      if not it.taken and inst.ownHold then inst.ref:assignMaterialFrom(inst.ownHold) end
+      setEmissive(inst.ref, it.col)
+    end
   else
     -- redraw: shader colour in display units (1 = white reference); an unlit LED is drawn dark to cover AC's light
     local br = k / 25
@@ -245,7 +292,7 @@ end
 local function releaseItems()
   for i = 1, M.n do
     local it = M.items[i]
-    if it.taken or it.cur ~= UNSET then showOriginal(it) end
+    if it.taken or it.cur ~= UNSET then pcall(showOriginal, it) end
     it.cur = UNSET
   end
 end
@@ -256,8 +303,12 @@ function M.dispose()
   for i = 1, M.n do
     local inst = M.items[i].inst
     for k = 1, #inst do
-      local c = inst[k].copy
-      if c then pcall(c.setVisible, c, false); pcall(c.dispose, c); inst[k].copy = nil end
+      local x = inst[k]
+      local c = x.copy
+      if c then pcall(c.setVisible, c, false); pcall(c.dispose, c); x.copy = nil end
+      if x.acHold then pcall(x.ref.assignMaterialFrom, x.ref, x.acHold); pcall(x.acHold.dispose, x.acHold) end
+      if x.ownHold then pcall(x.ownHold.dispose, x.ownHold) end
+      x.acHold, x.ownHold = nil, nil
     end
   end
   -- only a marker this run wrote is cleared here; one left by an earlier run waits for heal()
@@ -276,7 +327,7 @@ function M.attach(layout, wanted, id)
   M.fallback = nil
   local s = M.stats
   s.copies, s.reShows, s.fights, s.copyWrites, s.writes, s.drawErrors = 0, 0, 0, 0, 0, 0
-  s.materialsBefore, s.materialsAfter, s.split = 0, 0, false
+  s.materialsBefore, s.materialsAfter, s.split, s.noHolders = 0, 0, false, false
   local reasons = {}
   for step = 0, 2 do
     local m = (wanted - 1 + step) % 3 + 1
@@ -291,6 +342,10 @@ function M.attach(layout, wanted, id)
       if m ~= wanted then
         M.fallback = string.format('Metoda %s nefunguje (%s), běží %s.', M.NAMES[wanted], table.concat(reasons, '; '),
           M.NAMES[m])
+      end
+      if m == M.DIRECT and s.noHolders then
+        M.fallback = (M.fallback and (M.fallback .. ' ') or '') .. 'Přímý zápis musel rozdělit sdílené materiály diod:'
+          .. ' po vypnutí je auto znovu ovládá až po restartu jízdy.'
       end
       bump()
       return m
@@ -415,6 +470,15 @@ local function drawInstance(inst, col)
   render.mesh(MESH)
 end
 
+-- isActive is a node's own flag: an instance is drawn only when every node up to the root is active (LOD switch)
+local function chainActive(inst)
+  local nodes = inst.nodes
+  for j = 1, #nodes do
+    if not nodes[j]:isActive() then return false end
+  end
+  return true
+end
+
 local function drawAll()
   render.setBlendMode(render.BlendMode.OpaqueForced)
   render.setDepthMode(render.DepthMode.LessEqual)
@@ -424,7 +488,7 @@ local function drawAll()
     if it.taken then
       for k = 1, #it.inst do
         local inst = it.inst[k]
-        if inst.ref:isVisible() and inst.parent:isActive() then drawInstance(inst, it.draw) end
+        if inst.ref:isVisible() and chainActive(inst) then drawInstance(inst, it.draw) end
       end
     end
   end

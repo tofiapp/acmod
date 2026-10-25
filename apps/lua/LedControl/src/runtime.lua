@@ -213,12 +213,15 @@ local lightsOn = false
 local function stopLights()
   if lightsOn then lights.release(); lightsOn = false end
 end
+-- restarts that concern only the LEDs (same car): the lights module is re-initialised by lights.init, which keeps the
+-- real controls it holds (no give-back + re-take of real lights other drivers see)
+local KEEP_LIGHTS = { method = true, map = true, redetect = true }
 
 function M.update(dt)
   M.clock = M.clock + dt
   if M.restartReason then
     takeover.dispose()
-    stopLights()
+    if not KEEP_LIGHTS[M.restartReason] then stopLights() end
     M.lastRestart = M.restartReason
     M.restartReason = nil
     M.state = 'wait'
@@ -273,7 +276,7 @@ end
 
 -- Error boundary restorer and app unload: everything back to the car.
 function M.halt()
-  takeover.dispose()
+  pcall(takeover.dispose)
   pcall(lights.release)
   lightsOn = false
   M.state = 'wait'

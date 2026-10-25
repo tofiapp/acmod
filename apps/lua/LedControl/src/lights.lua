@@ -41,6 +41,7 @@ local defaults = {
   meshIntensity = 30,    -- emissive of a full colour on the rain light copies
   scen = '',             -- scenario settings: stringify { [id] = { on, prio, p = { key = value }, c = '#RRGGBB' } }
   meshGuard = '',        -- self-heal marker of light_meshes.lua: "carId|mesh|mesh..."
+  realGuard = '',        -- self-heal marker of held real controls: "carId|channel=driver's state|..."
   showDiag = false,      -- tab Světla: diagnostics block
 }
 local stored = ac.storage(defaults, 'lcl_')
@@ -48,10 +49,20 @@ local G = {}
 for k in pairs(defaults) do G[k] = stored[k] end
 M.G = G
 
+-- Saves of slider values are deferred (written 0.5 s after the last change, and on release), so dragging a slider
+-- does not write ac.storage or the car file every frame.
+local SAVE_DELAY = 0.5
+local globalDue, globalPending = nil, {}
+
 function M.setGlobal(key, value)
   if defaults[key] == nil then return end
   G[key] = value
-  stored[key] = value
+  if type(value) == 'number' then
+    globalPending[key] = true
+    globalDue = M.clock + SAVE_DELAY
+  else
+    stored[key] = value
+  end
   bump()
 end
 
@@ -144,6 +155,18 @@ local function send(ch, want, now)
   return true
 end
 
+-- Self-heal of real controls: which channels the app holds and the driver's state before, written on every take /
+-- give-back (never per frame), healed at init after a restart without ac.onRelease.
+local function writeRealGuard()
+  local t = { M.carId }
+  for i = 1, #ALL_CH do
+    local c = ALL_CH[i]
+    if c.held and c.kind ~= 'trigger' then t[#t + 1] = c.id .. '=' .. (c.before and '1' or '0') end
+  end
+  local text = #t > 1 and table.concat(t, '|') or ''
+  if text ~= G.realGuard then G.realGuard = text; stored.realGuard = text end
+end
+
 local function take(ch)
   ch.held, ch.yielded, ch.failed, ch.retries, ch.lastOn = true, false, nil, 0, false
   local s = ch.read()
@@ -159,13 +182,37 @@ local function take(ch)
     local TL = ac.TurningLights
     ch.restoreTurn = (flag('turningLeftOnly') and TL.Left) or (flag('turningRightOnly') and TL.Right) or TL.None
   end
+  writeRealGuard()
   bump()
 end
 
 -- A give-back command may still be pending (checked by the next take).
 local function unhold(ch)
   ch.held, ch.owner, ch.lastOn = false, nil, false
+  writeRealGuard()
   bump()
+end
+
+-- After a restart without ac.onRelease: give the driver back the real lights an earlier run held (same car only).
+local function healReal(carId)
+  local marker = G.realGuard
+  if marker == '' then return 0 end
+  local parts = {}
+  for p in string.gmatch(marker, '[^|]+') do parts[#parts + 1] = p end
+  if parts[1] ~= carId then return 0 end
+  local n = 0
+  for i = 2, #parts do
+    local id, v = parts[i]:match('^([%w]+)=([01])$')
+    for k = 1, #ALL_CH do
+      local ch = ALL_CH[k]
+      if id and ch.id == id and ch.has and not ch.held and ch.kind ~= 'trigger' and ch.read() ~= (v == '1') then
+        if send(ch, v == '1', M.clock) then ch.pending, ch.expected = true, v == '1'; n = n + 1 end
+      end
+    end
+  end
+  G.realGuard = ''
+  stored.realGuard = ''
+  return n
 end
 
 -- Brings ch towards want. Returns true when settled (state == want, nothing pending) or when the channel gave up
@@ -206,7 +253,8 @@ local function restoreNow(ch)
     -- a command still on its way counts as done (not "pending and expected or read()": expected may be false, and a
     -- second toggle of an extra switch would undo the first one)
     local state
-    if ch.pending then state = ch.expected else state = ch.read() end
+    -- in a replay the car shows the recorded lights: the live state is the last one confirmed before it
+    if ch.pending then state = ch.expected elseif M.parked then state = ch.confirmed else state = ch.read() end
     if state ~= ch.before and send(ch, ch.before, M.clock) then ch.pending, ch.expected = true, ch.before end
   end
   unhold(ch)
@@ -314,6 +362,8 @@ local function saveCar()
   prof.lights = carCfg
   store.saveCar(M.carId, prof)
 end
+local carDue, scenDue = nil, nil
+local function saveCarSoon() carDue = M.clock + SAVE_DELAY end
 
 -- ---------------------------------------------------------------- scenarios
 
@@ -474,9 +524,21 @@ function M.setParam(id, key, value)
     local d = s.def.params[k]
     if d.key == key then s.P[key] = paramValue(d, value, d.def) end
   end
-  saveScen()
+  scenDue = M.clock + SAVE_DELAY
   bump()
 end
+
+-- Writes deferred saves when due (force: now, e.g. on release or a car change).
+local function flushSaves(force)
+  local now = M.clock
+  if carDue and (force or now >= carDue) then carDue = nil; saveCar() end
+  if scenDue and (force or now >= scenDue) then scenDue = nil; saveScen() end
+  if globalDue and (force or now >= globalDue) then
+    globalDue = nil
+    for k in pairs(globalPending) do stored[k] = G[k]; globalPending[k] = nil end
+  end
+end
+M.flushSaves = flushSaves
 
 function M.setColour(id, packed)
   local s = M.byId[id]
@@ -591,14 +653,19 @@ local function upperFirst(v)
   return type(v) == 'string' and v:upper() or ''
 end
 
-local function detectBrake()
+local function detectBrake(info)
   local names = meshes.namesOf('{ actsAsBrakeLights:yes & lod:A }', 32, skipNames)
   if #names == 0 then names = meshes.namesOf('{ actsAsBrakeLights:yes }', 32, skipNames) end
   local seen = {}
   for i = 1, #names do seen[names[i]] = true end
-  local ok, cfg = pcall(ac.INIConfig.carConfig, 0)
+  -- CSP car config parsed once per car by car_info (it can be huge)
+  local cfg = info and info.cspConfig
+  if cfg == nil and not info then
+    local ok, c = pcall(ac.INIConfig.carConfig, 0)
+    cfg = ok and c or nil
+  end
   local root = ac.findNodes('carRoot:0')
-  if ok and cfg and type(cfg.sections) == 'table' and root and #root > 0 then
+  if cfg and type(cfg.sections) == 'table' and root and #root > 0 then
     for sec, keys in pairs(cfg.sections) do
       if type(keys) == 'table' and (upperFirst(keys.INPUT) == 'BRAKE' or tostring(sec):find('^EMISSIVE_BRAKE')) then
         local list = type(keys.NAME) == 'table' and keys.NAME or { keys.NAME }
@@ -738,6 +805,13 @@ local parked = false
 local REAL_OUT = { OUT.rain, OUT.headlights, OUT.hazards, OUT.flash }
 local oldCh = {}
 
+-- picked names minus the LEDs of the current layout (an LED mesh belongs to takeover.lua only)
+local function notLeds(list)
+  local out = {}
+  for i = 1, #list do if not skipNames[list[i]] then out[#out + 1] = list[i] end end
+  return out
+end
+
 local function configure()
   dirty = false
   for i = 1, #REAL_OUT do oldCh[i] = REAL_OUT[i].real and REAL_OUT[i].ch or false end
@@ -769,9 +843,9 @@ local function configure()
   OUT.brake.writer, OUT.brake.has = W.brake, #M.brakeNames > 0
   OUT.backlight.writer = W.dash
   OUT.backlight.has = type(ac.LightSource) == 'function' or #carCfg.dash.meshes > 0
-  if OUT.rain.writer then meshes.prepare(W.rain, M.rainNames) end
+  if OUT.rain.writer then meshes.prepare(W.rain, notLeds(M.rainNames)) end
   if OUT.brake.has then meshes.prepare(W.brake, M.brakeNames) end
-  if #carCfg.dash.meshes > 0 then meshes.prepare(W.dash, carCfg.dash.meshes) end
+  if #carCfg.dash.meshes > 0 then meshes.prepare(W.dash, notLeds(carCfg.dash.meshes)) end
   M.notes = {}
   if OUT.rain.writer and not W.rain.ready then M.notes[#M.notes + 1] = 'Dešťové světlo: ' .. tostring(W.rain.error) end
   if OUT.brake.has and not W.brake.ready then M.notes[#M.notes + 1] = 'Brzdová světla: ' .. tostring(W.brake.error) end
@@ -866,7 +940,7 @@ function M.setDash(key, value)
   cabin.k, cabin.placed = -1, false
   if cabin.light and key == 'range' then pcall(function () cabin.light.range = d.range end) end
   if key == 'cabinLight' then dirty = true end
-  saveCar()
+  saveCarSoon()
   bump()
 end
 
@@ -1045,7 +1119,13 @@ end
 
 function M.update(dt, ST)
   if M.carId == '' then return end
+  if ST.paused then
+    -- AC is paused: nothing is commanded (AC would not apply it), timers stand still
+    refreshItems()
+    return
+  end
   M.clock = M.clock + dt
+  flushSaves(false)
   local now = M.clock
   car = ac.getCar(0)
   if not car then return end
@@ -1061,6 +1141,7 @@ function M.update(dt, ST)
     -- AC plays the recorded lights: nothing is commanded, the visual copies give the car its own look
     if not parked then
       parked = true
+      M.parked = true
       for _, w in pairs(W) do meshes.set(w, ORIGINAL, 0) end
       cabinOff()
       for i = 1, #M.items do M.items[i].holder = TEXT.replay end
@@ -1068,6 +1149,7 @@ function M.update(dt, ST)
     return
   end
   parked = false
+  M.parked = false
   local blocked = online.realBlock(G.realOnline) ~= nil
   local order = M.order
   for i = 1, #order do evalScenario(order[i], ST, now) end
@@ -1105,6 +1187,7 @@ end
 -- Everything back to how the driver had it: real controls to the state before the app took them, copies removed and
 -- originals visible, the cabin light disposed. Safe to call at any time (also before init).
 function M.release()
+  flushSaves(true)
   local was = M.running
   releaseAll()
   if was then bump() end
@@ -1113,8 +1196,18 @@ end
 local lastCar = nil
 
 -- On every car detection (runtime.detectCar).
+local function releaseVisuals()
+  for _, w in pairs(W) do meshes.set(w, ORIGINAL, 0); meshes.release(w) end
+  meshes.clearMarker()
+  cabinOff()
+  for i = 1, #OUT_LIST do if not OUT_LIST[i].real then OUT_LIST[i].winner, OUT_LIST[i].value = nil, -1 end end
+  dirty = true
+end
+
 function M.init(carId, profile, layout, info)
-  M.release()
+  flushSaves(true)
+  local keep = M.running and carId == M.carId
+  if keep then releaseVisuals() else M.release() end
   M.carId = carId or ''
   prof = profile
   car = ac.getCar(0)
@@ -1132,7 +1225,7 @@ function M.init(carId, profile, layout, info)
   lastCar = carId
   for i = 1, #ALL_CH do
     local ch = ALL_CH[i]
-    ch.failed, ch.yielded = nil, false
+    if not ch.held then ch.failed, ch.yielded = nil, false end
     if not sameCar then ch.cmds, ch.lastCmd, ch.pending = 0, -1e9, false end
   end
   controlsRef = nil
@@ -1140,12 +1233,13 @@ function M.init(carId, profile, layout, info)
   if car then
     probe(car)
     detectChannels()
+    if not keep then M.healedReal = healReal(M.carId) end
   else
     -- nothing of the previous car may stay usable
     for i = 1, #ALL_CH do ALL_CH[i].has = false end
     M.switches = {}
   end
-  detectBrake()
+  detectBrake(info)
   detectRain()
   configure()
   dirty = false

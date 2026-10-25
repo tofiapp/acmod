@@ -19,8 +19,11 @@ end
 
 local function readFile(path)
   if not io.fileExists(path) then return nil end
-  local ok, data = pcall(stringify.parse, io.load(path))
+  local raw = io.load(path)
+  local ok, data = pcall(stringify.parse, raw)
   if ok and type(data) == 'table' then return data end
+  -- unreadable (damaged, cut by a crash): keep a copy, so the next save does not lose it silently
+  if type(raw) == 'string' and raw ~= '' then pcall(io.save, path .. '.bad', raw) end
   return nil
 end
 
@@ -33,7 +36,7 @@ end
 function M.plain(v, depth)
   depth = depth or 0
   local t = type(v)
-  if t == 'number' then return v == v and v or nil end
+  if t == 'number' then return (v == v and v > -math.huge and v < math.huge) and v or nil end
   if t == 'string' then return #v <= 400 and v or v:sub(1, 400) end
   if t == 'boolean' then return v end
   if t ~= 'table' or depth > 6 then return nil end
