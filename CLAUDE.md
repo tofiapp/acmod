@@ -197,4 +197,11 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
 - ac-reference.csv received: AC's keyboard steering = outward STEERING_SPEED x speed factor (1.05 /s at 55 km/h ...
   0.17 /s from 215 km/h), reset 3.15 /s, opposite 4.4 /s (details in docs/keydrive-research.md, also AC's keyboard
   throttle/brake help). v0.9: STEER_STYLE 0 copies it exactly (AC_SPEED_CURVE in assist.lua).
-Next: user test of v0.9 steering, then decide whether the pedals should copy AC's keyboard help as a base, then phase 6.
+- v0.9 user: steering "super". Throttle: launch crawls, then full power kicks in, a long uncontrolled slide because
+  the throttle stayed on. Log (incident 4, v0.9): (a) during a spin the car moved backwards relative to its nose
+  (localVelocity.z < -1) and traction switched itself off ("reverse") -> gas 1.0 mid-spin; (b) cap fell to 0.05
+  (crossing set A = out below the floor) and stayed, launches crawled; (c) real first-gear spins (slipRatio 3-8 at
+  5-12 km/h, AC's ndSlip consistent with the ratio even at low speed) took 0.6 s to catch at 1.5 /s.
+  v0.9.1: traction only off in reverse/neutral GEAR; A never below FLOOR; slip > 2x target -> K_DOWN_SEVERE 5 and the
+  sent throttle may fall 4 /s. A low-speed slip measure was tried and dropped (model launch worse, AC data consistent).
+Next: user test of v0.9.1 throttle, then phase 6.

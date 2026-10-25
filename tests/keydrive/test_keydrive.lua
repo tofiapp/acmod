@@ -251,7 +251,7 @@ do
   local a = launch(0.003, nil, 3)
   check('traction keeps the slip moderate', a.slipMean < 1.6, a.slipMean)
   check('traction: no runaway spin (one short spike allowed)', a.slipMax < 4, a.slipMax)
-  check('traction: smooth throttle (no jumps faster than 1.5/s down, rise rate up)', a.maxJump < 1.55, a.maxJump)
+  check('traction: no throttle steps (assist cuts at most 1.5 /s, 4 /s in a real spin)', a.maxJump < 4.05, a.maxJump)
   check('traction: throttle mostly kept', a.gasMean > 0.6, a.gasMean)
   check('traction: no pulsing (steady throttle once the limit is known)', a.gasStd < 0.06, a.gasStd)
   check('traction beats wheelspin', a.v > free.v, string.format('%.1f vs %.1f', a.v, free.v))
@@ -260,7 +260,7 @@ do
   check('traction independent of physics rate', math.abs(a.v - b.v) / a.v < 0.03 and math.abs(a.v - c.v) / a.v < 0.03,
     string.format('%.2f %.2f %.2f', a.v, b.v, c.v))
   local strong = launch(0.003, { __torque = 4500 }, 3)
-  check('very strong car: throttle stays smooth even when it cannot stop the spin', strong.maxJump < 1.55,
+  check('very strong car: throttle without steps', strong.maxJump < 4.05,
     string.format('jump %.2f std %.3f', strong.maxJump, strong.gasStd))
 end
 
@@ -728,6 +728,27 @@ do
   check('reference rows', f and select(2, f:gsub('\n', '')) > 380, f and select(2, f:gsub('\n', '')))
   check('reference records the key', f and f:find('\n[%d%.]+,0,0,1,0,', 1) ~= nil)
   mock.keys[VK_LEFT] = nil
+end
+
+-- 24. A spin in a forward gear: the car moves sideways/backwards relative to its nose (localVelocity.z < 0).
+-- Traction must stay on (it used to switch off and send full throttle into the spin).
+do
+  local s = fresh()
+  local c = mock.car
+  c.gear, c.speedKmh, c.localVelocity.z = 1, 40, -3
+  for i = 2, 3 do c.wheels[i].ndSlip = 8; c.wheels[i].angularSpeed = 30 end
+  mock.keys[VK_UP] = true
+  run(s, 1.5, 0.003)
+  check('spin in a forward gear: throttle held low', mock.joypad.gas < 0.45, mock.joypad.gas)
+  mock.keys[VK_UP] = nil
+  c.gear = -1
+  s = fresh()
+  mock.car.gear, mock.car.localVelocity.z = -1, -2
+  for i = 2, 3 do mock.car.wheels[i].ndSlip = 8 end
+  mock.keys[VK_UP] = true
+  run(s, 1.5, 0.003)
+  check('reverse gear: plain throttle', mock.joypad.gas > 0.95, mock.joypad.gas)
+  mock.keys[VK_UP] = nil
 end
 
 print(string.format('KeyDrive: %d passed, %d failed', passed, failed))

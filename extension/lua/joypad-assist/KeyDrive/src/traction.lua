@@ -34,11 +34,14 @@ local M = {
   memoryNow = 1,      -- remembered level for the current gear (overlay)
   active = false,     -- the multiplier is reducing the throttle
   riseScale = 1,      -- kept for the caller; always 1 now
+  severe = false,     -- the slip is more than twice the target: the caller may cut the throttle faster
   airborne = false,
 }
 
 local SLIP_TAU = 0.03     -- s, slip low-pass
 local K_DOWN = 2.5        -- per second at full error
+local K_DOWN_SEVERE = 5   -- per second when the slip is more than twice the target (a real spin: catch it quickly;
+                          -- user log: a first-gear spin took 0.6 s to catch at 1.5 /s and the launch crawled)
 local K_BACK = 1.5        -- per second, quick return up to the remembered level
 local K_PRE = 1.2         -- per second, easing down before a band where the wheels spun last time
 local CREEP = 0.08        -- per second, memory growth of the current band while there is plenty of grip
@@ -107,7 +110,6 @@ end
 -- Returns measured slip (ndSlip or scaled ratio) and the raw slip ratio, or nil when the driven wheels are in the air.
 local function measure(carState)
   local v = carState.localVelocity.z
-  local ref = math.max(math.abs(v), V0)
   local ndSum, loadSum, speedSum, n = 0, 0, 0, 0
   for k = 1, drivenCount do
     local w = wheels[driven[k]]
@@ -120,14 +122,12 @@ local function measure(carState)
     end
   end
   if n == 0 then return nil end
-  local ratio = (speedSum / n - v) / ref
+  local ratio = (speedSum / n - v) / math.max(math.abs(v), V0)
   local slip = M.usesNdSlip and ndSum / loadSum or ratio / FALLBACK_SCALE
   if not finite(slip) or not finite(ratio) then return nil end
   return slip, ratio
 end
 
--- Returns the throttle to send. `requested` is the ramped key throttle, `target` the slip target in ndSlip units
--- (1 = tyre peak, keep it <= 1: past the peak the slip runs away), `response` scales the rates (1 = default).
 -- Remembered level of a band with the slow recovery applied.
 local function level(g, b)
   if not known[g][b] then return 1 end
@@ -190,14 +190,15 @@ function M.update(dt, carState, requested, target, response)
           mem = m
           crossBand, crossGear, crossOut = band, gear, out
         end
-        if A > out then A = out end
+        if A > out then A = out < FLOOR and FLOOR or out end
       end
       overTime = overTime + dt
       local e = (M.slip - target) / target
-      if e > 1 then e = 1 end
+      local kd = K_DOWN
+      if e > 1 then e, kd = 1, K_DOWN_SEVERE end
       local bottom = overTime > PERSIST and FLOOR or (mem < 1 and math.max(FLOOR, mem * PULL) or FLOOR)
       if A > bottom then
-        A = A - K_DOWN * response * e * dt
+        A = A - kd * response * e * dt
         if A < bottom then A = bottom end
       end
     else
@@ -233,6 +234,7 @@ function M.update(dt, carState, requested, target, response)
   local out = requested < A and requested or A
   M.k = requested > 0.02 and out / requested or 1
   M.limit = A
+  M.severe = M.slip > 2 * target
   M.memoryNow = mem
   M.active = out < requested - 0.005 and requested > 0.02
   return out

@@ -74,6 +74,7 @@ local P = {
 }
 
 local THROTTLE_ASSIST_FALL = 1.5 -- per second: fastest throttle reduction an assist may make
+local THROTTLE_ASSIST_FALL_SEVERE = 4 -- per second while the wheels really spin (slip over twice the target)
 local CORNER_G_FULL = 1.5    -- lateral g at which the corner cap reduction is complete
 local CORNER_TAU = 0.15      -- s, smoothing of the corner factor
 local TRAIL_TAU = 0.2        -- s, smoothing of the steering amount used for the trail-brake release
@@ -133,8 +134,9 @@ local function throttle(dt, kGas, state)
 
   gasRequest = ramp.step(gasRequest, kGas and cap or 0, P.throttleRise, P.throttleFall, dt)
 
-  -- Traction only when driving forwards in a forward gear; reverse, neutral and standing in reverse never use it.
-  local forward = car.gear > 0 and car.localVelocity.z > -1
+  -- Traction in every forward gear. Not by the direction of travel: in a spin the car moves sideways or backwards
+  -- relative to its nose, and switching traction off there sent full throttle into the spin (user log).
+  local forward = car.gear > 0
   live.cap = cap
   local out
   if P.traction and forward then
@@ -145,7 +147,8 @@ local function throttle(dt, kGas, state)
   end
   -- Smoothness: the sent throttle never jumps. It drops at the key fall rate only when the driver lifts,
   -- otherwise (traction, corner cap) at most THROTTLE_ASSIST_FALL per second.
-  local fall = gasRequest < gas and P.throttleFall or THROTTLE_ASSIST_FALL
+  local fall = gasRequest < gas and P.throttleFall
+    or (traction.severe and (P.traction and forward)) and THROTTLE_ASSIST_FALL_SEVERE or THROTTLE_ASSIST_FALL
   local rise = P.throttleRise * ((P.traction and forward) and traction.riseScale or 1)
   return ramp.step(gas, out, rise, fall, dt)
 end
