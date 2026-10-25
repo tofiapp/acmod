@@ -258,7 +258,8 @@ apps/lua/LedControl/
   src/online.lua          online state, banner and the optional block of real controls online
   src/hotkeys.lua         ac.ControlButton master / next preset / flash, polled in script.update
   src/diag.lua            "Kopírovat diagnostiku" text
-  src/ui/main.lua         header (master, status, preset combo, errors) + tabs loaded lazily under pcall
+  src/ui/main.lua         header (master, status, preset combo, errors, online / test pattern notes) + tabs loaded
+                          lazily under pcall; src/ui/common.lua note() = coloured text that wraps (textColored does not)
   src/ui/tab_leds.lua     Diody (+ led_map.lua: manual order, groups, mesh picker), tab_scenarios.lua, tab_editor.lua,
                           tab_lights.lua, tab_settings.lua
 tests/ledcontrol/         mock_csp.lua (scene graph, shared materials, AC LED writer, JSON, ui), helpers.lua (test

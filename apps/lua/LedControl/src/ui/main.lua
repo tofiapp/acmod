@@ -1,16 +1,21 @@
 -- The window: header (master switch, car, state, method, errors) and the five tabs.
 
+local common = require('src/ui/common')
 local config = require('src/config')
 local runtime = require('src/runtime')
 local takeover = require('src/takeover')
 local safety = require('src/safety')
 local presets = require('src/presets')
+local lights = require('src/lights')
 
 local S = config.S
 local M = {}
 
 local RED = rgbm(1, 0.35, 0.3, 1)
 local ORANGE = rgbm(1, 0.7, 0.2, 1)
+
+local TEST_NOTE = 'Diody ukazují testovací vzor z karty Diody (scénáře neběží). Zpět: Diody → Normální provoz.'
+local HIDE_UI_ERROR = 'Skrýt##uiError'
 
 local seen = -1
 local statusLine = ''
@@ -49,7 +54,7 @@ local function tabDrawer(i)
       else mod = false; loadErrors[i] = 'Karta se nenačetla: ' .. tostring(res) end
       loaded[i] = mod
     end
-    if mod then mod.draw() else ui.textColored(loadErrors[i], RED) end
+    if mod then mod.draw() else common.note(loadErrors[i], RED) end
   end
 end
 for i = 1, #TABS do drawers[i] = tabDrawer(i) end
@@ -85,15 +90,20 @@ local function draw()
   if ui.checkbox('Zapnuto (hlavní vypínač)', S.master) then config.set('master', not S.master) end
   ui.textWrapped(statusLine)
   presetRow()
-  if takeover.fallback then ui.textColored(takeover.fallback, ORANGE) end
+  if takeover.fallback then common.note(takeover.fallback, ORANGE) end
   if errorLine ~= '' then
-    ui.textColored(errorLine, RED)
+    common.note(errorLine, RED)
     if ui.button('Zkusit znovu') then
       safety.retry()
       runtime.restart('retry')
     end
   end
-  if safety.uiError then ui.textColored(safety.uiError, RED) end
+  if safety.uiError then
+    common.note(safety.uiError, RED)
+    if ui.button(HIDE_UI_ERROR) then safety.uiError = nil end
+  end
+  if runtime.ST.isOnline and lights.online and lights.online.BANNER then common.note(lights.online.BANNER, ORANGE) end
+  if S.testMode ~= runtime.NORMAL and runtime.state == 'run' then common.note(TEST_NOTE, ORANGE) end
   drawnTab = 0
   ui.tabBar('tabs', tabs)
   -- a tab that was hidden this frame saves its pending edit (slider / colour picker still open)

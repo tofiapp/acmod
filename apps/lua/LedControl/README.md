@@ -40,7 +40,7 @@ Aplikace diody najde sama, v tomto pořadí:
 4. meshe kokpitu se jménem obsahujícím LED, RPM nebo SHIFT.
 
 Diody seřadí zleva doprava podle skutečné polohy na volantu a rozdělí do skupin (řada otáček, levé a pravé boční
-diody, další řady). Když pořadí nesedí nebo auto diody nemá, v kartě Diody je **Upravit pořadí a skupiny diod** nebo
+diody, další řady). Když pořadí nesedí nebo auto diody nemá, v kartě Diody je **Upravit pořadí a skupiny diod** (šipky ↑ ↓, „Obrátit pořadí“ celé skupiny) nebo
 **Vybrat diody ručně** (seznam malých meshů v kokpitu s hledáním). Najetím myší na diodu v náhledu dioda na autě bliká.
 
 ### Způsob převzetí

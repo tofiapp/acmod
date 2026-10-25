@@ -131,7 +131,7 @@ local workPreset, workScenario = nil, nil
 local sel, selEntry = nil, nil    -- selected scenario id and its effective entry
 local nFrames, cur = 1, 1
 local brushIndex = 3              -- '1'
-local dirty = false
+local dirty, touched = false, false
 local ver = 0
 local painting = false
 local renameFor, renameText = nil, ''   -- preset id whose name is being edited
@@ -301,7 +301,7 @@ local function loadWork()
   local frames = isFramesLook(look)
   work, nFrames = normalise(frames and look or nil)
   baseline = frames and presets.deepCopy(work) or false
-  dirty = baseline == false
+  dirty, touched = false, false     -- a scenario that is no animation yet is only shown: nothing changed
   workPreset, workScenario = runtime.presetId, sel
   if cur > nFrames then cur = nFrames end
   if cur < 1 then cur = 1 end
@@ -324,6 +324,7 @@ local function ensureGroups()
 end
 
 local function edited()
+  touched = true
   dirty = not (baseline and same(work, baseline))
   ver = ver + 1
 end
@@ -480,9 +481,10 @@ local function testBlocked()
 end
 
 local function testOnCar()
-  if not save() then return end
   local why = testBlocked()
-  if why then sayEdit(why, ORANGE) return end
+  if why then sayEdit(why, ORANGE) return end      -- blocked: nothing is saved (no copy of a built-in preset)
+  -- nothing painted on a scenario that is no animation yet: test its current look, do not replace it with dark frames
+  if not (baseline == false and not touched) and not save() then return end
   -- the runtime compiles the saved preset in its next update; the test is started on that compiled preset
   pendingTest, pendingUntil = sel, runtime.clock + PENDING_TIME
 end

@@ -20,12 +20,12 @@ M.QUANTITIES = {
   { id = 'position', name = 'Pozice v závodě', unit = '', min = 0, max = 60, get = function (S) return S.position end },
   { id = 'damage', name = 'Poškození karoserie', unit = '', min = 0, max = 200, get = function (S) return S.damage end },
   { id = 'engine', name = 'Životnost motoru', unit = '', min = 0, max = 1000, get = function (S) return S.engineLife end },
-  { id = 'pitlane', name = 'V pit lane', bool = true, get = function (S) return S.inPitlane and 1 or 0 end },
-  { id = 'limiter', name = 'Pit limiter zapnutý', bool = true, get = function (S) return S.pitLimiter and 1 or 0 end },
-  { id = 'drs', name = 'DRS otevřené', bool = true, get = function (S) return S.drsActive and 1 or 0 end },
-  { id = 'abs', name = 'ABS zasahuje', bool = true, get = function (S) return S.absInAction and 1 or 0 end },
-  { id = 'tc', name = 'TC zasahuje', bool = true, get = function (S) return S.tcInAction and 1 or 0 end },
-  { id = 'lights', name = 'Světla zapnutá', bool = true, get = function (S) return S.headlights and 1 or 0 end },
+  { id = 'pitlane', name = 'V pit lane', neg = 'mimo pit lane', bool = true, get = function (S) return S.inPitlane and 1 or 0 end },
+  { id = 'limiter', name = 'Pit limiter zapnutý', neg = 'pit limiter vypnutý', bool = true, get = function (S) return S.pitLimiter and 1 or 0 end },
+  { id = 'drs', name = 'DRS otevřené', neg = 'DRS zavřené', bool = true, get = function (S) return S.drsActive and 1 or 0 end },
+  { id = 'abs', name = 'ABS zasahuje', neg = 'ABS nezasahuje', bool = true, get = function (S) return S.absInAction and 1 or 0 end },
+  { id = 'tc', name = 'TC zasahuje', neg = 'TC nezasahuje', bool = true, get = function (S) return S.tcInAction and 1 or 0 end },
+  { id = 'lights', name = 'Světla zapnutá', neg = 'světla vypnutá', bool = true, get = function (S) return S.headlights and 1 or 0 end },
 }
 M.OPS = { '<', '<=', '>', '>=', '=', '!=' }
 M.OP_NAMES = { ['<'] = '<', ['<='] = '≤', ['>'] = '>', ['>='] = '≥', ['='] = '=', ['!='] = '≠' }
@@ -90,6 +90,15 @@ function M.eval(c, S)
   return true
 end
 
+-- Name as used inside a sentence: first letter small unless the name starts with an abbreviation (DRS, ABS, TC).
+local SMALL = { ['Ž'] = 'ž', ['Š'] = 'š', ['Č'] = 'č', ['Ř'] = 'ř', ['Ď'] = 'ď' }
+local function inSentence(name)
+  if name:match('^%u%u') then return name end
+  local first2 = name:sub(1, 2)
+  if SMALL[first2] then return SMALL[first2] .. name:sub(3) end
+  return name:sub(1, 1):lower() .. name:sub(2)
+end
+
 function M.describe(rows)
   rows = M.sanitise(rows)
   if #rows == 0 then return 'bez podmínky (nikdy)' end
@@ -97,9 +106,11 @@ function M.describe(rows)
   for i = 1, #rows do
     local q = BY_ID[rows[i].q]
     if q.bool then
-      parts[i] = (rows[i].v >= 0.5) == (rows[i].op ~= '!=') and q.name or ('ne ' .. q.name)
+      local yes = (rows[i].v >= 0.5) == (rows[i].op ~= '!=')
+      parts[i] = yes and inSentence(q.name) or (q.neg or ('ne ' .. inSentence(q.name)))
     else
-      parts[i] = string.format('%s %s %g %s', q.name, M.OP_NAMES[rows[i].op], rows[i].v, q.unit)
+      parts[i] = string.format('%s %s %g%s', inSentence(q.name), M.OP_NAMES[rows[i].op], rows[i].v,
+        q.unit ~= '' and (' ' .. q.unit) or '')
     end
   end
   return table.concat(parts, ' a ')

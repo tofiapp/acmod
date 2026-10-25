@@ -2,6 +2,7 @@
 -- hand when the car has none detected. Works on a local copy; "Uložit" stores it as the car's map
 -- (runtime.setMap -> car profile, detection uses it instead of the automatic order).
 
+local common = require('src/ui/common')
 local runtime = require('src/runtime')
 local detect = require('src/detect')
 
@@ -22,9 +23,18 @@ local countLabel = ''
 
 local UP, DOWN, DEL, GROUP, GNAME, GROLE = {}, {}, {}, {}, {}, {}
 for i = 1, MAX do
-  UP[i], DOWN[i], DEL[i], GROUP[i] = 'Nahoru##mapUp' .. i, 'Dolů##mapDown' .. i, 'Odebrat##mapDel' .. i, '##mapGroup' .. i
+  UP[i], DOWN[i], DEL[i], GROUP[i] = '↑##mapUp' .. i, '↓##mapDown' .. i, 'Odebrat##mapDel' .. i, '##mapGroup' .. i
 end
-for g = 1, 4 do GNAME[g], GROLE[g] = '##mapGroupName' .. g, '##mapGroupRole' .. g end
+local GREV = {}
+for g = 1, 8 do GNAME[g], GROLE[g], GREV[g] = '##mapGroupName' .. g, '##mapGroupRole' .. g, 'Obrátit pořadí##mapRev' .. g end
+local ARROW = vec2(24, 0)
+
+-- Czech plural: 1 mesh, 2-4 meshe, 5+ meshů
+local function meshCount(n)
+  if n == 1 then return '1 mesh' end
+  if n >= 2 and n <= 4 then return n .. ' meshe' end
+  return n .. ' meshů'
+end
 
 local function changed() version = version + 1 end
 
@@ -33,10 +43,14 @@ local function fromLayout()
   local lay = runtime.layout
   local m = { leds = {}, groups = {} }
   if lay then
-    for gi = 1, math.min(#lay.groups, 4) do
+    for gi = 1, math.min(#lay.groups, 8) do
       local g = lay.groups[gi]
       m.groups[gi] = { g.name, g.role }
       for _, id in ipairs(g.leds) do m.leds[#m.leds + 1] = { lay.leds[id].name, gi } end
+    end
+    -- more than 8 groups (the map's limit): the rest goes into group 8 instead of being dropped
+    for gi = 9, #lay.groups do
+      for _, id in ipairs(lay.groups[gi].leds) do m.leds[#m.leds + 1] = { lay.leds[id].name, 8 } end
     end
   end
   if #m.groups == 0 then m.groups[1] = { 'Řada otáček', 'main' } end
@@ -67,7 +81,7 @@ local function refresh()
           m.radius * 100, m.dist, m.material, i) }
       end
     end
-    countLabel = string.format('%d meshů', #meshLabels)
+    countLabel = meshCount(#meshLabels)
   end
 end
 
@@ -100,15 +114,15 @@ local function rows()
   for i = 1, #work.leds do
     local e = work.leds[i]
     ui.text(rowLabels[i] or e[1])
-    ui.sameLine(260)
-    ui.setNextItemWidth(130)
+    ui.sameLine(200)
+    ui.setNextItemWidth(110)
     rowIndex = i
     local g = work.groups[e[2]]
     ui.combo(GROUP[i], g and g[1] or '?', ui.ComboFlags.None, groupItems)
     ui.sameLine()
-    if ui.button(UP[i]) and i > 1 then swap = { i, i - 1 } end
+    if ui.button(UP[i], ARROW) and i > 1 then swap = { i, i - 1 } end
     ui.sameLine()
-    if ui.button(DOWN[i]) and i < #work.leds then swap = { i, i + 1 } end
+    if ui.button(DOWN[i], ARROW) and i < #work.leds then swap = { i, i + 1 } end
     ui.sameLine()
     if ui.button(DEL[i]) then swap = { i, 0 } end
   end
@@ -129,8 +143,19 @@ local function groupsEditor()
     ui.setNextItemWidth(140)
     groupIndex = g
     ui.combo(GROLE[g], ROLE_NAMES[work.groups[g][2]] or '?', ui.ComboFlags.None, roleItems)
+    ui.sameLine()
+    if ui.button(GREV[g]) then
+      -- reverse the order of this group's LEDs (a mirrored row needs one click, not n(n-1)/2 moves)
+      local idx = {}
+      for i = 1, #work.leds do if work.leds[i][2] == g then idx[#idx + 1] = i end end
+      for a = 1, math.floor(#idx / 2) do
+        local i, j = idx[a], idx[#idx + 1 - a]
+        work.leds[i], work.leds[j] = work.leds[j], work.leds[i]
+      end
+      changed()
+    end
   end
-  if #work.groups < 4 and ui.button('Přidat skupinu') then
+  if #work.groups < 8 and ui.button('Přidat skupinu') then
     work.groups[#work.groups + 1] = { 'Skupina ' .. (#work.groups + 1), 'side' }
     changed()
   end
@@ -158,7 +183,7 @@ local function picker()
       meshes = detect.listMeshes(ac.getCar(0), 300)
       changed()
     end
-    ui.textColored('Seznam malých meshů do 2 m od očí řidiče, nejbližší první.', GREY)
+    common.note('Seznam malých meshů do 2 m od očí řidiče, nejbližší první.', GREY)
     return
   end
   ui.setNextItemWidth(220)
@@ -175,13 +200,14 @@ function M.draw()
     if runtime.layout and runtime.layout.manual then
       ui.sameLine()
       if ui.button('Zpět na automatické hledání') then runtime.setMap(nil) end
-      ui.textColored('Toto auto používá vaše ruční pořadí diod.', ORANGE)
+      common.note('Toto auto používá vaše ruční pořadí diod.', ORANGE)
     end
     return
   end
   refresh()
   ui.header('Pořadí a výběr diod')
-  ui.textColored('Pořadí shora dolů = zleva doprava na volantu. Šipkami měňte pořadí, v rozbalovacím seznamu skupinu.', GREY)
+  common.note('Pořadí shora dolů = zleva doprava na volantu. Šipkami ↑ ↓ měňte pořadí, v rozbalovacím seznamu skupinu,'
+    .. ' „Obrátit pořadí“ otočí celou skupinu.', GREY)
   rows()
   groupsEditor()
   picker()

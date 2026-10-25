@@ -2,6 +2,7 @@
 -- export / import of presets through the clipboard, deleting saved data and restoring defaults (both with an
 -- in-window confirmation).
 
+local common = require('src/ui/common')
 local config = require('src/config')
 local runtime = require('src/runtime')
 local takeover = require('src/takeover')
@@ -39,10 +40,10 @@ local function defaultName()
 end
 
 local function defaultItems()
-  if ui.selectable(DEFAULT_LABEL, S.defaultPreset == 'auto') then config.set('defaultPreset', 'auto') end
+  if ui.selectable(DEFAULT_LABEL, S.defaultPreset == 'auto') then config.set('defaultPreset', 'auto'); runtime.defaultPresetChanged() end
   local all = presets.all()
   for i = 1, #all do
-    if ui.selectable(all[i].name, S.defaultPreset == all[i].id) then config.set('defaultPreset', all[i].id) end
+    if ui.selectable(all[i].name, S.defaultPreset == all[i].id) then config.set('defaultPreset', all[i].id); runtime.defaultPresetChanged() end
   end
 end
 
@@ -50,7 +51,7 @@ local function brightness()
   ui.header('Diody')
   local v, changed = ui.slider('##intensitySettings', S.intensity, 1, 100, 'Jas diod: %.0f')
   if changed then runtime.setIntensity(math.floor(v + 0.5)) end
-  ui.textColored('Síla svitu převzatých diod (AC u svých diod používá zhruba 10 až 60).', GREY)
+  common.note('Síla svitu převzatých diod (AC u svých diod používá zhruba 10 až 60).', GREY)
   ui.text('Způsob převzetí pro auta, kde jste ho nezměnili:')
   for m = 1, 3 do
     if ui.radioButton(METHOD_LABELS[m], S.method == m) and S.method ~= m then
@@ -66,18 +67,18 @@ end
 
 local function hotkeyRows()
   ui.header('Klávesy')
-  ui.textColored('Fungují i se zavřeným oknem. Klikněte na tlačítko a stiskněte klávesu nebo tlačítko volantu.', GREY)
+  common.note('Fungují i se zavřeným oknem. Klikněte na tlačítko a stiskněte klávesu nebo tlačítko volantu.', GREY)
   for i = 1, #hotkeys.list do
     local e = hotkeys.list[i]
     ui.text(e.name)
     if e.button then e.button:control(HOTKEY_SIZE, nil, 'Klikněte pro přiřazení')
-    else ui.textColored('Ovládání kláves není v této verzi CSP k dispozici.', GREY) end
+    else common.note('Ovládání kláves není v této verzi CSP k dispozici.', GREY) end
   end
 end
 
 local function exchange()
   ui.header('Presety: sdílení')
-  ui.textColored('Preset se přenáší jako jeden řádek textu přes schránku (např. do zprávy nebo na fórum).', GREY)
+  common.note('Preset se přenáší jako jeden řádek textu přes schránku (např. do zprávy nebo na fórum).', GREY)
   if ui.button('Kopírovat aktuální preset do schránky') then
     local text = presets.export(runtime.presetId)
     if text then
@@ -110,10 +111,11 @@ end
 
 local function restoreDefaults()
   for k in pairs(config.defaults) do
-    if k ~= 'hiddenGuard' then config.reset(k) end
+    if k ~= 'hiddenGuard' and k ~= 'master' then config.reset(k) end   -- the master switch stays as the driver set it
   end
   pcall(lights.resetScenarios)
   takeover.invalidate()
+  runtime.defaultPresetChanged()
   runtime.restart('defaults')
 end
 
@@ -139,7 +141,7 @@ local function danger()
   elseif ui.button('Obnovit výchozí nastavení##defaults') then
     confirmDefaults = now + CONFIRM_TIME
   end
-  ui.textColored('Smazání odstraní vaše presety a nastavení všech aut. Obnovení vrátí jas, metodu, výchozí preset a'
+  common.note('Smazání odstraní vaše presety a nastavení všech aut. Obnovení vrátí jas, metodu, výchozí preset a'
     .. ' scénáře světel.', GREY)
 end
 
@@ -148,9 +150,9 @@ function M.draw()
   hotkeyRows()
   exchange()
   danger()
-  if runtime.clock < messageUntil then ui.textColored(message, messageColour) end
+  if runtime.clock < messageUntil then common.note(message, messageColour) end
   ui.separator()
-  ui.textColored(ABOUT, GREY)
+  common.note(ABOUT, GREY)
 end
 
 return M

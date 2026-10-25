@@ -11,6 +11,7 @@
 -- id, the test mode or this tab's own version change; combo contents are module-level functions that read the
 -- expanded scenario (X) and the condition row (comboRow) from module-level variables.
 
+local common = require('src/ui/common')
 local config = require('src/config')
 local runtime = require('src/runtime')
 local presets = require('src/presets')
@@ -35,7 +36,7 @@ local ARROW = vec2(24, 0)
 local TEST_SIZE = vec2(44, 0)
 local TOGGLE_SIZE = vec2(64, 0)
 local SWATCH = vec2(44, 0)
-local COMBO_W, SLIDER_W, ROW_Q_W, ROW_OP_W = 240, 260, 190, 56
+local COMBO_W, SLIDER_W, ROW_Q_W, ROW_OP_W, ROW_V_W = 240, 260, 190, 56, 150
 local INDENT = 28
 
 local BF = ui.ButtonFlags
@@ -56,16 +57,16 @@ local DEFAULT_ZONES = patterns.DEFAULT_ZONES
 -- ---------------------------------------------------------------- static texts and labels
 
 local T = {
-  intro = 'Nahoře je větší přednost: když platí víc scénářů najednou, na každé skupině diod svítí ten výš.'
+  intro = 'Nahoře je vyšší priorita: když platí víc scénářů najednou, na každé skupině diod svítí ten výš.'
     .. ' Zaškrtnutí = scénář je zapnutý.',
   cowBuiltin = 'Vestavěný preset zůstane beze změny: první úprava vytvoří vaši vlastní kopii a toto auto ji začne'
     .. ' používat.',
   cowUser = 'Změny se ukládají do tohoto presetu (platí pro všechna auta, která ho používají).',
-  base = 'Když žádný scénář nesvítí:',
+  base = 'Základ presetu (když žádný scénář nesvítí):',
   testMode = 'Karta Diody teď ukazuje testovací vzor, scénáře na autě neběží.',
   testTip = 'Ukáže scénář na autě na 5 s, i když jeho podmínka teď neplatí.',
-  upTip = 'Výš = větší přednost',
-  downTip = 'Níž = menší přednost',
+  upTip = 'Výš = vyšší priorita',
+  downTip = 'Níž = nižší priorita',
   testLater = 'Test se na autě ukáže, až scénáře poběží (viz řádek nahoře).',
   testOff = 'Vypnutý scénář (nebo scénář bez diod na tomto autě) se při Testu na autě neukáže, nejdřív ho zapněte.',
   now = 'svítí teď',
@@ -581,7 +582,7 @@ local function zonesEditor()
     colourCell(2 + k, ZN[k])
     ui.sameLine()
     if k == 1 then
-      ui.textColored(T.fromStart, GREY)
+      common.note(T.fromStart, GREY)
     else
       local label = ZU[k]
       local lo = X.zu[k - 1] * 100
@@ -635,7 +636,7 @@ local function srcRow()
   ui.setNextItemWidth(COMBO_W + 60)
   ui.combo('##sc_src', X.srcName, COMBO, srcItems)
   if not X.carSrcOk then
-    ui.textColored(X.src == 'car' and T.carSrcMissing or T.carSrcHint, X.src == 'car' and ORANGE or GREY)
+    common.note(X.src == 'car' and T.carSrcMissing or T.carSrcHint, X.src == 'car' and ORANGE or GREY)
   end
 end
 
@@ -668,7 +669,7 @@ local function conditionRow(r)
     local label = VL[r]
     local shown = pending(label) and P.num or X.wv[r]
     local step = Q_STEP[q.id] or 1
-    ui.setNextItemWidth(ROW_Q_W)
+    ui.setNextItemWidth(ROW_V_W)
     local v, changed = ui.slider(label, shown, q.min, q.max, Q_FMT[q.id])
     if changed then
       v = snap(v, step, q.min, q.max)
@@ -702,7 +703,7 @@ local function customConditions()
   if enter then commit() else released(label) end
   ui.text(T.rows)
   for r = 1, X.nw do conditionRow(r) end
-  if X.nw == 0 then ui.textColored(T.noRows, ORANGE) end
+  if X.nw == 0 then common.note(T.noRows, ORANGE) end
   if X.nw < MAX_ROWS and ui.button('Přidat podmínku##addrow') then
     commit()
     local e = freshEntry(X.id)
@@ -761,8 +762,8 @@ local function details()
     zonesEditor()
     if X.rpmFill then srcRow() end
   end
-  if u.frames then ui.textColored(T.frames, GREY) end
-  if not (u.c1 or u.c2 or u.hz or u.zones or u.frames) then ui.textColored(T.noSettings, GREY) end
+  if u.frames then common.note(T.frames, GREY) end
+  if not (u.c1 or u.c2 or u.hz or u.zones or u.frames) then common.note(T.noSettings, GREY) end
   if X.param then paramSlider() end
   if X.custom then deleteButton() end
   if indent then ui.unindent(INDENT) end
@@ -787,15 +788,15 @@ local function header()
     runtime.setBase('original')
   end
   local warnings = head.warnings
-  for i = 1, #warnings do ui.textColored(warnings[i], ORANGE) end
+  for i = 1, #warnings do common.note(warnings[i], ORANGE) end
   if head.status then
-    ui.textColored(head.status, ORANGE)
+    common.note(head.status, ORANGE)
     if head.testMode and runtime.state == 'run' then
       ui.sameLine()
       if ui.button('Zpět na normální provoz##sc_normal') then runtime.setMode(runtime.NORMAL) end
     end
   end
-  if runtime.clock < testMsgUntil then ui.textColored(testMsg, YELLOW) end
+  if runtime.clock < testMsgUntil then common.note(testMsg, YELLOW) end
   ui.textWrapped(T.intro)
 end
 
@@ -856,20 +857,20 @@ local function list()
     ui.sameLine()
     if ui.button(expanded == r.id and l.close or l.open, TOGGLE_SIZE) then toggle(r.id) end
     ui.sameLine()
-    ui.textColored(r.name, r.colour)
+    common.note(r.name, r.colour)
     if ui.itemHovered() then ui.setTooltip(r.tip) end
     local sc = live and r.ci and C.scen[r.ci]
     if sc then
       if sc.forceUntil > t then
         ui.sameLine()
-        ui.textColored(T.testing, YELLOW)
+        common.note(T.testing, YELLOW)
       elseif sc.active then
         ui.sameLine()
-        ui.textColored(T.now, GREEN)
+        common.note(T.now, GREEN)
       end
     end
-    if r.availLine then ui.textColored(r.availLine, DIM)
-    elseif r.hint then ui.textColored(r.hint, GREY) end
+    if r.availLine then common.note(r.availLine, DIM)
+    elseif r.hint then common.note(r.hint, GREY) end
     if expanded == r.id and X.id == r.id then details() end
   end
 end
@@ -889,7 +890,7 @@ local function draw()
   ui.separator()
   list()
   ui.separator()
-  if ui.button('Přidat vlastní podmínku##addcustom') then
+  if ui.button('Přidat vlastní scénář##addcustom') then
     commit()
     local scId = runtime.addCustom()
     if scId then expanded = scId end

@@ -2,6 +2,7 @@
 -- mode per car, the cabin light / dash meshes of the backlight, mesh pickers and the light scenarios (on/off, priority,
 -- Test, parameters, colour). Labels are built when lights.version changes, never per frame.
 
+local common = require('src/ui/common')
 local config = require('src/config')
 local runtime = require('src/runtime')
 local lights = require('src/lights')
@@ -16,6 +17,9 @@ local GREY = rgbm(0.6, 0.6, 0.6, 1)
 local GREEN = rgbm(0.4, 1, 0.5, 1)
 local CELL = vec2(24, 24)
 local SHOWN = 60          -- mesh picker rows at most
+local TEST_OFF = 'Test teď nejde: zapněte hlavní vypínač a „Ovládat světla auta“.'
+local message, messageUntil = nil, 0
+local function say(text) message, messageUntil = text, runtime.clock + 5 end
 
 local T = {
   intro = 'Světla vašeho auta. Ukazuji jen to, co auto má. Skutečná světla mění opravdový stav auta, „jen u vás“ '
@@ -177,7 +181,7 @@ local function pickerBlock(role)
     local name = list[k].name
     if ui.selectable(labels[k], lights.meshSelected(role, name)) then lights.toggleMesh(role, name) end
   end
-  if moreText then ui.textColored(moreText, GREY) end
+  if moreText then common.note(moreText, GREY) end
 end
 
 -- ---------------------------------------------------------------- sections
@@ -190,14 +194,14 @@ local function itemsSection()
     local it = items[i]
     ui.text(it.name)
     ui.sameLine()
-    ui.textColored(it.on and T.on or T.off, it.on and GREEN or GREY)
+    common.note(it.on and T.on or T.off, it.on and GREEN or GREY)
     ui.sameLine()
-    ui.textColored(it.real and T.real or T.localOnly, it.real and ORANGE or GREY)
+    common.note(it.real and T.real or T.localOnly, it.real and ORANGE or GREY)
     ui.textWrapped(itemDesc[i] or '')
     ui.text(T.holder)
     ui.sameLine()
     ui.text(it.holder)
-    if it.note then ui.textColored(it.note, ORANGE) end
+    if it.note then common.note(it.note, ORANGE) end
   end
 end
 
@@ -208,7 +212,7 @@ local function rainSourceItems()
     if e.usable then
       if ui.selectable(sourceLabels[i], lights.rainSource == e) then lights.setRainSwitch(e.key) end
     else
-      ui.textColored(sourceLabels[i], GREY)
+      common.note(sourceLabels[i], GREY)
     end
   end
 end
@@ -218,7 +222,7 @@ local function rainSection()
   ui.textWrapped(T.rainHelp)
   local cfg = lights.carSettings()
   local mode = lights.rainMode
-  if cfg.rain.mode == nil and lights.rainAuto ~= '' then ui.textColored(lights.rainAuto, GREY) end
+  if cfg.rain.mode == nil and lights.rainAuto ~= '' then common.note(lights.rainAuto, GREY) end
   if #lights.rainSources > 0 then
     if ui.radioButton(T.rmSwitch, mode == 'switch') and mode ~= 'switch' then lights.setRainMode('switch') end
     ui.sameLine()
@@ -281,10 +285,12 @@ local function scenarioRow(r)
   if ui.button(r.down) then lights.move(s.id, 1) end
   ui.sameLine()
   local testing = s.forceUntil > lights.clock
-  if ui.button(testing and r.testing or r.test) then lights.test(s.id) end
+  if ui.button(testing and r.testing or r.test) and not lights.test(s.id) then
+    say(TEST_OFF)
+  end
   if s.active then
     ui.sameLine()
-    ui.textColored(testing and T.forced or T.active, GREEN)
+    common.note(testing and T.forced or T.active, GREEN)
   end
   ui.textWrapped(r.desc)
   for k = 1, #r.params do
@@ -324,9 +330,10 @@ end
 
 local function draw()
   refresh()
-  if runtime.ST.isOnline then ui.textColored(lights.online.BANNER, ORANGE) end
+  if runtime.ST.isOnline then common.note(lights.online.BANNER, ORANGE) end
   ui.textWrapped(T.intro)
-  if not S.master then ui.textColored(T.masterOff, ORANGE) end
+  if not S.master then common.note(T.masterOff, ORANGE) end
+  if message and runtime.clock < messageUntil then common.note(message, ORANGE) end
   if ui.checkbox(T.enabled, G.enabled) then lights.setGlobal('enabled', not G.enabled) end
   ui.sameLine()
   if ui.checkbox(T.realOnline, G.realOnline) then lights.setGlobal('realOnline', not G.realOnline) end
@@ -335,7 +342,7 @@ local function draw()
     return
   end
   if not lights.running then lights.poll() end
-  for i = 1, #lights.notes do ui.textColored(lights.notes[i], ORANGE) end
+  for i = 1, #lights.notes do common.note(lights.notes[i], ORANGE) end
   ui.separator()
   itemsSection()
   ui.separator()

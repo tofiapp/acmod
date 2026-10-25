@@ -437,12 +437,12 @@ check(saved.limiter.to == 'all', 'target saved')
 -- ---------------------------------------------------------------- custom condition builder
 
 show(1)
-click('Přidat vlastní podmínku##addcustom')
+click('Přidat vlastní scénář##addcustom')
 local customId
 for _, e in ipairs(presets.effective(rt.preset())) do if e.custom then customId = e.id end end
 text = capture()
 check(customId ~= nil and drawn['Skrýt##ex_' .. customId] and has(text, 'Název:'), 'add custom: new scenario expanded')
-check(drawn['##q1'] and drawn['##op1'] and drawn['##v1'] and has(text, 'Shrnutí: svítí, když Rychlost < 60 km/h'),
+check(drawn['##q1'] and drawn['##op1'] and drawn['##v1'] and has(text, 'Shrnutí: svítí, když rychlost < 60 km/h'),
   'custom: one row speed < 60 with its description')
 
 -- name: typed, saved when the field is left
@@ -515,7 +515,7 @@ frame(1)
 w = entry(customId).when
 check(w[2].v == 100, 'value slider: saved on release')
 text = capture()
-check(has(text, 'ne V pit lane a Rychlost ≥ 100 km/h'), 'description: both rows')
+check(has(text, 'mimo pit lane a rychlost ≥ 100 km/h'), 'description: both rows')
 pick('##q2', 'Denní doba')
 w = entry(customId).when
 check(w[2].q == 'time' and w[2].op == '>=' and w[2].v >= 0 and w[2].v <= 24, 'quantity change keeps the value in range')
@@ -655,7 +655,7 @@ check(grown < 4, string.format('no per-frame allocation with the Scénáře tab 
 if os.getenv('LC_SHOW_ALLOC') then print(string.format('alloc fill expanded: %.3f KB', grown)) end
 
 -- a custom scenario with two condition rows expanded
-click('Přidat vlastní podmínku##addcustom')
+click('Přidat vlastní scénář##addcustom')
 click('Přidat podmínku##addrow')
 pick('##q2', 'V pit lane')
 show(30)

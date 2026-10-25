@@ -1,6 +1,7 @@
 -- Tab Diody: takeover method, brightness, live preview of the LEDs in their real order per group (hover = the LED
 -- blinks on the car, click = pick its colour), test patterns, LED list, rejected candidates, diagnostics.
 
+local common = require('src/ui/common')
 local config = require('src/config')
 local runtime = require('src/runtime')
 local takeover = require('src/takeover')
@@ -98,7 +99,7 @@ local function preview()
     ui.text(groupLabels[gi] or '')
     if normal and running and C and C.groups[gi] then
       ui.sameLine()
-      ui.textColored(C.groups[gi].activeName or '(nic, základ presetu)', GREEN)
+      common.note(C.groups[gi].activeName or '(nic, základ presetu)', GREEN)
     end
     for k = 1, #g.leds do
       local i = g.leds[k]
@@ -122,7 +123,7 @@ local function preview()
       end
     end
   end
-  ui.textColored('Šedá = dioda řízená autem. Najetím myší dioda na autě bliká, klik = vlastní barva (test).', GREY)
+  common.note('Šedá = dioda řízená autem. Najetím myší dioda na autě bliká, klik = vlastní barva (test).', GREY)
   if S.testMode == runtime.MANUAL and ui.button('Všechny zpět autu') then
     for i = 1, runtime.n do runtime.manual[i] = color.ORIGINAL end
   end
@@ -137,7 +138,7 @@ local function draw()
     ui.text('Čekám na načtení auta…')
     return
   end
-  for i = 1, #warningLines do ui.textColored(warningLines[i], ORANGE) end
+  for i = 1, #warningLines do common.note(warningLines[i], ORANGE) end
   if #lay.leds == 0 then
     ui.textWrapped('Na tomto autě jsem nenašel žádné diody (digital_instruments.ini, CSP config, označení actsAsLED ani'
       .. ' jména meshů). Vyberte je ručně ze seznamu meshů kokpitu tlačítkem níže.')
@@ -159,8 +160,8 @@ local function draw()
   ui.separator()
   for i = 1, #ledLines do ui.text(ledLines[i]) end
   if #rejectedLines > 0 then
-    ui.text('Odmítnuté kandidáty:')
-    for i = 1, #rejectedLines do ui.textColored(rejectedLines[i], GREY) end
+    ui.text('Odmítnutí kandidáti:')
+    for i = 1, #rejectedLines do common.note(rejectedLines[i], GREY) end
   end
   if ui.checkbox('Zobrazit diagnostiku', S.showDiag) then config.set('showDiag', not S.showDiag) end
   if S.showDiag then

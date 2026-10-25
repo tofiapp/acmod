@@ -62,8 +62,8 @@ function M.setGlobal(key, value)
     globalDue = M.clock + SAVE_DELAY
   else
     stored[key] = value
+    bump()
   end
-  bump()
 end
 
 -- ---------------------------------------------------------------- car fields (probed once per car)
@@ -524,8 +524,7 @@ function M.setParam(id, key, value)
     local d = s.def.params[k]
     if d.key == key then s.P[key] = paramValue(d, value, d.def) end
   end
-  scenDue = M.clock + SAVE_DELAY
-  bump()
+  scenDue = M.clock + SAVE_DELAY        -- the rows read the live value, no rebuild of the tab needed
 end
 
 -- Writes deferred saves when due (force: now, e.g. on release or a car change).
@@ -544,8 +543,7 @@ function M.setColour(id, packed)
   local s = M.byId[id]
   if not s or not s.def.colour then return end
   s.colour = color.parse(packed, s.colour)
-  saveScen()
-  bump()
+  scenDue = M.clock + SAVE_DELAY        -- the picker changes it every frame while dragging: save once it rests
 end
 
 -- Moves a scenario one place up (-1) or down (+1) in the priority order, past the scenarios the tab does not show
@@ -571,9 +569,11 @@ local function startFlash(s)
 end
 
 -- Button Test: the scenario runs for 5 s even when its condition does not hold (flash: one series of pulses).
+-- Returns false when nothing can be tested now (master switch or 'Ovládat světla auta' off): a test set then would
+-- fire the real lights later, when the switch is turned on.
 function M.test(id)
   local s = M.byId[id]
-  if not s then return end
+  if not s or not M.running then return false end
   if s.out == OUT.flash then
     -- without the car's own flash the high beams blink, which needs the headlights on
     if OUT.flash.ch == CH.highBeams and not (car and flag('headlightsActive')) then return end
@@ -582,6 +582,7 @@ function M.test(id)
   else
     s.forceUntil = M.clock + TEST_SECONDS
   end
+  return true
 end
 
 function M.testing(id)
@@ -939,9 +940,8 @@ function M.setDash(key, value)
   else return end
   cabin.k, cabin.placed = -1, false
   if cabin.light and key == 'range' then pcall(function () cabin.light.range = d.range end) end
-  if key == 'cabinLight' then dirty = true end
   saveCarSoon()
-  bump()
+  if key == 'cabinLight' then dirty = true; bump() end
 end
 
 function M.carSettings() return carCfg end

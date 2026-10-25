@@ -97,6 +97,14 @@ function M.setPreset(id)
   bump()
 end
 
+-- Nastavení changed the default preset: a car without its own choice follows it now.
+function M.defaultPresetChanged()
+  if M.profile.preset or not M.layout then return end
+  M.presetId = presets.choose(nil, S.defaultPreset, M.layout, ST.drsPresent)
+  M.compiledVersion = -1
+  bump()
+end
+
 function M.cyclePreset()
   local all = presets.all()
   local at = 1

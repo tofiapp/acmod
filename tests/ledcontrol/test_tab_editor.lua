@@ -241,7 +241,7 @@ check(work and nFrames == 1 and cur == 1 and not dirty, 'new animation: clean wo
 t = texts()
 check(has(t, 'Řada otáček – 15 diod') and has(t, 'Levé – 3 diody') and has(t, 'Pravé – 3 diody'),
   'grid: one row per LED group with its name, in real order')
-check(has(t, 'Ukáže se, když: Rychlost < 60 km/h'), 'custom animation: its condition is described')
+check(has(t, 'Ukáže se, když: rychlost < 60 km/h'), 'custom animation: its condition is described')
 check(not has(t, 'neuloženo'), 'clean copy: no "neuloženo"')
 check(U.flags['Zahodit změny##edDiscard'] == 0x100, 'clean copy: Zahodit změny disabled')
 check(has(t, 'Smazat animaci##edScDel'), 'custom animation: delete button shown')
@@ -412,10 +412,13 @@ tabFrame(2)
 local customLabel = 'Vlastní animace 1 – vlastní snímky##edSc:' .. sel
 pickCombo('##edScenario', 'Omezovač otáček##edSc:limiter')
 t = texts()
-check(select(4, peek()) == 'limiter' and has(t, 'vzor „Bliká“') and has(t, 'neuloženo'),
-  'built-in scenario: its look is replaced only on save')
+check(select(4, peek()) == 'limiter' and has(t, 'vzor „Bliká“') and not has(t, 'neuloženo'),
+  'built-in scenario: only shown, nothing counts as unsaved before painting')
 check(storedLook('limiter') == nil, 'built-in scenario: nothing stored before Uložit')
 check(not has(t, 'Smazat animaci##edScDel'), 'built-in scenario: no delete button')
+click('##edBrush1')
+click('##edCell1_3')
+check(has(texts(), 'neuloženo'), 'built-in scenario: painting makes it unsaved')
 -- the car's preset changed outside the editor (header combo) with unsaved edits: they are dropped with a message
 U.openCombo = '##preset'
 click('GT3 styl##hdrPreset:builtin:gt3')

@@ -95,7 +95,7 @@ check(S.intensity == 25 and S.defaultPreset == 'auto' and S.method == 1, 'defaul
 clickIn('Diody', 'Upravit pořadí a skupiny diod')
 local t = texts('Diody')
 check(t:find('1. RPM_LED_3', 1, true) and t:find('Pořadí a výběr diod', 1, true), 'map: editor lists the LEDs in order')
-clickIn('Diody', 'Dolů##mapDown1')
+clickIn('Diody', '↓##mapDown1')
 clickIn('Diody', 'Odebrat##mapDel21')
 clickIn('Diody', 'Uložit pořadí')
 frame(3)
@@ -112,7 +112,7 @@ clickIn('Diody', 'Načíst meshe z kokpitu')
 env.ui.type = { ['Hledat##meshFilter'] = 'flag_r3' }
 frame(1)
 t = texts('Diody')
-check(t:find('FLAG_R3', 1, true) ~= nil and t:find('1 meshů', 1, true) ~= nil, 'map: mesh list filtered')
+check(t:find('FLAG_R3', 1, true) ~= nil and t:find('1 mesh', 1, true) ~= nil, 'map: mesh list filtered')
 local label
 for _, s in ipairs(env.ui.texts) do if s:find('^FLAG_R3') then label = s end end
 clickIn('Diody', label)
@@ -122,6 +122,14 @@ local picked
 for _, led in ipairs(rt.layout.leds) do if led.name == 'FLAG_R3' then picked = led end end
 check(#rt.layout.leds == 21 and picked and picked.group == 1 and picked.id == 16,
   'map: picked mesh added at the end of group 1 (main row)')
+-- reverse a whole group in one click
+clickIn('Diody', 'Upravit pořadí a skupiny diod')
+clickIn('Diody', 'Obrátit pořadí##mapRev2')
+clickIn('Diody', 'Uložit pořadí')
+frame(3)
+local g2 = rt.layout.groups[2]
+check(rt.layout.leds[g2.leds[1]].name == 'FLAG_L3' and rt.layout.leds[g2.leds[3]].name == 'FLAG_L1',
+  'map: Obrátit pořadí reverses the group')
 clickIn('Diody', 'Zpět na automatické hledání')
 frame(3)
 check(not rt.layout.manual and #rt.layout.leds == 21 and rt.layout.signature == '15+3+3', 'map: automatic detection again')
