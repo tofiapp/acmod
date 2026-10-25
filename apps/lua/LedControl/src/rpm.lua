@@ -11,7 +11,8 @@
 -- Writes ST.shiftUp (effective), ST.shiftStartManual (0 = from the preset), ST.limiterRpm, ST.limiterKnown.
 -- No allocation in update().
 
-local M = { version = 0, learned = 0, maxSeen = 0, flagUnreliable = false, auto = {}, ledRpm = nil }
+local M = { version = 0, learned = 0, maxSeen = 0, flagUnreliable = false, auto = {}, ledRpm = nil,
+  manual = { start = false, shift = false, limiter = false } }
 
 local profile = nil
 local saveFn = nil
@@ -64,6 +65,7 @@ local function compute(ST)
   else a.shift, a.shiftFrom = math.floor(limiter * 0.97 + 0.5), aiUp > 0 and '97 % omezovače (ai.ini je výš)' or '97 % omezovače' end
   local shift = c.shift or a.shift
   M.limiter, M.shift, M.start = limiter, shift, c.start or 0
+  M.manual.start, M.manual.shift, M.manual.limiter = c.start ~= nil, c.shift ~= nil, c.limiter ~= nil
   M.limiterKnown = c.limiter ~= nil or (c.learned or 0) > 0 or carLimiter > 0
   M.ledRpm = c.leds
   ST.shiftUp, ST.shiftKnown = shift, true
@@ -153,11 +155,21 @@ function M.setLed(k, value, ST)
   saveDue = clock + 0.5
 end
 
--- n values spread evenly from the start of the shift lights to the shift point.
-function M.spread(n, startRpm, ST)
+-- n values spread evenly from the start of the shift lights to the shift point, in the order the preset's fill
+-- lights the row: dir 'left' (default), 'right', 'edges' (pairs from both edges to the centre), 'centre'.
+function M.spread(n, startRpm, ST, dir)
   local list = {}
   local a, b = startRpm, M.shift
-  for k = 1, n do list[k] = n > 1 and math.floor(a + (b - a) * (k - 1) / (n - 1) + 0.5) or b end
+  local half = math.floor((n + 1) / 2)
+  for k = 1, n do
+    local r, len = k, n
+    if dir == 'right' then r = n - k + 1
+    elseif dir == 'edges' or dir == 'centre' then
+      r, len = math.min(k, n - k + 1), half
+      if dir == 'centre' then r = half - r + 1 end
+    end
+    list[k] = len > 1 and math.floor(a + (b - a) * (r - 1) / (len - 1) + 0.5) or b
+  end
   M.setLeds(list, ST)
 end
 

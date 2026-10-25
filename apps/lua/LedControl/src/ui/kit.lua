@@ -63,7 +63,9 @@ function K.tip(text)
 end
 
 -- Left column label of a form row; the control follows on the same line, aligned for every row.
+-- ui.alignTextToFramePadding (TimeShift) puts the text on the same baseline as the framed control next to it.
 function K.label(text)
+  if ui.alignTextToFramePadding then ui.alignTextToFramePadding() end
   ui.text(text)
   ui.sameLine(K.LABEL_W)
 end
@@ -100,13 +102,27 @@ function K.choice(labels, current)
   return clicked
 end
 
--- Icon button with its own id and a tooltip; returns true when clicked.
-function K.iconButton(id, icon, tooltip)
+-- Icon button with its own id and a tooltip; returns true when clicked (never when disabled).
+-- ui.iconButton(icon, size, padding, frame, ui.ButtonFlags.Disabled) as WebBrowser / RGBControl.
+local DISABLED = ui.ButtonFlags and ui.ButtonFlags.Disabled or 0
+function K.iconButton(id, icon, tooltip, disabled)
   ui.pushID(id)
-  local clicked = ui.iconButton(icon, 22, 5)
+  local clicked = ui.iconButton(icon, 22, 5, true, disabled and DISABLED or 0)
   ui.popID()
   if tooltip then K.tip(tooltip) end
-  return clicked
+  return clicked and not disabled
+end
+
+-- s cut to at most n bytes on a UTF-8 character boundary, with '…' when cut (call on change, not per frame).
+function K.shorten(s, n)
+  if type(s) ~= 'string' or #s <= n then return s end
+  local cut = n - 3
+  while cut > 0 do
+    local b = s:byte(cut + 1)
+    if not b or b < 0x80 or b >= 0xC0 then break end
+    cut = cut - 1
+  end
+  return s:sub(1, cut) .. '…'
 end
 
 -- Coloured dot on the text line (state: K.GREEN = active, K.DIM = idle, ...).

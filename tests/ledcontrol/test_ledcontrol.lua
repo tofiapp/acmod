@@ -10,6 +10,20 @@ local formulaCar, gt3Car, markedCar, namedCar, emptyCar, baseCar =
   H.formulaCar, H.gt3Car, H.markedCar, H.namedCar, H.emptyCar, H.baseCar
 local app
 local function loadApp() app = H.loadApp(); return app end
+-- the window's text this frame (labels with their ##ids, texts, combo previews; tooltips only when hovered)
+local function texts()
+  local was = env.windowOpen
+  env.windowOpen = true
+  env.ui.record = true
+  env.ui.texts = {}
+  frame(1)
+  env.ui.record = false
+  env.windowOpen = was
+  return table.concat(env.ui.texts, '\n')
+end
+local function has(t, s) return t:find(s, 1, true) ~= nil end
+-- CSP's ac.getCarName (RallyCopilot / SetupExchange use it) is not in the shared mock
+ac.getCarName = function (i) return i == 0 and 'Formula Test 2026' or '' end
 
 -- ---------------------------------------------------------------- 1. formula, shadow copies
 
@@ -39,6 +53,16 @@ check(#lay.leds[1].inst == 3 and lay.leds[1].inst[1].lodA and lay.leds[1].inst[1
   'formula: 3 instances per RPM LED, LOD A visible first')
 check(lay.leds[1].rpm ~= nil, 'formula: RPM_SWITCH read from digital_instruments')
 check(rt.info.shiftUp == 11500, 'formula: ai.ini shift point read')
+
+-- header: master switch, state, car name, preset; the Diody tab's preview and sections
+local t = texts()
+check(has(t, 'Zapnuto##master') and has(t, 'běží') and has(t, 'Formula Test 2026'), 'header: master switch, state, car name')
+check(has(t, '##preset') or has(t, 'F1 styl'), 'header: preset combo')
+local active = rt.compiled and rt.compiled.groups[1].activeName
+check(has(t, 'Řada otáček') and has(t, 'Levé') and has(t, 'Pravé') and active and has(t, active) and has(t, 'základ'),
+  'Diody: groups with the scenario that paints them (' .. tostring(active) .. ') or the base')
+check(has(t, 'Pořadí a skupiny') and has(t, 'Způsob převzetí') and has(t, 'Diagnostika'), 'Diody: sections')
+check(not has(t, 'Testovací vzor') and not has(t, 'Chyba'), 'header: no problem lines while all is well')
 
 -- original mode: nothing taken, AC's colours shown
 mode(1)
@@ -92,6 +116,7 @@ check(app.config.S.testMode == rt.MANUAL, 'manual: picking a colour switches to 
 
 -- hover blinks the LED on the car
 env.ui.hover = '##led1'
+check(has(texts(), '1. dioda'), 'hover: tooltip names the LED by its place in the group')
 local saw = { on = false, off = false }
 for _ = 1, 30 do
   frame(1)
@@ -101,6 +126,17 @@ end
 env.ui.hover = nil
 env.windowOpen = false
 check(saw.on and saw.off, 'hover: LED blinks on the car')
+
+-- the header's master checkbox
+click('Zapnuto##master')
+frame(2)
+check(app.config.S.master == false and rt.state == 'off', 'header: Zapnuto switches the master off')
+t = texts()
+check(has(t, 'vypnuto') and has(t, 'Zapnuto'), 'header: state vypnuto, Diody hint to switch on')
+click('Zapnuto##master')
+frame(2)
+check(app.config.S.master == true and rt.state == 'run', 'header: Zapnuto on again')
+env.windowOpen = false
 
 -- master off: everything back
 app.config.set('master', false)
@@ -134,7 +170,57 @@ frame(1)
 env.ui.slide = nil
 frame(2)
 check(near(seenOf('RPM_LED_1'), 50), 'brightness slider rewrites the LEDs')
+local S = app.config.S
+click('Den##bright2')
+frame(2)
+check(S.intensity == 30 and near(seenOf('RPM_LED_1'), 30), 'brightness preset Den = 30')
+click('Slunce##bright3')
+frame(2)
+check(S.intensity == 50 and near(seenOf('RPM_LED_1'), 50), 'brightness preset Slunce = 50')
+click('Noc##bright1')
+frame(2)
+check(S.intensity == 12 and near(seenOf('RPM_LED_1'), 12), 'brightness preset Noc = 12')
+-- automatic brightness: day / night sliders under the Jas row
+check(not has(texts(), '##intensityDay'), 'auto off: no day / night sliders')
+click('Auto##autoBrightness')
+frame(2)
+check(S.autoBrightness and near(seenOf('RPM_LED_1'), S.intensityDay), 'auto: day value at 14 h')
+t = texts()
+check(has(t, 'Den') and has(t, 'Noc') and has(t, 'teď ' .. S.intensityDay), 'auto: Den / Noc rows, the value used now')
+env.ui.slide = { ['##intensityDay'] = 40 }
+frame(1)
+env.ui.slide = nil
+frame(2)
+check(S.intensityDay == 40 and near(seenOf('RPM_LED_1'), 40), 'auto: Den slider')
+env.sim.timeHours = 23
+frame(2)
+check(near(seenOf('RPM_LED_1'), S.intensityNight), 'auto: night value at 23 h')
+env.ui.slide = { ['##intensityNight'] = 8 }
+frame(1)
+env.ui.slide = nil
+frame(2)
+check(S.intensityNight == 8 and near(seenOf('RPM_LED_1'), 8) and has(texts(), 'teď 8'), 'auto: Noc slider')
+click('Auto##autoBrightness')
+frame(2)
+check(not S.autoBrightness and near(seenOf('RPM_LED_1'), 12), 'auto off: the manual value again')
+env.sim.timeHours = 14
 app.runtime.setIntensity(25)
+
+-- Test row and the header's test pattern line
+click('Duha##mode2')
+check(S.testMode == 2, 'Test row: Duha')
+t = texts()
+check(has(t, 'Testovací vzor') and has(t, 'Zpět na provoz##hdrNormal'), 'header: test pattern line')
+click('Zpět na provoz##hdrNormal')
+check(S.testMode == 0, 'header: Zpět na provoz ends the test pattern')
+click('Vlastní##mode6')
+check(S.testMode == rt.MANUAL and has(texts(), 'Všechny zpět autu'), 'Test row: Vlastní offers all back to the car')
+rt.manual[1] = 0xFF0000
+click('Všechny zpět autu##allBack')
+check(rt.manual[1] == -1, 'Všechny zpět autu: every LED back to the car')
+click('Provoz##mode0')
+check(S.testMode == 0, 'Test row: Provoz = normal operation')
+mode(5)
 
 -- diagnostics
 click('Kopírovat diagnostiku')
@@ -165,7 +251,9 @@ local allBack = true
 for _, m in pairs(env.formula.hr) do if not m.visible then allBack = false end end
 check(allBack, 'error: originals visible again')
 env.windowOpen = true
-click('Zkusit znovu')
+t = texts()
+check(has(t, 'Chyba – diody jsou vrácené autu') and has(t, 'Zkusit znovu##retry'), 'header: error line with retry')
+click('Zkusit znovu##retry')
 frame(3)
 check(not app.safety.halted and app.runtime.state == 'run', 'error: retry runs again')
 env.windowOpen = false
@@ -182,7 +270,7 @@ env.storage = {}; env.startMode = 5
 loadApp()
 frame(2)
 env.windowOpen = true
-click('B – překreslení')
+click('B překreslení##method2')
 env.windowOpen = false
 frame(3)
 rt, tk = app.runtime, app.takeover
@@ -236,6 +324,7 @@ frame(3)
 env.createMeshFails = false
 check(app.takeover.method == 2 and app.takeover.fallback and app.takeover.fallback:find('createMesh', 1, true),
   'fallback: no copies -> redraw with the reason')
+check(has(texts(), 'Běží B – překreslení'), 'header: the method that runs instead')
 
 -- ---------------------------------------------------------------- 7. other cars and sources
 
@@ -291,9 +380,10 @@ env.ui.texts = {}
 frame(1)
 env.ui.record = false
 env.windowOpen = false
-local said = false
-for _, t in ipairs(env.ui.texts) do if t:find('nenašel', 1, true) then said = true end end
-check(said, 'empty: the window says no LEDs were found')
+local said = table.concat(env.ui.texts, '\n')
+check(has(said, 'Diody nenalezeny') and has(said, 'Vybrat diody ručně') and has(said, 'Kopírovat diagnostiku'),
+  'empty: the window says no LEDs were found, offers manual picking and the diagnostics')
+check(has(said, 'bez diod') and not has(said, 'Způsob převzetí'), 'empty: header state, no sections that need LEDs')
 
 -- model not loaded yet: waits and retries
 baseCar(1)
@@ -320,21 +410,33 @@ check(app.runtime.lastRestart == 'session' and app.runtime.state == 'run', 'sess
 
 -- ---------------------------------------------------------------- 8. no allocation per frame
 
+local function allocation(what)
+  env.windowOpen = true
+  env.ui.tab = 'Diody'
+  frame(120)
+  jit.off()
+  collectgarbage('collect')
+  collectgarbage('stop')
+  local before = collectgarbage('count')
+  frame(300)
+  local grown = collectgarbage('count') - before
+  collectgarbage('restart')
+  jit.on()
+  env.windowOpen = false
+  print(string.format('allocation, %s: %.2f KB', what, grown))
+  check(grown < 4, string.format('no per-frame allocation in update + render + window, %s (%.2f KB over 300 frames)',
+    what, grown))
+end
+
 formulaCar(1)
 env.storage = {}; env.startMode = 2
 loadApp()
-env.windowOpen = true
-frame(120)
-jit.off()
-collectgarbage('collect')
-collectgarbage('stop')
-local before = collectgarbage('count')
-frame(300)
-local grown = collectgarbage('count') - before
-collectgarbage('restart')
-jit.on()
-env.windowOpen = false
-check(grown < 4, string.format('no per-frame allocation in update + render + window (%.2f KB over 300 frames)', grown))
+allocation('Diody, test pattern')
+-- normal operation (scenario names per group) with automatic brightness ("teď" value)
+formulaCar(1)
+env.storage = { lc_autoBrightness = true }
+loadApp()
+allocation('Diody, scenarios + auto brightness')
 
 -- ---------------------------------------------------------------- 9. all files load
 

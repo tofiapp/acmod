@@ -1,17 +1,24 @@
--- Tab Scénáře: the scenarios of the car's current preset in priority order (grouped by category), each with on/off,
--- priority arrows, Test, a live "svítí teď" mark and its availability on this car; one scenario at a time is expanded
--- with its settings: target, pattern and only the settings the pattern uses (colours, Hz, direction, width, fill zones,
--- fill source), the scenario's parameter, and for custom scenarios the name and the condition rows.
--- Every edit goes through runtime (a built-in preset is copied to a user preset on the first edit, in presets.lua).
+-- Tab Scénáře (docs/ledcontrol-ui.md, section "Scénáře"): one line for the base look, then the scenarios of the car's
+-- current preset in priority order under small category captions, one row each: on/off, the name (a click expands
+-- its settings), a live dot (green = lit now, blue = Test, orange = a layout problem), Test and Výš / Níž. A scenario
+-- this car cannot show has a grey name with the reason in "(?)". The expanded scenario is a form of aligned rows with
+-- only the settings its pattern uses (patterns.USES), colours via K.colourField, the scenario's parameter, and for
+-- custom scenarios the name, the condition rows and Smazat.
+-- Every edit goes through runtime (a built-in preset is copied to a user preset on the first edit, in presets.lua; the
+-- tab then says so for a few seconds under the edited row).
 -- Slider, colour and name edits are kept here while the control is in use and saved once: on release for sliders and
 -- text (ui.itemDeactivatedAfterEdit / ui.itemActive), at most every 0.3 s for the colour picker (its release cannot
 -- be seen), so the preset file is not written every frame while dragging. A pending edit is saved before any other
--- edit and goes to the preset it was made in, even when the car switched presets meanwhile (hotkey, preset combo).
+-- edit and goes to the preset it was made in, even when the car switched presets meanwhile (hotkey, preset combo);
+-- main.lua calls M.flush when the tab is hidden.
 -- No allocation per frame: rows, labels and texts are rebuilt only when presets.version, runtime.version, the preset
 -- id, the test mode or this tab's own version change; combo contents are module-level functions that read the
 -- expanded scenario (X) and the condition row (comboRow) from module-level variables.
+-- CSP calls besides the kit: ui.selectable(label, selected, flags, size) (TrackCoordinatesHelper), ui.measureText
+-- (WebBrowser), ui.setNextItemIcon (AISplineEditor, RGBControl), ui.Icons.ArrowUp / ArrowDown (RGBControl),
+-- ui.Icons.Cancel (WebBrowser), ui.Icons.Plus (RGBControl), ui.indent / unindent (official android_auto apps).
 
-local common = require('src/ui/common')
+local K = require('src/ui/kit')
 local config = require('src/config')
 local runtime = require('src/runtime')
 local presets = require('src/presets')
@@ -25,28 +32,24 @@ local M = {}
 
 local floor = math.floor
 
-local WHITE = rgbm(1, 1, 1, 1)
-local GREY = rgbm(0.6, 0.6, 0.6, 1)
-local DIM = rgbm(0.45, 0.45, 0.45, 1)
-local GREEN = rgbm(0.4, 1, 0.5, 1)
-local YELLOW = rgbm(1, 0.85, 0.3, 1)
-local ORANGE = rgbm(1, 0.7, 0.2, 1)
-
-local ARROW = vec2(24, 0)
+-- columns of a scenario row (px from the window's left edge; the window is 560 px, rows end before 520)
+local COL_DOT, COL_TEST, COL_UP, COL_DOWN = 330, 348, 398, 424
+local NAME_MAX = COL_DOT - 68          -- the checkbox before the name, a "(?)" after it
 local TEST_SIZE = vec2(44, 0)
-local TOGGLE_SIZE = vec2(64, 0)
-local SWATCH = vec2(44, 0)
-local COMBO_W, SLIDER_W, ROW_Q_W, ROW_OP_W, ROW_V_W = 240, 260, 190, 56, 150
-local INDENT = 28
+local INDENT = 20                      -- the expanded scenario's form
+local ZONE_SLIDER_W, ZONE_RM_X = 110, 466
+local Q_W, OP_W, V_W, COND_RM_X = 160, 48, 120, 490
+local GAP = vec2(0, 4)
 
-local BF = ui.ButtonFlags
-local BUTTON_NONE = BF and BF.None or 0
-local BUTTON_DISABLED = BF and BF.Disabled or 0
-local PICKER = ui.ColorPickerFlags.PickerHueBar
+local TEXT = ui.StyleColor and ui.StyleColor.Text or nil
 local COMBO = ui.ComboFlags.None
+local ICONS = ui.Icons
+local ICON_UP, ICON_DOWN = ICONS.ArrowUp, ICONS.ArrowDown
+local ICON_REMOVE, ICON_ADD = ICONS.Cancel, ICONS.Plus
 
 local SAVE_EVERY = 0.3      -- s between saves when the release of a control cannot be seen
 local CONFIRM_TIME = 4
+local MSG_TIME, MSG_ACTION_TIME = 4, 8
 local MAX_ZONES = 8
 local MAX_ROWS = 8          -- conditions.sanitise keeps 8 rows
 local EMPTY = {}
@@ -57,46 +60,70 @@ local DEFAULT_ZONES = patterns.DEFAULT_ZONES
 -- ---------------------------------------------------------------- static texts and labels
 
 local T = {
-  intro = 'Nahoře je vyšší priorita: když platí víc scénářů najednou, na každé skupině diod svítí ten výš.'
-    .. ' Zaškrtnutí = scénář je zapnutý.',
-  cowBuiltin = 'Vestavěný preset zůstane beze změny: první úprava vytvoří vaši vlastní kopii a toto auto ji začne'
-    .. ' používat.',
-  cowUser = 'Změny se ukládají do tohoto presetu (platí pro všechna auta, která ho používají).',
-  base = 'Základ presetu (když žádný scénář nesvítí):',
-  testMode = 'Karta Diody teď ukazuje testovací vzor, scénáře na autě neběží.',
+  base = 'Základ (když nic nesvítí)',
+  baseWhat = 'Co diody ukazují, když žádný scénář nesvítí. Podle auta = diody ovládá auto samo.',
+  baseBuiltin = '„%s“ je vestavěný preset: první úprava vytvoří vaši vlastní kopii a toto auto ji začne používat.',
+  baseUser = 'Změny se ukládají do tohoto presetu „%s“ (platí pro všechna auta, která ho používají).',
+  baseFrom = 'Vychází z presetu „%s“.',
+  copied = 'Uloženo do vaší kopie „%s“.',
+  onTip = 'Zapnout nebo vypnout scénář',
+  nameTip = 'Kde: %s, vzor: %s. Kliknutím otevřete nastavení.',
   testTip = 'Ukáže scénář na autě na 5 s, i když jeho podmínka teď neplatí.',
-  upTip = 'Výš = vyšší priorita',
+  upTip = 'Výš = vyšší priorita: když platí víc scénářů najednou, na každé skupině diod svítí ten výš.',
   downTip = 'Níž = nižší priorita',
-  testLater = 'Test se na autě ukáže, až scénáře poběží (viz řádek nahoře).',
-  testOff = 'Vypnutý scénář (nebo scénář bez diod na tomto autě) se při Testu na autě neukáže, nejdřív ho zapněte.',
-  now = 'svítí teď',
-  testing = 'test',
-  target = 'Kde svítí:',
-  pattern = 'Vzor:',
-  dir = 'Směr:',
-  src = 'Plnění:',
-  frames = 'Snímky tohoto vzoru se kreslí v kartě Editor.',
-  noSettings = 'Tento vzor nemá další nastavení.',
-  zones = 'Barvy podle zaplnění (každá zóna platí od své hranice):',
+  dotNow = 'Svítí teď',
+  dotTest = 'Test',
+  unavailable = 'Nedostupné: %s',
+  unavailableDefault = 'na tomto autě',
+  testLater = 'Test teď nejde: %s.',
+  testPattern = 'diody ukazují testovací vzor',
+  testNoLeds = 'Test se neukáže: scénář nemá na tomto autě žádné diody.',
+  normal = 'Zpět na provoz##sc_normal',
+  -- the expanded scenario
+  target = 'Kde',
+  pattern = 'Vzor',
+  hz = 'Rychlost',
+  dir = 'Směr',
+  width = 'Počet diod',
+  zones = 'Barvy',
+  zonesHelp = 'Každá barva platí od své hranice (v % řady) až k další.',
   fromStart = 'od začátku',
-  carSrcMissing = 'Ne každá dioda cíle má práh otáček z auta: skupiny bez prahů se plní relativně.',
-  carSrcHint = '„Podle prahů otáček z auta“ jde jen u aut, která mají práh otáček u každé diody cíle.',
-  name = 'Název:',
-  rows = 'Svítí, když platí všechny podmínky:',
-  noRows = 'Bez podmínky scénář nikdy nesvítí (jen při Testu).',
-  waiting = 'Čekám na načtení auta…',
+  zonesMax = 'nejvýš 8 barev',
+  removeZone = 'Odebrat barvu',
+  addZone = 'Přidat barvu##addzone',
+  src = 'Plnění',
+  carSrcMissing = 'Skupiny bez prahů otáček se plní od začátku po bod řazení.',
+  carSrcHint = '„Podle prahů otáček auta“ jde jen u aut, která mají práh otáček u každé diody cíle.',
+  frames = 'Snímky',
+  framesWhere = 'kreslí se v kartě Editor',
+  rpm = 'Otáčky',
+  rpmWhere = 'nastavíte v kartě Otáčky',
+  targetMissing = 'Auto nemá %s, svítí hlavní řada.',
+  startManual = 'U tohoto auta platí začátek nastavený v kartě Otáčky.',
+  name = 'Název',
+  when = 'Když',
+  andWord = 'a',
+  noRows = 'Bez podmínky nikdy nesvítí (jen při Testu).',
+  removeRow = 'Odebrat podmínku',
+  addRow = 'Přidat podmínku##addrow',
+  delete = 'Smazat scénář##sc_delete',
+  deleteConfirm = 'Opravdu smazat?##sc_delete',
+  addCustom = 'Přidat vlastní scénář##addcustom',
+  conditionHolds = 'Svítí, když %s.',
 }
+
+local BASE_LABELS = { 'Zhasnuto##base_off', 'Podle auta##base_orig' }
 
 local TARGETS, TARGET_NAMES = scenarios.TARGETS, scenarios.TARGET_NAMES
 local KINDS, KIND_NAMES, USES = patterns.KINDS, patterns.NAMES, patterns.USES
 local DIRS, DIR_NAMES = patterns.DIRS, patterns.DIR_NAMES
 local SRCS = { 'relative', 'car' }
-local SRC_NAMES = { relative = 'relativně (od začátku po bod řazení)', car = 'podle prahů otáček z auta' }
+local SRC_NAMES = { relative = 'od začátku po bod řazení', car = 'podle prahů otáček auta' }
 local QUANTITIES, OPS, OP_NAMES = conditions.QUANTITIES, conditions.OPS, conditions.OP_NAMES
 
 local C1_NAME = { solid = 'Barva', blink = 'Barva', alternate = 'Liché diody', pulse = 'Barva', run = 'Světlo' }
 local C2_NAME = { blink = 'Mezi bliknutími', alternate = 'Sudé diody', pulse = 'Útlum do', run = 'Pozadí',
-  fill = 'Nerozsvícené diody' }
+  fill = 'Pozadí' }
 
 local function fmtText(s) return (tostring(s or ''):gsub('%%', '%%%%')) end
 
@@ -109,13 +136,15 @@ for i = 1, #QUANTITIES do
   Q_FMT[q.id] = (fine and '%.1f' or '%.0f') .. (q.unit and q.unit ~= '' and (' ' .. fmtText(q.unit)) or '')
 end
 
-local ZU, ZC, ZR, ZN = {}, {}, {}, {}
+-- zone labels: start slider, colour button, remove button id (K.iconButton)
+local ZU, ZC, ZR = {}, {}, {}
 for k = 1, MAX_ZONES do
-  ZU[k], ZC[k], ZR[k], ZN[k] = '##zu' .. k, '##zc' .. k, 'Odebrat##rmzone' .. k, 'Zóna ' .. k
+  ZU[k], ZC[k], ZR[k] = '##zu' .. k, '##zc' .. k, 'rmzone' .. k
 end
+-- condition row labels: quantity, operator, value, yes / no, remove button id (K.iconButton)
 local QL, OPL, VL, VB, RM = {}, {}, {}, {}, {}
 for r = 1, MAX_ROWS do
-  QL[r], OPL[r], VL[r], VB[r], RM[r] = '##q' .. r, '##op' .. r, '##v' .. r, 'ano##vb' .. r, 'Odebrat##rmrow' .. r
+  QL[r], OPL[r], VL[r], VB[r], RM[r] = '##q' .. r, '##op' .. r, '##v' .. r, 'ano##vb' .. r, 'rmrow' .. r
 end
 
 -- colour slots of the expanded scenario: 1 = colour 1, 2 = colour 2, 2 + k = fill zone k. The rgbm a colour button
@@ -133,11 +162,31 @@ local idLabels = {}
 local function labelsOf(id)
   local l = idLabels[id]
   if not l then
-    l = { on = '##on_' .. id, up = '↑##up_' .. id, down = '↓##dn_' .. id, test = 'Test##test_' .. id,
-      open = 'Upravit##ex_' .. id, close = 'Skrýt##ex_' .. id }
+    l = { on = '##on_' .. id, up = 'up_' .. id, down = 'dn_' .. id, test = 'Test##test_' .. id }
     idLabels[id] = l
   end
   return l
+end
+
+-- category captions in capitals (Czech letters included; string.upper only knows ASCII)
+local UPPER = { ['á'] = 'Á', ['č'] = 'Č', ['ď'] = 'Ď', ['é'] = 'É', ['ě'] = 'Ě', ['í'] = 'Í', ['ň'] = 'Ň',
+  ['ó'] = 'Ó', ['ř'] = 'Ř', ['š'] = 'Š', ['ť'] = 'Ť', ['ú'] = 'Ú', ['ů'] = 'Ů', ['ý'] = 'Ý', ['ž'] = 'Ž' }
+local captions = {}
+local function captionOf(cat)
+  cat = tostring(cat or '')
+  local c = captions[cat]
+  if not c then
+    c = cat:upper():gsub('[\195\196\197][\128-\191]', UPPER)
+    captions[cat] = c
+  end
+  return c
+end
+
+local function firstUpper(s)
+  s = tostring(s or '')
+  local b = s:byte(1)
+  if b and b >= 97 and b <= 122 then return s:sub(1, 1):upper() .. s:sub(2) end
+  return s
 end
 
 -- ---------------------------------------------------------------- state
@@ -147,17 +196,20 @@ local seenPresets, seenRuntime, seenPresetId, seenMode, seenOwn = -1, -1, nil, -
 local own = 0                   -- this tab's version (expanded scenario, ...)
 local expanded = nil            -- id of the expanded scenario
 local freshC = nil              -- runtime.compiled when it matches the shown preset, else nil
-local head = { name = '', note = nil, cow = '', baseOff = true, status = nil, warnings = {}, testMode = false }
-local testMsg, testMsgUntil = T.testLater, -1
+local head = { baseOff = true, help = '' }
 local confirmDelete = -1
 local comboRow = 1
 local testQueued = nil          -- id of a Test clicked while the compiled preset was a frame old
 
+-- one short message (feedback of a click) under the row it belongs to ('' = under the base line)
+local msg, msgColour, msgId, msgUntil, msgAction = '', K.GREY, nil, -1, false
+
 -- the expanded scenario, rebuilt with the rows
-local X = { id = nil, e = nil, custom = false, p = 'solid', pName = '', uses = EMPTY, to = 'all', toName = '',
+local X = { id = nil, e = nil, custom = false, p = 'solid', pName = '', uses = EMPTY, to = 'all', toName = '', toNote = nil,
   c = { 0, 0 }, c1Name = '', c2Name = '', hz = 2, width = 1, dir = 'left', dirName = '', src = 'relative',
   srcName = '', carSrcOk = false, rpmFill = true, nz = 0, zu = {}, zc = {}, zEnd = 1,
-  param = nil, pValue = 0, pFmt = '', name = '', nw = 0, wq = {}, wop = {}, wv = {}, wbool = {}, desc = '' }
+  param = nil, pValue = 0, paramName = '', pFmt = '', name = '', nw = 0, wq = {}, wop = {}, wv = {}, wbool = {},
+  warn = nil, shift = false }
 
 -- pending edit of a slider, colour or text control
 local K_LOOK, K_PARAM, K_ZONE, K_COLOUR, K_COND, K_NAME = 1, 2, 3, 4, 5, 6
@@ -184,6 +236,25 @@ local function snap(v, step, lo, hi)
 end
 
 local function hexOf(p) return string.format('#%06X', p) end
+
+local function flash(text, colour, id, action)
+  msg, msgColour, msgId, msgAction = text, colour, id, action == true
+  msgUntil = runtime.clock + (action and MSG_ACTION_TIME or MSG_TIME)
+end
+
+-- After an edit: remembers when it was saved; when it made a copy of a built-in preset, says so under the row.
+local function after(before, id)
+  lastSave = runtime.clock
+  if before ~= runtime.presetId and presets.isBuiltin(before) then
+    flash(string.format(T.copied, tostring(runtime.preset().name)), K.GREEN, id or '')
+  end
+end
+
+local function edit(id, field, value)
+  local before = runtime.presetId
+  runtime.editScenario(id, field, value)
+  after(before, id)
+end
 
 -- The current effective entry of a scenario in a preset (not the cached one, which may be a frame old).
 local function entryIn(preset, id)
@@ -279,17 +350,18 @@ local function commit()
     end
     field, value = 'look', copy
   end
-  if here then runtime.editScenario(id, field, value)
-  else presets.setScenario(P.preset, id, field, value) end
-  lastSave = runtime.clock
+  if here then edit(id, field, value)
+  else
+    presets.setScenario(P.preset, id, field, value)
+    lastSave = runtime.clock
+  end
 end
 
 -- Immediate edits (combos, checkboxes, buttons) of the expanded scenario: a pending edit is saved first, so both are
 -- kept and the pending one goes to the preset it was made in.
 local function editField(field, value)
   commit()
-  runtime.editScenario(X.id, field, value)
-  lastSave = runtime.clock
+  edit(X.id, field, value)
 end
 
 local function editLook(field, value)
@@ -298,8 +370,7 @@ local function editLook(field, value)
   if not e then return end
   local copy = lookCopy(e)
   copy[field] = value
-  runtime.editScenario(X.id, 'look', copy)
-  lastSave = runtime.clock
+  edit(X.id, 'look', copy)
 end
 
 -- true when the game can tell this tab that a slider / text field was released
@@ -361,13 +432,18 @@ local function holds(op, x, v)
   return math.abs(x - v) >= 0.5
 end
 
-local function buildX(e)
+local function buildX(e, r, lay, hasRole)
   X.id, X.e, X.custom = e.id, e, e.custom == true
   local look = type(e.look) == 'table' and e.look or EMPTY
   local p = patterns.KIND_INDEX[look.p] and look.p or 'solid'
   X.p, X.pName, X.uses = p, KIND_NAMES[p] or p, USES[p] or EMPTY
   X.to = e.to or 'all'
   X.toName = TARGET_NAMES[X.to] or X.to
+  -- a role the car does not have falls back to the main row (engine.lua)
+  X.toNote = nil
+  if lay and X.to ~= 'all' and X.to ~= 'main' and not hasRole[X.to] then
+    X.toNote = string.format(T.targetMissing, X.toName)
+  end
   local c = type(look.c) == 'table' and look.c or EMPTY
   X.c[1], X.c[2] = color.parse(c[1], 0xFFFFFF), color.parse(c[2], color.OFF)
   X.c1Name, X.c2Name = C1_NAME[p] or 'Barva', C2_NAME[p] or 'Druhá barva'
@@ -381,6 +457,7 @@ local function buildX(e)
   X.carSrcOk = carThresholdsOk(X.to)
   -- a fill driven by time (start countdown) has nothing to do with RPM thresholds
   X.rpmFill = not (e.def and e.def.value and e.def.id ~= 'shiftLights')
+  X.shift = e.id == 'shiftLights'
   local z = zonesOf(look)
   X.nz = math.min(MAX_ZONES, #z / 2)
   for k = 1, X.nz do X.zu[k], X.zc[k] = z[2 * k - 1], color.parse(z[2 * k], 0xFFFFFF) end
@@ -389,17 +466,24 @@ local function buildX(e)
   X.param = def
   if def then
     X.pValue = num(e.param, def.default or def.min, def.min, def.max)
-    X.pFmt = fmtText(def.name) .. ': %.0f' .. (def.unit and def.unit ~= '' and (' ' .. fmtText(def.unit)) or '')
+    X.paramName = tostring(def.name)
+    X.pFmt = '%.0f' .. (def.unit and def.unit ~= '' and (' ' .. fmtText(def.unit)) or '')
   end
   X.name = e.name or ''
   local w = type(e.when) == 'table' and e.when or EMPTY
   X.nw = math.min(MAX_ROWS, #w)
-  for r = 1, X.nw do
-    local q = conditions.BY_ID[w[r].q] or QUANTITIES[1]
-    X.wq[r], X.wop[r], X.wv[r] = q, w[r].op or '<', tonumber(w[r].v) or 0
-    X.wbool[r] = holds(X.wop[r], 1, X.wv[r])   -- "ano" = the row holds while the quantity is on
+  for i = 1, X.nw do
+    local q = conditions.BY_ID[w[i].q] or QUANTITIES[1]
+    X.wq[i], X.wop[i], X.wv[i] = q, w[i].op or '<', tonumber(w[i].v) or 0
+    X.wbool[i] = holds(X.wop[i], 1, X.wv[i])   -- "ano" = the row holds while the quantity is on
   end
-  X.desc = (X.custom and X.nw > 0) and ('Shrnutí: svítí, když ' .. conditions.describe(w) .. '.') or ''
+  X.warn = r.warn
+end
+
+local function nameWidth(name)
+  local w = ui.measureText and ui.measureText(name).x or #name * 7
+  w = floor(w + 8)
+  return w > NAME_MAX and NAME_MAX or w
 end
 
 local function rebuild()
@@ -410,50 +494,59 @@ local function rebuild()
   local index = {}
   if freshC then for i = 1, #C.scen do index[C.scen[i].id] = i end end
   local lay = runtime.layout
+  local hasRole = {}
+  if lay and lay.groups then for gi = 1, #lay.groups do hasRole[lay.groups[gi].role] = true end end
   rows = {}
   local prevCat, found = nil, false
   for i = 1, #list do
     local e = list[i]
-    local r = { id = e.id, e = e, on = e.on, l = labelsOf(e.id), name = e.name, first = i == 1, last = i == #list,
-      ci = index[e.id], avail = true }
-    if e.cat ~= prevCat then r.cat, prevCat = e.cat, e.cat end
+    local r = { id = e.id, e = e, on = e.on, l = labelsOf(e.id), first = i == 1, last = i == #list,
+      ci = index[e.id], label = tostring(e.name) .. '##ex_' .. e.id }
+    if e.cat ~= prevCat then r.cat, prevCat = captionOf(e.cat), e.cat end
     local ok, note = true, nil
-    if r.ci then
-      local sc = C.scen[r.ci]
+    local sc = r.ci and C.scen[r.ci]
+    if sc then
       ok, note = sc.avail ~= false, sc.note
+      if sc.layoutOk == false then
+        local prefix = tostring(sc.name) .. ':'
+        for k = 1, #C.warnings do
+          local wtext = C.warnings[k]
+          if wtext:sub(1, #prefix) == prefix then r.warn = r.warn and (r.warn .. ' ' .. wtext) or wtext end
+        end
+      end
     elseif lay and e.def and e.def.avail then
       local okCall, a, b = pcall(e.def.avail, runtime.ST, lay)
       if okCall then ok, note = a ~= false, b end
     end
-    r.avail = ok
-    if not ok then r.availLine = '      nedostupné: ' .. tostring(note or 'na tomto autě')
+    if not ok then
+      r.help = string.format(T.unavailable, tostring(note or T.unavailableDefault))
     elseif e.custom then
-      r.hint = (type(e.when) == 'table' and #e.when > 0) and ('      Svítí, když ' .. conditions.describe(e.when))
-        or ('      ' .. T.noRows)
-    elseif note then r.hint = '      ' .. tostring(note) end
-    r.colour = not ok and DIM or (e.on and WHITE or GREY)
-    r.tip = string.format('%s\nKde svítí: %s\nVzor: %s', e.name, TARGET_NAMES[e.to] or tostring(e.to),
-      KIND_NAMES[type(e.look) == 'table' and e.look.p or ''] or 'Svítí')
+      r.help = (type(e.when) == 'table' and #e.when > 0) and string.format(T.conditionHolds, conditions.describe(e.when))
+        or T.noRows
+    elseif note and not (e.def and e.def.to == 'side') then
+      -- (the note of a side scenario says it falls back to the main row: shown at Kde, for the actual target)
+      r.help = firstUpper(note)
+    end
+    r.colour = not ok and K.DIM or (not e.on and K.GREY or nil)
+    r.tip = string.format(T.nameTip, TARGET_NAMES[e.to] or tostring(e.to),
+      KIND_NAMES[type(e.look) == 'table' and e.look.p or ''] or KIND_NAMES.solid)
+    r.size = vec2(nameWidth(tostring(e.name)), 0)
     rows[i] = r
-    if e.id == expanded then found = true; buildX(e) end
+    if e.id == expanded then found = true; buildX(e, r, lay, hasRole) end
   end
   nRows = #list
   if not found then expanded = nil; X.id = nil end
-  head.name = 'Preset: ' .. tostring(preset.name) .. (preset.builtin and ' (vestavěný)' or ' (vlastní)')
-  if preset.builtin then head.note = preset.note
+  local text
+  if preset.builtin then
+    text = string.format(T.baseBuiltin, tostring(preset.name))
+    if preset.note then text = text .. '\n\n' .. preset.note end
   else
+    text = string.format(T.baseUser, tostring(preset.name))
     local from = preset.from and presets.get(preset.from)
-    head.note = from and ('Vychází z presetu „' .. from.name .. '“.') or nil
+    if from then text = text .. '\n' .. string.format(T.baseFrom, tostring(from.name)) end
   end
-  head.cow = preset.builtin and T.cowBuiltin or T.cowUser
+  head.help = T.baseWhat .. '\n\n' .. text
   head.baseOff = preset.base ~= 'original'
-  head.testMode = S.testMode ~= runtime.NORMAL
-  head.status = nil
-  if runtime.state == 'wait' or not lay then head.status = T.waiting
-  elseif runtime.state ~= 'run' then
-    head.status = 'Scénáře teď na autě neběží: ' .. tostring(runtime.STATES[runtime.state] or runtime.state) .. '.'
-  elseif head.testMode then head.status = T.testMode end
-  head.warnings = freshC and freshC.warnings or EMPTY
 end
 
 local function refresh()
@@ -515,8 +608,7 @@ local function editRow(r, q, op, v)
   if q then row.q = q end
   if op then row.op = op end
   if v then row.v = v end
-  runtime.editScenario(X.id, 'when', w)
-  lastSave = runtime.clock
+  edit(X.id, 'when', w)
 end
 
 local function quantityItems()
@@ -545,7 +637,10 @@ end
 
 -- ---------------------------------------------------------------- expanded scenario
 
-local function colourCell(slot, name)
+-- a form row without a label of its own (the control sits in the control column)
+local function moreRow() K.label('') end
+
+local function colourCell(slot)
   local c = COLS[slot]
   local stored = slot <= 2 and X.c[slot] or X.zc[slot - 2]
   local label = COL_LABEL[slot]
@@ -553,20 +648,24 @@ local function colourCell(slot, name)
     c.r, c.g, c.b = color.unpack(stored)
     COL_SHOWN[slot] = stored
   end
-  -- the picker edits c in place; a change is seen by comparing (as CSP's Radar app does), not by the return value
-  ui.colorButton(label, c, PICKER, SWATCH)
+  -- the picker and the quick picks edit c in place; a change is seen by comparing (as CSP's Radar app does)
+  K.colourField(label, c)
   local p = color.pack(c.r, c.g, c.b)
   if p ~= COL_SHOWN[slot] then
     COL_SHOWN[slot] = p
     pend(label, K_COLOUR, nil, slot, p)
   end
-  ui.sameLine()
-  ui.text(name)
 end
 
-local function lookSlider(label, field, value, lo, hi, fmt, step)
+local function colourRow(slot, name)
+  K.label(name)
+  colourCell(slot)
+end
+
+local function lookSlider(name, label, field, value, lo, hi, fmt, step)
+  K.label(name)
   local shown = pending(label) and P.num or value
-  ui.setNextItemWidth(SLIDER_W)
+  ui.setNextItemWidth(K.CONTROL_W)
   local v, changed = ui.slider(label, shown, lo, hi, fmt)
   if changed then
     v = snap(v, step, lo, hi)
@@ -575,21 +674,47 @@ local function lookSlider(label, field, value, lo, hi, fmt, step)
   released(label)
 end
 
+local function removeZone(k)
+  commit()
+  local e = freshEntry(X.id)
+  if not e then return end
+  local copy = lookCopy(e)
+  local z = zonesOf(copy)
+  table.remove(z, 2 * k)
+  table.remove(z, 2 * k - 1)
+  z[1] = 0
+  copy.zones = z
+  edit(X.id, 'look', copy)
+end
+
+local function addZone()
+  commit()
+  local e = freshEntry(X.id)
+  if not e then return end
+  local copy = lookCopy(e)
+  local z = zonesOf(copy)
+  local last = z[#z - 1]
+  z[#z + 1] = floor((last + (1 - last) / 2) * 100 + 0.5) / 100
+  z[#z + 1] = '#FFFFFF'
+  copy.zones = z
+  edit(X.id, 'look', copy)
+end
+
 local function zonesEditor()
-  ui.text(T.zones)
   local nz = X.nz
   for k = 1, nz do
-    colourCell(2 + k, ZN[k])
-    ui.sameLine()
+    if k == 1 then K.label(T.zones) else moreRow() end
+    colourCell(2 + k)
+    ui.sameLine(0, 8)
     if k == 1 then
-      common.note(T.fromStart, GREY)
+      K.dim(T.fromStart)
     else
       local label = ZU[k]
       local lo = X.zu[k - 1] * 100
       local hi = (k < nz and X.zu[k + 1] or X.zEnd) * 100
       local shown = (pending(label) and P.num or X.zu[k]) * 100
-      ui.setNextItemWidth(SLIDER_W - 60)
-      local v, changed = ui.slider(label, shown, lo, hi, 'od %.0f %% řady')
+      ui.setNextItemWidth(ZONE_SLIDER_W)
+      local v, changed = ui.slider(label, shown, lo, hi, 'od %.0f %%')
       if changed then
         v = snap(v, 1, lo, hi) / 100
         if v * 100 ~= shown or not P.on then pend(label, K_ZONE, nil, k, v) end
@@ -597,79 +722,80 @@ local function zonesEditor()
       released(label)
     end
     if nz > 1 then
-      ui.sameLine()
-      if ui.button(ZR[k]) then
-        commit()
-        local e = freshEntry(X.id)
-        if e then
-          local copy = lookCopy(e)
-          local z = zonesOf(copy)
-          table.remove(z, 2 * k)
-          table.remove(z, 2 * k - 1)
-          z[1] = 0
-          copy.zones = z
-          runtime.editScenario(X.id, 'look', copy)
-          lastSave = runtime.clock
-        end
-      end
+      ui.sameLine(ZONE_RM_X)
+      if K.iconButton(ZR[k], ICON_REMOVE, T.removeZone) then removeZone(k) end
     end
   end
-  if nz < MAX_ZONES and ui.button('Přidat zónu##addzone') then
-    commit()
-    local e = freshEntry(X.id)
-    if e then
-      local copy = lookCopy(e)
-      local z = zonesOf(copy)
-      local last = z[#z - 1]
-      z[#z + 1] = floor((last + (1 - last) / 2) * 100 + 0.5) / 100
-      z[#z + 1] = '#FFFFFF'
-      copy.zones = z
-      runtime.editScenario(X.id, 'look', copy)
-      lastSave = runtime.clock
-    end
+  moreRow()
+  if nz < MAX_ZONES then
+    if ui.setNextItemIcon then ui.setNextItemIcon(ICON_ADD) end
+    if ui.button(T.addZone) then addZone() end
+  else
+    K.dim(T.zonesMax)
   end
+  K.help(T.zonesHelp)
 end
 
 local function srcRow()
-  ui.text(T.src)
-  ui.sameLine()
-  ui.setNextItemWidth(COMBO_W + 60)
+  K.label(T.src)
+  ui.setNextItemWidth(K.CONTROL_W)
   ui.combo('##sc_src', X.srcName, COMBO, srcItems)
   if not X.carSrcOk then
-    common.note(X.src == 'car' and T.carSrcMissing or T.carSrcHint, X.src == 'car' and ORANGE or GREY)
+    if X.src == 'car' then K.note(T.carSrcMissing, K.ORANGE) else K.help(T.carSrcHint) end
   end
 end
 
 local function paramSlider()
   local d = X.param
   local label = '##sc_param'
+  K.label(X.paramName)
   local shown = pending(label) and P.num or X.pValue
-  ui.setNextItemWidth(SLIDER_W + 80)
+  ui.setNextItemWidth(K.CONTROL_W)
   local v, changed = ui.slider(label, shown, d.min, d.max, X.pFmt)
   if changed then
     v = snap(v, 1, d.min, d.max)
     if v ~= shown or not P.on then pend(label, K_PARAM, nil, 0, v) end
   end
   released(label)
+  if X.shift and runtime.ST.shiftStartManual > 0 then K.help(T.startManual) end
+end
+
+local function removeRow(r)
+  commit()
+  local e = freshEntry(X.id)
+  if not e then return end
+  local w = presets.deepCopy(e.when or {})
+  table.remove(w, r)
+  edit(X.id, 'when', w)
+end
+
+local function addRow()
+  commit()
+  local e = freshEntry(X.id)
+  if not e then return end
+  local w = presets.deepCopy(e.when or {})
+  w[#w + 1] = { q = 'speed', op = '<', v = 60 }
+  edit(X.id, 'when', w)
 end
 
 local function conditionRow(r)
+  K.label(r == 1 and T.when or T.andWord)
   local q = X.wq[r]
   comboRow = r
-  ui.setNextItemWidth(ROW_Q_W)
+  ui.setNextItemWidth(Q_W)
   ui.combo(QL[r], q.name, COMBO, quantityItems)
-  ui.sameLine()
+  ui.sameLine(0, 4)
   if q.bool then
     if ui.checkbox(VB[r], X.wbool[r]) then editRow(r, nil, '=', X.wbool[r] and 0 or 1) end
   else
     comboRow = r
-    ui.setNextItemWidth(ROW_OP_W)
+    ui.setNextItemWidth(OP_W)
     ui.combo(OPL[r], OP_NAMES[X.wop[r]] or X.wop[r], COMBO, opItems)
-    ui.sameLine()
+    ui.sameLine(0, 4)
     local label = VL[r]
     local shown = pending(label) and P.num or X.wv[r]
     local step = Q_STEP[q.id] or 1
-    ui.setNextItemWidth(ROW_V_W)
+    ui.setNextItemWidth(V_W)
     local v, changed = ui.slider(label, shown, q.min, q.max, Q_FMT[q.id])
     if changed then
       v = snap(v, step, q.min, q.max)
@@ -677,23 +803,13 @@ local function conditionRow(r)
     end
     released(label)
   end
-  ui.sameLine()
-  if ui.button(RM[r]) then
-    commit()
-    local e = freshEntry(X.id)
-    if e then
-      local w = presets.deepCopy(e.when or {})
-      table.remove(w, r)
-      runtime.editScenario(X.id, 'when', w)
-      lastSave = runtime.clock
-    end
-  end
+  ui.sameLine(COND_RM_X)
+  if K.iconButton(RM[r], ICON_REMOVE, T.removeRow) then removeRow(r) end
 end
 
-local function customConditions()
-  ui.text(T.name)
-  ui.sameLine()
-  ui.setNextItemWidth(COMBO_W + 60)
+local function customRows()
+  K.label(T.name)
+  ui.setNextItemWidth(K.CONTROL_W)
   local label = '##sc_name'
   local s, changed, enter = ui.inputText(label, pending(label) and P.str or X.name)
   if changed then
@@ -701,33 +817,31 @@ local function customConditions()
     P.str = s
   end
   if enter then commit() else released(label) end
-  ui.text(T.rows)
   for r = 1, X.nw do conditionRow(r) end
-  if X.nw == 0 then common.note(T.noRows, ORANGE) end
-  if X.nw < MAX_ROWS and ui.button('Přidat podmínku##addrow') then
-    commit()
-    local e = freshEntry(X.id)
-    if e then
-      local w = presets.deepCopy(e.when or {})
-      w[#w + 1] = { q = 'speed', op = '<', v = 60 }
-      runtime.editScenario(X.id, 'when', w)
-      lastSave = runtime.clock
-    end
+  if X.nw == 0 then
+    K.label(T.when)
+    K.note(T.noRows, K.ORANGE)
   end
-  if X.desc ~= '' then ui.textWrapped(X.desc) end
+  if X.nw < MAX_ROWS then
+    moreRow()
+    if ui.setNextItemIcon then ui.setNextItemIcon(ICON_ADD) end
+    if ui.button(T.addRow) then addRow() end
+  end
 end
 
 local function deleteButton()
   local now = runtime.clock
   if confirmDelete > now then
-    if ui.button('Opravdu smazat? Klikněte znovu##sc_delete') then
+    if ui.button(T.deleteConfirm) then
       confirmDelete = -1
       P.on = false
+      local before = runtime.presetId
       runtime.removeScenario(X.id)
+      after(before, '')
       expanded = nil
       own = own + 1
     end
-  elseif ui.button('Smazat tento scénář##sc_delete') then
+  elseif ui.button(T.delete) then
     confirmDelete = now + CONFIRM_TIME
   end
 end
@@ -735,69 +849,67 @@ end
 local function details()
   local indent = ui.indent ~= nil
   if indent then ui.indent(INDENT) end
-  if X.custom then customConditions() end
-  ui.text(T.target)
-  ui.sameLine()
-  ui.setNextItemWidth(COMBO_W)
+  if X.custom then customRows() end
+  K.label(T.target)
+  ui.setNextItemWidth(K.CONTROL_W)
   ui.combo('##sc_target', X.toName, COMBO, targetItems)
-  ui.text(T.pattern)
-  ui.sameLine()
-  ui.setNextItemWidth(COMBO_W)
+  if X.toNote then K.help(X.toNote) end
+  K.label(T.pattern)
+  ui.setNextItemWidth(K.CONTROL_W)
   ui.combo('##sc_pattern', X.pName, COMBO, patternItems)
   local u = X.uses
-  if u.c1 then colourCell(1, X.c1Name) end
-  if u.c2 then
-    if u.c1 then ui.sameLine() end
-    colourCell(2, X.c2Name)
-  end
-  if u.hz then lookSlider('##sc_hz', 'hz', X.hz, 0.1, 20, 'Rychlost: %.1f Hz', 0.1) end
+  if u.zones then zonesEditor() end
+  if u.c1 then colourRow(1, X.c1Name) end
+  if u.c2 then colourRow(2, X.c2Name) end
+  if u.hz then lookSlider(T.hz, '##sc_hz', 'hz', X.hz, 0.1, 20, '%.1f Hz', 0.1) end
   if u.dir then
-    ui.text(T.dir)
-    ui.sameLine()
-    ui.setNextItemWidth(COMBO_W)
+    K.label(T.dir)
+    ui.setNextItemWidth(K.CONTROL_W)
     ui.combo('##sc_dir', X.dirName, COMBO, dirItems)
   end
-  if u.width then lookSlider('##sc_width', 'width', X.width, 1, 16, 'Počet diod světla: %.0f', 1) end
-  if u.zones then
-    zonesEditor()
-    if X.rpmFill then srcRow() end
+  if u.width then lookSlider(T.width, '##sc_width', 'width', X.width, 1, 16, '%.0f', 1) end
+  if u.zones and X.rpmFill then srcRow() end
+  if u.frames then
+    K.label(T.frames)
+    K.dim(T.framesWhere)
   end
-  if u.frames then common.note(T.frames, GREY) end
-  if not (u.c1 or u.c2 or u.hz or u.zones or u.frames) then common.note(T.noSettings, GREY) end
+  if X.warn then K.note(X.warn, K.ORANGE) end
   if X.param then paramSlider() end
+  if X.shift then
+    K.label(T.rpm)
+    K.dim(T.rpmWhere)
+  end
   if X.custom then deleteButton() end
   if indent then ui.unindent(INDENT) end
   ui.separator()
 end
 
--- ---------------------------------------------------------------- list and header
+-- ---------------------------------------------------------------- list and base line
 
-local function header()
-  ui.text(head.name)
-  if head.note then ui.textWrapped(head.note) end
-  ui.textWrapped(head.cow)
-  ui.text(T.base)
-  ui.sameLine()
-  if ui.radioButton('zhasnuto##base_off', head.baseOff) and not head.baseOff then
-    commit()
-    runtime.setBase('off')
-  end
-  ui.sameLine()
-  if ui.radioButton('podle auta##base_orig', not head.baseOff) and head.baseOff then
-    commit()
-    runtime.setBase('original')
-  end
-  local warnings = head.warnings
-  for i = 1, #warnings do common.note(warnings[i], ORANGE) end
-  if head.status then
-    common.note(head.status, ORANGE)
-    if head.testMode and runtime.state == 'run' then
-      ui.sameLine()
-      if ui.button('Zpět na normální provoz##sc_normal') then runtime.setMode(runtime.NORMAL) end
+local function message(id)
+  if msgId ~= id or runtime.clock >= msgUntil then return end
+  K.note(msg, msgColour)
+  if msgAction and S.testMode ~= runtime.NORMAL then
+    ui.sameLine()
+    if ui.button(T.normal) then
+      runtime.setMode(runtime.NORMAL)
+      msgUntil = -1
     end
   end
-  if runtime.clock < testMsgUntil then common.note(testMsg, YELLOW) end
-  ui.textWrapped(T.intro)
+end
+
+local function baseLine()
+  ui.text(T.base)
+  ui.sameLine()
+  local pick = K.choice(BASE_LABELS, head.baseOff and 1 or 2)
+  K.help(head.help)
+  if pick then
+    commit()
+    local before = runtime.presetId
+    runtime.setBase(pick == 1 and 'off' or 'original')
+    after(before, '')
+  end
+  message('')
 end
 
 -- true when the compiled scenario is a candidate of at least one LED group (an older engine.compile left switched-off
@@ -819,60 +931,75 @@ local function test(C, r)
     runtime.testScenario(r.id)
     local sc = r.ci and C.scen[r.ci]
     if sc and painted(C, sc) then return end
-    testMsg = T.testOff
+    flash(T.testNoLeds, K.ORANGE, r.id)
+  elseif runtime.state == 'run' then
+    flash(string.format(T.testLater, T.testPattern), K.ORANGE, r.id, true)
   else
-    testMsg = T.testLater
+    flash(string.format(T.testLater, tostring(runtime.STATES[runtime.state] or runtime.state)), K.ORANGE, r.id)
   end
-  testMsgUntil = runtime.clock + CONFIRM_TIME
+end
+
+local function move(r, delta)
+  commit()
+  local before = runtime.presetId
+  runtime.moveScenario(r.id, delta)
+  after(before, r.id)
+end
+
+local function dot(colour, tip)
+  ui.sameLine(COL_DOT)
+  K.dot(colour)
+  K.tip(tip)
+end
+
+local function row(r, C, live, t)
+  local l = r.l
+  if r.cat then K.caption(r.cat) end
+  if ui.checkbox(l.on, r.on) then
+    commit()
+    edit(r.id, 'on', not r.on)
+  end
+  K.tip(T.onTip)
+  ui.sameLine()
+  local colour = r.colour
+  if colour and TEXT then ui.pushStyleColor(TEXT, colour) end
+  if ui.selectable(r.label, expanded == r.id, 0, r.size) then toggle(r.id) end
+  if colour and TEXT then ui.popStyleColor() end
+  K.tip(r.tip)
+  if r.help then K.help(r.help) end
+  local sc = live and r.ci and C.scen[r.ci]
+  if sc and sc.forceUntil > t then dot(K.BLUE, T.dotTest)
+  elseif sc and sc.active then dot(K.GREEN, T.dotNow)
+  elseif r.warn then dot(K.ORANGE, r.warn) end
+  ui.sameLine(COL_TEST)
+  if ui.button(l.test, TEST_SIZE) then test(C, r) end
+  K.tip(T.testTip)
+  if not r.first then
+    ui.sameLine(COL_UP)
+    if K.iconButton(l.up, ICON_UP, T.upTip) then move(r, -1) end
+  end
+  if not r.last then
+    ui.sameLine(COL_DOWN)
+    if K.iconButton(l.down, ICON_DOWN, T.downTip) then move(r, 1) end
+  end
+  message(r.id)
+  if expanded == r.id and X.id == r.id then details() end
 end
 
 local function list()
   local C = runtime.compiled == freshC and freshC or nil
   local live = C ~= nil and running()      -- scenario states are frozen while the engine does not run
   local t = runtime.ST.t
-  for i = 1, nRows do
-    local r = rows[i]
-    local l = r.l
-    if r.cat then ui.header(r.cat) end
-    if ui.checkbox(l.on, r.on) then
-      commit()
-      runtime.editScenario(r.id, 'on', not r.on)
-      lastSave = runtime.clock
-    end
-    ui.sameLine()
-    if ui.button(l.up, ARROW, r.first and BUTTON_DISABLED or BUTTON_NONE) and not r.first then
-      commit()
-      runtime.moveScenario(r.id, -1)
-    end
-    if ui.itemHovered() then ui.setTooltip(T.upTip) end
-    ui.sameLine()
-    if ui.button(l.down, ARROW, r.last and BUTTON_DISABLED or BUTTON_NONE) and not r.last then
-      commit()
-      runtime.moveScenario(r.id, 1)
-    end
-    if ui.itemHovered() then ui.setTooltip(T.downTip) end
-    ui.sameLine()
-    if ui.button(l.test, TEST_SIZE) then test(C, r) end
-    if ui.itemHovered() then ui.setTooltip(T.testTip) end
-    ui.sameLine()
-    if ui.button(expanded == r.id and l.close or l.open, TOGGLE_SIZE) then toggle(r.id) end
-    ui.sameLine()
-    common.note(r.name, r.colour)
-    if ui.itemHovered() then ui.setTooltip(r.tip) end
-    local sc = live and r.ci and C.scen[r.ci]
-    if sc then
-      if sc.forceUntil > t then
-        ui.sameLine()
-        common.note(T.testing, YELLOW)
-      elseif sc.active then
-        ui.sameLine()
-        common.note(T.now, GREEN)
-      end
-    end
-    if r.availLine then common.note(r.availLine, DIM)
-    elseif r.hint then common.note(r.hint, GREY) end
-    if expanded == r.id and X.id == r.id then details() end
-  end
+  for i = 1, nRows do row(rows[i], C, live, t) end
+end
+
+local function addCustom()
+  commit()
+  local before = runtime.presetId
+  local scId = runtime.addCustom()
+  if scId then expanded = scId end
+  after(before, scId)
+  own = own + 1
 end
 
 local function draw()
@@ -886,16 +1013,12 @@ local function draw()
     end
   end
   P.drawn = false
-  header()
+  baseLine()
   ui.separator()
   list()
-  ui.separator()
-  if ui.button('Přidat vlastní scénář##addcustom') then
-    commit()
-    local scId = runtime.addCustom()
-    if scId then expanded = scId end
-    own = own + 1
-  end
+  ui.dummy(GAP)
+  if ui.setNextItemIcon then ui.setNextItemIcon(ICON_ADD) end
+  if ui.button(T.addCustom) then addCustom() end
   -- a slider / text field that was being edited is not drawn any more (scenario collapsed or removed): save it
   if P.on and P.wait and not P.drawn then commit() end
 end

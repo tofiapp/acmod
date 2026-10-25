@@ -1,7 +1,6 @@
--- LedControl: tab Editor (manual presets and frame animations): presets new / copy / rename / delete / export,
--- new custom animation, painting cells (click and drag), palette, frames add / duplicate / delete / move, fps,
--- save into the preset (the LEDs on the car show the painted frames), discard, layout mismatch warning and the
--- rescale button, Test na autě, no allocation with the tab open.
+-- LedControl: tab Editor regressions (review-ux): browsing scenarios in the editor without editing anything says
+-- nothing about dropped edits (and does when something was edited), Test na autě with the master switch off saves
+-- nothing, Test na autě while running on a built-in preset, the rev limiter look afterwards.
 
 local appDir, tmpDir, mockPath, helpersPath = ...
 local H = dofile(helpersPath)(appDir, tmpDir, mockPath)
@@ -12,7 +11,6 @@ local U = env.ui
 -- (the shared mock stays untouched: these are the calls the grid needs, with the signatures of the official apps)
 
 local R1, R2 = vec2(0, 0), vec2(22, 22)
-ui.ButtonFlags = { None = 0, Disabled = 0x100 }
 ui.HoveredFlags = { None = 0, AllowWhenBlockedByActiveItem = 32 }
 ui.invisibleButton = function (label) U.last = label; return U.click == label end
 ui.itemRect = function () return R1, R2 end
@@ -21,21 +19,9 @@ ui.itemClicked = function () return U.click ~= nil and U.click == U.last end
 ui.mouseDown = function () return U.mouseDown == true end
 ui.dummy = function () U.last = '##dummy' end
 ui.drawRect = function () end
-ui.StyleColor = { Text = 0 }
 local styleDepth = 0
 ui.pushStyleColor = function () styleDepth = styleDepth + 1 end
 ui.popStyleColor = function () styleDepth = styleDepth - 1 end
-ui.drawRectFilled = function (_, _, c)
-  local f = U.fills
-  if f then f[#f + 1] = { U.last, c.r, c.g, c.b } end
-end
--- the colour object a watched colour button gets each frame (what the picker would show), without allocating
-local seenColour = { r = -1, g = -1, b = -1 }
-local baseColorButton = ui.colorButton
-ui.colorButton = function (label, c, flags, size)
-  if label == U.watchColour then seenColour.r, seenColour.g, seenColour.b = c.r, c.g, c.b end
-  return baseColorButton(label, c, flags, size)
-end
 local baseButton = ui.button
 U.flags = {}
 ui.button = function (label, size, flags)
@@ -112,8 +98,15 @@ local _, _, dirty = peek()
 print('after only selecting "Pit limiter zapnutý": dirty =', dirty)
 pickCombo('##edScenario', 'Omezovač otáček##edSc:' .. b)
 local t = texts()
-print('message shown:', has(t, 'Neuložené změny předchozí animace jsou zahozené.'))
-check(not has(t, 'Neuložené změny předchozí animace jsou zahozené.'), 'no "unsaved changes dropped" message when nothing was edited')
+print('message shown:', has(t, 'Neuložené změny zahozené.'))
+check(not has(t, 'Neuložené změny zahozené.'), 'no "unsaved changes dropped" message when nothing was edited')
+-- the same switch after painting a cell: now the message is due (so the check above looks for the right text)
+click('##edBrush1')
+click('##edCell1_3')
+pickCombo('##edScenario', 'Pit limiter zapnutý##edSc:' .. a)
+t = texts()
+check(has(t, 'Neuložené změny zahozené.') and not select(3, peek()), 'edited, then another scenario: edits dropped, said so')
+pickCombo('##edScenario', 'Omezovač otáček##edSc:' .. b)
 -- the Test na autě button with the master switch off on a built-in preset
 app.config.set('master', false)
 frame(3)
@@ -124,6 +117,8 @@ print('preset before:', before, ' after Test (master off):', rt.presetId)
 print('copy message visible:', has(t, 'kopii'), ' blocked message visible:', has(t, 'Diody nejsou převzaté'))
 local look = storedLook(b)
 print('stored look of "Omezovač otáček" in', rt.presetId, ':', look and look.p, look and look.g and look.g[1] and look.g[1].f[1])
+check(rt.presetId == before and has(t, 'Diody nejsou převzaté') and not (look and look.p == 'frames'),
+  'Test na autě with the master switch off: explained, nothing saved, no copy of the built-in preset')
 -- master on: same click while running
 H.formulaCar(1)
 env.storage = {}
@@ -136,14 +131,19 @@ frame(2)
 t = texts()
 look = storedLook(b)
 print('master on: preset now', rt.presetId, ' look', look and look.p, look and look.g and look.g[1] and look.g[1].f[1])
-print('messages: copy', has(t, 'kopii'), ' test', has(t, 'Test na autě: animace se ukazuje 5 s.'))
+print('messages: copy', has(t, 'kopii'), ' test', has(t, 'Test na autě: 5 s.'))
+check(rt.presetId == 'builtin:f1' and has(t, 'Test na autě: 5 s.') and not (look and look.p == 'frames'),
+  'Test na autě on an unpainted built-in scenario: its own look is tested, nothing saved')
 env.car.rpm = 13000
 frame(30)
 local anyLit = false
 for s = 1, 15 do if lit(slotColour(s)) then anyLit = true end end
 print('at the rev limiter after the Test ended: any main LED lit =', anyLit)
+local afterTest = anyLit
 rt.setPreset('builtin:f1'); frame(3)
 anyLit = false
 for s = 1, 15 do if lit(slotColour(s)) then anyLit = true end end
 print('same rpm with the built-in F1 styl: any main LED lit =', anyLit)
+check(afterTest and anyLit, 'rev limiter after the Test: the LEDs light as with the built-in preset')
+check(styleDepth == 0, 'style colour pushes and pops balanced')
 return H.finish('test_regress_ux_editor')

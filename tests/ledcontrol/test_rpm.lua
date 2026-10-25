@@ -99,6 +99,11 @@ frame(2)
 check(litCount() == 0, 'below the first LED value: dark')
 rpm.setLeds(nil, rt.ST)
 check(rpm.ledRpm == nil, 'per LED values switched off')
+rpm.spread(15, 7000, rt.ST, 'edges')
+check(rpm.ledRpm[1] == 7000 and rpm.ledRpm[15] == 7000 and rpm.ledRpm[8] == rpm.shift and rpm.ledRpm[2] == rpm.ledRpm[14],
+  'spread edges to centre: pairs from both edges')
+check(rpm.manual.start and rpm.manual.shift and not rpm.manual.limiter, 'manual flags')
+rpm.setLeds(nil, rt.ST)
 
 -- sanitising
 local clean = rpm.sanitise({ start = 'x', shift = 1e999, limiter = -5, learned = 0 / 0, leds = { 7000, 'bad', 1e9 } })

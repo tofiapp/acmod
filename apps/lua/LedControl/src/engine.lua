@@ -77,11 +77,14 @@ function M.compile(preset, layout, ST)
           -- the thresholds from the car's files
           local thr = nil
           if sc.id == 'shiftLights' and g.role == 'main' and rpm.ledRpm and #rpm.ledRpm == grp.n then
+            -- colour zones follow the RPM order (as with the car's own thresholds), so edges-to-centre works too
             thr = { rank = {} }
+            local lo, hi = math.huge, -math.huge
             for k = 1, grp.n do
               thr[k] = rpm.ledRpm[k]
-              thr.rank[k] = grp.n > 1 and (k - 1) / (grp.n - 1) or 1
+              lo, hi = math.min(lo, thr[k]), math.max(hi, thr[k])
             end
+            for k = 1, grp.n do thr.rank[k] = hi > lo and (thr[k] - lo) / (hi - lo) or 1 end
           elseif sc.cl.src == 'car' then
             thr = thresholdsOf(layout, g.leds)
           end

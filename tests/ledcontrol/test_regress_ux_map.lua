@@ -19,11 +19,15 @@ frame(3)
 local rt = app.runtime
 print('auto layout:', #rt.layout.leds, 'LEDs, signature', rt.layout.signature, 'groups', #rt.layout.groups)
 for gi, g in ipairs(rt.layout.groups) do print('  group', gi, g.name, g.role, #g.leds) end
--- user opens "Upravit pořadí a skupiny diod" and saves without changing anything
+-- user moves an LED down and back up in "Pořadí a skupiny" (Diody tab), then saves the unchanged order
+local autoSignature = rt.layout.signature
 env.ui.tab = 'Diody'
-click('Upravit pořadí a skupiny diod')
-click('Uložit pořadí')
+click('↓##mapDown1')
+click('↑##mapUp2')
+click('Uložit##mapSave')
 frame(3)
-print('after Uložit pořadí:', #rt.layout.leds, 'LEDs, signature', rt.layout.signature)
+print('after Uložit:', #rt.layout.leds, 'LEDs, signature', rt.layout.signature, 'manual', rt.layout.manual)
 check(#rt.layout.leds == 18, 'saving the unchanged order keeps all 18 LEDs (got ' .. #rt.layout.leds .. ')')
+check(rt.layout.manual and rt.layout.signature == autoSignature, 'saving the unchanged order keeps the groups ('
+  .. rt.layout.signature .. ')')
 return H.finish('test_regress_ux_map')

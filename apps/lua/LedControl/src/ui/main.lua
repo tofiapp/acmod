@@ -1,6 +1,8 @@
--- The window: header (master switch, car, state, method, errors) and the five tabs.
+-- The window: header (master switch, state, car, preset, one short line per problem) and the tabs.
+-- Layout as docs/ledcontrol-ui.md "Header". Car name: ac.getCarName(0) (as RallyCopilot / SetupExchange use it), read
+-- once per car under pcall, else the car id. Explanations sit in (?) tooltips, the main view stays short.
 
-local common = require('src/ui/common')
+local K = require('src/ui/kit')
 local config = require('src/config')
 local runtime = require('src/runtime')
 local takeover = require('src/takeover')
@@ -11,26 +13,66 @@ local lights = require('src/lights')
 local S = config.S
 local M = {}
 
-local RED = rgbm(1, 0.35, 0.3, 1)
-local ORANGE = rgbm(1, 0.7, 0.2, 1)
-
-local TEST_NOTE = 'Diody ukazují testovací vzor z karty Diody (scénáře neběží). Zpět: Diody → Normální provoz.'
+local MASTER = 'Zapnuto##master'
+local RETRY = 'Zkusit znovu##retry'
 local HIDE_UI_ERROR = 'Skrýt##uiError'
+local BACK_TO_NORMAL = 'Zpět na provoz##hdrNormal'
+local CAR_NAME_MAX = 40
 
-local seen = -1
-local statusLine = ''
-local errorLine = ''
+-- state -> word, colour, tooltip (the dot and the word carry the state, the tooltip says what it means)
+local STATUS = {
+  run = { 'běží', K.GREEN, 'Diody na autě řídí LedControl.' },
+  off = { 'vypnuto', K.DIM, 'Hlavní vypínač je vypnutý: diody řídí auto.' },
+  wait = { 'čeká na auto', K.DIM, 'Auto se ještě načítá.' },
+  noleds = { 'bez diod', K.ORANGE, 'Na tomto autě nejsou rozpoznané diody (karta Diody).' },
+  failed = { 'nefunguje', K.RED, 'Diody nejde převzít žádným způsobem.' },
+  error = { 'chyba', K.RED, 'Nastala chyba, diody jsou vrácené autu.' },
+}
 
+local ERROR_TEXT = 'Chyba – diody jsou vrácené autu'
+local UI_ERROR_TEXT = 'Chyba v okně'
+local ONLINE_TEXT = 'Online: skutečná světla vidí i ostatní'
+local TEST_TEXT = 'Testovací vzor'
+local TEST_HELP = 'Diody ukazují testovací vzor z karty Diody (řádek Test), scénáře presetu teď neběží.'
+local PRESET_TIP = 'Preset pro toto auto (každé auto si pamatuje svůj).'
+
+-- "Běží B – překreslení" when another method than the chosen one runs (short names as in the Diody tab)
+local SHORT_METHOD = { 'A – kopie', 'B – překreslení', 'C – přímý zápis' }
+local FALLBACK_TEXT = {}
+for m = 1, 3 do FALLBACK_TEXT[m] = 'Běží ' .. SHORT_METHOD[m] end
+
+local seenError = nil
+local errorTip = ''
+local carShown, carName = nil, ''
+
+-- Cuts a UTF-8 string to at most n bytes without splitting a character.
+local function shorten(s, n)
+  if #s <= n then return s end
+  local cut = n
+  while cut > 1 do
+    local b = s:byte(cut + 1)
+    if not b or b < 0x80 or b >= 0xC0 then break end     -- the next byte starts a character: cut here
+    cut = cut - 1
+  end
+  return s:sub(1, cut) .. '…'
+end
+
+-- Strings rebuilt only when what they show changed (car, error).
 local function refresh()
-  local v = runtime.version * 100000 + takeover.version
-  if v == seen and (safety.error == nil) == (errorLine == '') then return end
-  seen = v
-  local lay = runtime.layout
-  local count = lay and #lay.leds or 0
-  statusLine = string.format('%s | %s | diod %d (%s) | %s', runtime.carId ~= '' and runtime.carId or '-',
-    runtime.STATES[runtime.state] or runtime.state, count, lay and lay.signature or '0',
-    takeover.NAMES[takeover.method] or 'nepřevzato')
-  errorLine = safety.error and string.format('Chyba (%s): %s', tostring(safety.where), safety.error) or ''
+  if runtime.carId ~= carShown then
+    carShown = runtime.carId
+    local name = nil
+    if carShown ~= '' and ac.getCarName then
+      local ok, n = pcall(ac.getCarName, 0)
+      if ok and type(n) == 'string' and n ~= '' then name = n end
+    end
+    carName = shorten(name or carShown, CAR_NAME_MAX)
+  end
+  if safety.error ~= seenError then
+    seenError = safety.error
+    errorTip = safety.error and string.format('%s (%s)\n\nCelý text je v „Kopírovat diagnostiku“ (karta Diody).',
+      safety.error, tostring(safety.where)) or ''
+  end
 end
 
 -- Tabs are loaded on first use under pcall, so a broken tab shows its error instead of stopping the window.
@@ -55,7 +97,7 @@ local function tabDrawer(i)
       else mod = false; loadErrors[i] = 'Karta se nenačetla: ' .. tostring(res) end
       loaded[i] = mod
     end
-    if mod then mod.draw() else common.note(loadErrors[i], RED) end
+    if mod then mod.draw() else K.note(loadErrors[i], K.RED) end
   end
 end
 for i = 1, #TABS do drawers[i] = tabDrawer(i) end
@@ -75,11 +117,62 @@ local function presetItems()
   end
 end
 
+-- [x] Zapnuto   ● běží   Car name
+local function stateRow()
+  if ui.checkbox(MASTER, S.master) then config.set('master', not S.master) end
+  K.tip('Hlavní vypínač. Vypnuto = diody i světla řídí auto samo.')
+  ui.sameLine(0, 16)
+  local st = STATUS[safety.error and 'error' or runtime.state] or STATUS.wait
+  K.dot(st[2])
+  ui.sameLine(0, 2)
+  ui.textColored(st[1], st[2])
+  K.tip(st[3])
+  if runtime.state == 'failed' and not safety.error and takeover.fallback then K.help(takeover.fallback) end
+  if carName ~= '' then
+    ui.sameLine(0, 16)
+    ui.textColored(carName, K.GREY)
+  end
+end
+
 local function presetRow()
-  ui.text('Preset pro toto auto:')
-  ui.sameLine()
-  ui.setNextItemWidth(220)
+  K.label('Preset')
+  ui.setNextItemWidth(K.CONTROL_W)
   ui.combo('##preset', runtime.preset().name, ui.ComboFlags.None, presetItems)
+  K.tip(PRESET_TIP)
+end
+
+-- One line per problem, only while it lasts.
+local function problemLines()
+  if safety.error then
+    ui.textColored(ERROR_TEXT, K.RED)
+    K.help(errorTip)
+    ui.sameLine()
+    if ui.button(RETRY) then
+      safety.retry()
+      runtime.restart('retry')
+    end
+  end
+  if safety.uiError then
+    ui.textColored(UI_ERROR_TEXT, K.RED)
+    K.help(safety.uiError)
+    ui.sameLine()
+    if ui.button(HIDE_UI_ERROR) then safety.uiError = nil end
+  end
+  local m = takeover.method
+  if takeover.fallback and m > 0 and runtime.state == 'run' then
+    ui.textColored(FALLBACK_TEXT[m] or '', K.ORANGE)
+    K.help(takeover.fallback)
+  end
+  if runtime.ST.isOnline and lights.online and lights.online.BANNER then
+    ui.textColored(ONLINE_TEXT, K.ORANGE)
+    K.help(lights.online.BANNER)
+  end
+  if S.testMode ~= runtime.NORMAL and runtime.state == 'run' then
+    ui.textColored(TEST_TEXT, K.ORANGE)
+    K.help(TEST_HELP)
+    ui.sameLine()
+    if ui.button(BACK_TO_NORMAL) then runtime.setMode(runtime.NORMAL) end
+  end
 end
 
 local function tabs()
@@ -88,23 +181,9 @@ end
 
 local function draw()
   refresh()
-  if ui.checkbox('Zapnuto (hlavní vypínač)', S.master) then config.set('master', not S.master) end
-  ui.textWrapped(statusLine)
+  stateRow()
   presetRow()
-  if takeover.fallback then common.note(takeover.fallback, ORANGE) end
-  if errorLine ~= '' then
-    common.note(errorLine, RED)
-    if ui.button('Zkusit znovu') then
-      safety.retry()
-      runtime.restart('retry')
-    end
-  end
-  if safety.uiError then
-    common.note(safety.uiError, RED)
-    if ui.button(HIDE_UI_ERROR) then safety.uiError = nil end
-  end
-  if runtime.ST.isOnline and lights.online and lights.online.BANNER then common.note(lights.online.BANNER, ORANGE) end
-  if S.testMode ~= runtime.NORMAL and runtime.state == 'run' then common.note(TEST_NOTE, ORANGE) end
+  problemLines()
   drawnTab = 0
   ui.tabBar('tabs', tabs)
   -- a tab that was hidden this frame saves its pending edit (slider / colour picker still open)

@@ -31,11 +31,15 @@ local wrap = {
   checkbox = function (l, v) put((v and '[x] ' or '[ ] ') .. vis(l)) end,
   radioButton = function (l, v) put((v and '(o) ' or '( ) ') .. vis(l)) end,
   selectable = function (l, v) put((v and '> ' or '  ') .. vis(l)) end,
-  slider = function (l, v, mn, mx, fmt) put('<' .. vis(l) .. ' ' .. (fmt and string.format(fmt:gsub('%%%%', '%%'), v) or tostring(v)) .. '>') end,
+  slider = function (l, v, mn, mx, fmt)
+    local ok, s = pcall(string.format, fmt or '%.3f', v)
+    put('<' .. vis(l) .. ' ' .. (ok and s or tostring(v)) .. '>')
+  end,
   combo = function (l, p) put('{v ' .. vis(l) .. ': ' .. tostring(p) .. '}') end,
   colorButton = function (l) put('[■' .. vis(l) .. ']') end,
   inputText = function (l, t) put('[_' .. vis(l) .. ': ' .. tostring(t) .. '_]') end,
   progressBar = function (v, s, o) put('[====' .. tostring(o or '') .. '====]') end,
+  drawCircleFilled = function (_, _, c) put(c and c.g > c.r and c.g > c.b and '●green' or (c and c.r > 0.8 and c.g > 0.5 and '●orange' or '●')) end,
   separator = function () put('------------------------------') end,
   sameLine = function () same = true end,
   setTooltip = function (t) lines[#lines + 1] = string.rep('    ', depth) .. '      (tooltip: ' .. vis(t):gsub('\n', ' / ') .. ')' end,

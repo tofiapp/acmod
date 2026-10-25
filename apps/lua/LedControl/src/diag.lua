@@ -32,6 +32,15 @@ function M.text()
     runtime.lastRestart)
   add('Metoda: chtěná %s, běží %s', takeover.NAMES[runtime.method()] or '?', takeover.NAMES[takeover.method] or 'žádná')
   if takeover.fallback then add('Záloha: %s', takeover.fallback) end
+  add('Jas: ruční %d, auto %s (den %d, noc %d), teď %.1f | ochrana barev %d %%', S.intensity, tostring(S.autoBrightness),
+    S.intensityDay, S.intensityNight, runtime.effectiveIntensity(), math.floor((S.colourGuard or 0) * 100 + 0.5))
+  local R = runtime.rpm
+  if R then
+    add('Otáčky: začátek %s, řazení %d (%s%s), omezovač %d (%s%s), naměřeno %d, max %d, příznak AC %s%s',
+      R.start > 0 and tostring(R.start) or 'z presetu', R.shift, R.auto.shiftFrom or '?', R.manual.shift and ', ručně' or '',
+      R.limiter, R.auto.limiterFrom or '?', R.manual.limiter and ', ručně' or '', R.learned, R.maxSeen,
+      R.flagUnreliable and 'nespolehlivý' or 'ok', R.ledRpm and (', vlastní otáčky ' .. #R.ledRpm .. ' diod') or '')
+  end
   add('Hlavní vypínač: %s | jas: %d | režim: %s | preset: %s', tostring(S.master), S.intensity,
     runtime.MODES[S.testMode] or 'normální provoz', runtime.presetId)
   local C = runtime.compiled

@@ -535,7 +535,20 @@ ui = {
     rec(label)
     if content then content() end
   end,
-  textDisabled = function (t) rec(t) end,
+  textDisabled = function (t) rec(t) end,   -- keeps U.last: hovering the item before a (?) shows its help
+  alignTextToFramePadding = function () end,
+  offsetCursorY = function () end,
+  offsetCursorX = function () end,
+  setCursorX = function () end,
+  setCursorY = function () end,
+  indent = function () end,
+  unindent = function () end,
+  setNextItemIcon = function () end,
+  measureText = function (t) return vec2(#tostring(t) * 7, 14) end,
+  HoveredFlags = { None = 0, AllowWhenBlockedByActiveItem = 32 },
+  invisibleButton = function (label) U.last = label; return U.click == label end,
+  itemActive = function () return U.active ~= nil and U.active == U.last end,
+  mouseDown = function () return U.mouseDown == true end,
   pushFont = function () end,
   popFont = function () end,
   pushStyleColor = function () end,
@@ -543,9 +556,10 @@ ui = {
   pushID = function (id) U.idStack = U.idStack or {}; U.idStack[#U.idStack + 1] = id end,
   popID = function () U.idStack[#U.idStack] = nil end,
   -- an icon button is clicked by the id pushed before it (kit.iconButton): env.ui.click = 'id'
-  iconButton = function (icon)
+  iconButton = function (icon, size, padding, frame, flags)
     local id = U.idStack and U.idStack[#U.idStack]
     U.last = id
+    if flags and flags ~= 0 then return false end      -- disabled
     return U.click ~= nil and U.click == id
   end,
   dummy = function () end,
