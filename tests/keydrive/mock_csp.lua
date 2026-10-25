@@ -90,6 +90,7 @@ function M.install(core)
     onControlSettingsChanged = function (cb) table.insert(M.callbacks.controls, cb) end,
     loadRenderThreadModule = function (name) table.insert(M.renderModules, name) end,
     getCar = function () return M.car end,
+    getCarID = function () return 'test_car' end,
     setDrawUIActive = function (v) M.drawUIActive = v end,
     onRelease = function (cb) M.callbacks.release = cb end,
     StructItem = {

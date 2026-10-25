@@ -1,5 +1,5 @@
 -- KeyDrive tests: run through tests/keydrive/run_tests.py.
-local selfPath, CORE = ...
+local selfPath, CORE, APP = ...
 local here = selfPath:match('^(.*)[/\\]')
 package.path = here .. '/?.lua;' .. package.path
 local mock = require('mock_csp')
@@ -702,6 +702,28 @@ do
   check('no AC steering: KeyDrive steers', mock.connected['KeyDrive.Live.v8'].steerFromAC == false and mock.joypad.steer > 0.5,
     mock.joypad.steer)
   mock.keys[VK_RIGHT] = nil
+end
+
+-- 23. KeyDriveConfig reference recorder (normal keyboard mode): records keys and AC's own steering.
+do
+  mock.reset()
+  mock.controls.HEADER = { INPUT_METHOD = 'KEYBOARD' }
+  mock.controls.KEYBOARD.STEERING_SPEED = '1.75'
+  local app = mock.load(APP, 'KeyDriveConfig.lua')
+  local c = mock.car
+  c.speedKmh = 90
+  mock.keys[VK_LEFT] = true
+  for i = 1, 11 * 60 do
+    c.steer = -math.min(120, i * 2)
+    app.update(1 / 60)
+  end
+  app.windowReference(1 / 60)
+  local f = mock.saved['cfg/keydrive/ac-reference.csv']
+  check('reference file written', f ~= nil)
+  check('reference meta line', f and f:find('# input=KEYBOARD', 1, true) ~= nil)
+  check('reference rows', f and select(2, f:gsub('\n', '')) > 380, f and select(2, f:gsub('\n', '')))
+  check('reference records the key', f and f:find('\n[%d%.]+,0,0,1,0,', 1) ~= nil)
+  mock.keys[VK_LEFT] = nil
 end
 
 print(string.format('KeyDrive: %d passed, %d failed', passed, failed))

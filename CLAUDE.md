@@ -136,6 +136,10 @@ extension/lua/joypad-assist/KeyDrive/
                                v0.6 and older wrote into the script folder, which a reinstall wipes). Ask the user for
                                these files instead of guessing.
   src/shared.lua               ac.connect layout 'KeyDrive.Live.v8' (same layout on every side)
+apps/lua/KeyDriveConfig/       companion app (phase 8 later). Now: window "KeyDrive Reference" + src/reference.lua, records
+                               in NORMAL keyboard mode (KeyDrive inactive) keys, car.steer, front wheel angle, pedals,
+                               speed, slip -> Documents/Assetto Corsa/logs/keydrive/ac-reference.csv (first line '#' meta:
+                               input method, AC keyboard rates, car). Use it to copy AC's own keyboard filter.
 tests/keydrive/                own mock + tests: python tests/keydrive/run_tests.py
 build-keydrive.sh / .ps1       dist/KeyDrive-<version>.zip (extension/... + apps/lua/KeyDriveConfig/...)
 ```
@@ -187,4 +191,7 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
   gamepad mode, the incoming state.steer (differing from KeyDrive's last write, pointing the key's way) wins votes and
   is passed through untouched; else emulation (STEER_STYLE 2). Recorder logs in_gas/in_brake/in_steer, steer_from_ac,
   ac_votes: check them in the next log to learn what AC sends.
-Next: user test of v0.8.1 (logs in Documents/Assetto Corsa/logs/keydrive), then phase 6.
+- v0.8.1 user: panel says "KeyDrive" (AC sends no keyboard steering in gamepad mode); steering "steers like a
+  joystick, not like normal". v0.8.2 adds the reference recorder app; next step: fit AC's keyboard steering (and its
+  hidden throttle/brake help) from ac-reference.csv, then copy it in STEER_STYLE 0.
+Next: get ac-reference.csv from the user, then phase 6.
