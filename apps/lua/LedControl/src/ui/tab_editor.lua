@@ -84,7 +84,8 @@ local T = {
   tipNew = 'Nový preset (z aktuálního)', tipCopy = 'Kopie presetu', tipRename = 'Přejmenovat', tipDelete = 'Smazat',
   tipConfirm = 'Klikněte znovu: preset se smaže.',
   presetHelp = 'Vestavěné presety (F1 styl, GT3 styl, Minimální) jsou relativní – sedí na libovolný počet diod.\n'
-    .. 'Úpravou vestavěného presetu vznikne jeho kopie. Přejmenovat a smazat jde jen vlastní preset.',
+    .. 'Úpravy vestavěného presetu se ukládají přímo do něj (karta Scénáře: Obnovit výchozí). Přejmenovat a smazat jde jen '
+    .. 'vlastní preset.',
   animHelp = 'Animace je vzhled jednoho scénáře kreslený po snímcích.\n'
     .. 'Vyberte scénář presetu, nebo vytvořte novou vlastní animaci.',
   tipDelAnim = 'Smazat animaci', tipConfirmAnim = 'Klikněte znovu: animace se smaže.',
@@ -464,14 +465,18 @@ end
 
 local function save()
   if not (work and sel) then return false end
-  local wasBuiltin = presets.isBuiltin(runtime.presetId)
   runtime.editScenario(sel, 'look', work)
   workPreset = runtime.presetId
   baseline = presets.deepCopy(work)
   dirty = false
   ver = ver + 1
-  if wasBuiltin then
-    sayEdit('Uloženo do kopie „' .. runtime.preset().name .. '“, auto ji teď používá.')
+  -- the look of a catalogue scenario is an animation shared by the presets ticked in it (tab Scénáře)
+  local a = presets.animFor(runtime.presetId, sel)
+  local n = presets.animCount(a)
+  if a and n > 1 then
+    sayEdit('Uloženo do animace „' .. a.name .. '“ (platí pro ' .. n .. ' presetů, viz karta Scénáře).')
+  elseif a then
+    sayEdit('Uloženo do animace „' .. a.name .. '“. V kartě Scénáře ji můžete zapnout i v jiných presetech.')
   else
     sayEdit('Uloženo do „' .. runtime.preset().name .. '“.')
   end
@@ -490,7 +495,7 @@ end
 
 local function testOnCar()
   local why = testBlocked()
-  if why then sayEdit(why, K.ORANGE) return end      -- blocked: nothing is saved (no copy of a built-in preset)
+  if why then sayEdit(why, K.ORANGE) return end      -- blocked: nothing is saved
   -- nothing painted on a scenario that is no animation yet: test its current look, do not replace it with dark frames
   if not (baseline == false and not touched) and not save() then return end
   -- the runtime compiles the saved preset in its next update; the test is started on that compiled preset
@@ -529,7 +534,7 @@ end
 local function newAnimation()
   local lay = runtime.layout
   if not lay or #lay.leds == 0 then sayEdit(T.noLeds, K.ORANGE) return end
-  local wasDirty, wasBuiltin = dirty, presets.isBuiltin(runtime.presetId)
+  local wasDirty = dirty
   local scId = runtime.addCustom()
   if not scId then return end
   local name = 'Vlastní animace ' .. (scId:match('%d+') or '')
@@ -543,8 +548,7 @@ local function newAnimation()
   dirty = false
   syncPalette()
   ver = ver + 1
-  local text = 'Nová animace „' .. name .. '“'
-    .. (wasBuiltin and (' v kopii „' .. runtime.preset().name .. '“.') or '.')
+  local text = 'Nová animace „' .. name .. '“.'
   if wasDirty then text = text .. ' Neuložené změny předchozí jsou zahozené.' end
   sayEdit(text, wasDirty and K.ORANGE or K.GREEN)
 end

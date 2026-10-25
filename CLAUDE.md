@@ -220,9 +220,13 @@ apps/lua/LedControl/
                           high RPM; a flag on at low RPM = unreliable, ignored), else car.rpmLimiter; shift point =
                           ai.ini UP only below 97 % of the limiter, else 97 %; manual start / shift / limiter and RPM
                           per main-row LED; writes ST.shiftUp, ST.shiftStartManual, ST.limiterRpm, ST.limiterKnown
-  src/presets.lua         built-ins F1 styl, GT3 styl, Minimální (relative); user presets sparse ('from' built-in),
-                          copy-on-write editing, move, custom scenarios, export "LEDCONTROL-PRESET 1 " + JSON, import
-                          via JSON.parse + sanitise
+  src/presets.lua         built-ins F1 styl, GT3 styl, Minimální (relative), edited in place (overlay p.edits saved as
+                          builtinEdits, resetBuiltin; no hidden copies since 0.4.0); user presets sparse ('from'
+                          built-in); animations = library of named looks per catalogue scenario (anims, presets ticked
+                          in anim.presets, one per scenario and preset, a look edit goes into it or makes one;
+                          look order catalogue <- built-in <- own entry <- animation); move, custom scenarios (per
+                          preset), export "LEDCONTROL-PRESET 1 " + JSON (animation looks baked in), import via
+                          JSON.parse + sanitise
   src/engine.lua          compile(preset, layout, ST) -> per group candidate lists; step(): scenario tests once with
                           hold / Test timers, per group highest priority active scenario paints, UNSET falls through,
                           rest = preset base ('off' / 'original')

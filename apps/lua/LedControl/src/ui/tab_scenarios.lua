@@ -4,8 +4,9 @@
 -- this car cannot show has a grey name with the reason in "(?)". The expanded scenario is a form of aligned rows with
 -- only the settings its pattern uses (patterns.USES), colours via K.colourField, the scenario's parameter, and for
 -- custom scenarios the name, the condition rows and Smazat.
--- Every edit goes through runtime (a built-in preset is copied to a user preset on the first edit, in presets.lua; the
--- tab then says so for a few seconds under the edited row).
+-- Every edit goes through runtime into the car's preset (built-ins are edited in place, presets.lua; "Obnovit výchozí"
+-- on the base line clears their changes). The look of a catalogue scenario is an animation: the expanded scenario's
+-- first rows pick one (or "Vzhled presetu"), rename it, tick the presets it applies to, split or delete it.
 -- Slider, colour and name edits are kept here while the control is in use and saved once: on release for sliders and
 -- text (ui.itemDeactivatedAfterEdit / ui.itemActive), at most every 0.3 s for the colour picker (its release cannot
 -- be seen), so the preset file is not written every frame while dragging. A pending edit is saved before any other
@@ -62,7 +63,24 @@ local DEFAULT_ZONES = patterns.DEFAULT_ZONES
 local T = {
   base = 'Základ (když nic nesvítí)',
   baseWhat = 'Co diody ukazují, když žádný scénář nesvítí. Podle auta = diody ovládá auto samo.',
-  baseBuiltin = '„%s“ je vestavěný preset: první úprava vytvoří vaši vlastní kopii a toto auto ji začne používat.',
+  baseBuiltin = 'Změny se ukládají přímo do vestavěného presetu „%s“ (platí pro všechna auta, která ho používají). '
+    .. 'Obnovit výchozí vrátí jeho původní nastavení.',
+  reset = 'Obnovit výchozí##resetBuiltin',
+  resetConfirm = 'Opravdu obnovit?##resetBuiltin',
+  resetDone = 'Preset „%s“ má zase výchozí nastavení.',
+  anim = 'Animace',
+  animNone = 'Vzhled presetu',
+  animNew = 'Nová animace (kopie tohoto vzhledu)',
+  animHelp = 'Animace = vzhled scénáře (vzor, barvy, blikání), který můžete použít ve více presetech: zaškrtněte je '
+    .. 'v Platí pro. Úprava vzhledu změní animaci ve všech zaškrtnutých presetech.\n\nVzhled presetu = vzhled, '
+    .. 'který má jen tento preset. Jeho první úprava z něj udělá animaci.',
+  animName = 'Název',
+  animFor = 'Platí pro',
+  animShared = 'Úprava se projeví ve všech zaškrtnutých presetech.',
+  animSplit = 'Jen pro tento preset##sc_animSplit',
+  animSplitTip = 'Udělá z animace kopii jen pro tento preset; ostatní presety si nechají původní.',
+  animDelete = 'Smazat animaci##sc_animDel',
+  animDeleteConfirm = 'Opravdu smazat?##sc_animDel',
   baseUser = 'Změny se ukládají do tohoto presetu „%s“ (platí pro všechna auta, která ho používají).',
   baseFrom = 'Vychází z presetu „%s“.',
   copied = 'Uloženo do vaší kopie „%s“.',
@@ -209,10 +227,12 @@ local X = { id = nil, e = nil, custom = false, p = 'solid', pName = '', uses = E
   c = { 0, 0 }, c1Name = '', c2Name = '', hz = 2, width = 1, dir = 'left', dirName = '', src = 'relative',
   srcName = '', carSrcOk = false, rpmFill = true, nz = 0, zu = {}, zc = {}, zEnd = 1,
   param = nil, pValue = 0, paramName = '', pFmt = '', name = '', nw = 0, wq = {}, wop = {}, wv = {}, wbool = {},
-  warn = nil, shift = false }
+  warn = nil, shift = false, anim = nil, animName = '', anims = EMPTY, animLabels = EMPTY, ap = EMPTY, apOn = {},
+  animShared = false }
+local confirmAnim, confirmReset = -1, -1
 
 -- pending edit of a slider, colour or text control
-local K_LOOK, K_PARAM, K_ZONE, K_COLOUR, K_COND, K_NAME = 1, 2, 3, 4, 5, 6
+local K_LOOK, K_PARAM, K_ZONE, K_COLOUR, K_COND, K_NAME, K_ANIM_NAME = 1, 2, 3, 4, 5, 6, 7
 local P = { on = false, label = nil, id = nil, preset = nil, kind = 0, field = nil, slot = 0, num = 0, str = '',
   wait = false, drawn = false }
 local lastSave = -10
@@ -313,16 +333,20 @@ local function cleanName(s)
   return s
 end
 
--- Saves the pending edit (if any) into the preset it was made in. When the car switched to another preset meanwhile
--- (preset combo, hotkey), the edit goes to the old preset if that is a user preset, and is dropped for a built-in
--- one (a copy nobody uses would be made); it never lands in the new preset.
+-- Saves the pending edit (if any) into the preset it was made in, also when the car switched to another preset
+-- meanwhile (preset combo, hotkey); it never lands in the new preset.
 local function commit()
   if not P.on then return end
   P.on = false
   own = own + 1            -- rebuild, so a control shows the stored value again (also when nothing was saved)
+  if P.kind == K_ANIM_NAME then
+    local name = cleanName(P.str)
+    if name then presets.renameAnim(P.field, name); lastSave = runtime.clock end
+    return
+  end
   local id, here = P.id, P.preset == runtime.presetId
   local preset = here and runtime.preset() or presets.get(P.preset)
-  if not preset or (not here and preset.builtin) then return end
+  if not preset then return end
   local e = entryIn(preset, id)
   if not e then return end
   local k = P.kind
@@ -478,6 +502,24 @@ local function buildX(e, r, lay, hasRole)
     X.wbool[i] = holds(X.wop[i], 1, X.wv[i])   -- "ano" = the row holds while the quantity is on
   end
   X.warn = r.warn
+  -- animation rows (catalogue scenarios only)
+  X.anim = (not X.custom) and e.anim or nil
+  X.animName = X.anim and X.anim.name or T.animNone
+  X.anims, X.animLabels, X.ap = EMPTY, EMPTY, EMPTY
+  if not X.custom then
+    X.anims = presets.animsOf(e.id)
+    X.animLabels = {}
+    for i = 1, #X.anims do X.animLabels[i] = X.anims[i].name .. '##an_' .. X.anims[i].id end
+  end
+  if X.anim then
+    X.ap = presets.all()
+    for i = 1, #X.ap do
+      local id = X.ap[i].id
+      X.apOn[i] = X.anim.presets[id] == true
+      X.ap[i] = { id = id, label = X.ap[i].name .. '##ap_' .. id }
+    end
+    X.animShared = presets.animCount(X.anim) > 1
+  end
 end
 
 local function nameWidth(name)
@@ -546,7 +588,8 @@ local function rebuild()
     if from then text = text .. '\n' .. string.format(T.baseFrom, tostring(from.name)) end
   end
   head.help = T.baseWhat .. '\n\n' .. text
-  head.baseOff = preset.base ~= 'original'
+  head.baseOff = presets.baseOf(preset) ~= 'original'
+  head.modified = preset.builtin and presets.isModified(preset.id) or false
 end
 
 local function refresh()
@@ -562,7 +605,7 @@ end
 local function toggle(id)
   commit()
   expanded = expanded ~= id and id or nil
-  confirmDelete = -1
+  confirmDelete, confirmAnim = -1, -1
   own = own + 1
 end
 
@@ -846,10 +889,85 @@ local function deleteButton()
   end
 end
 
+local function animChanged()
+  own = own + 1
+  lastSave = runtime.clock
+end
+
+local function animItems()
+  if ui.selectable(T.animNone, X.anim == nil) and X.anim then
+    commit()
+    presets.assign(X.anim.id, runtime.presetId, false)
+    animChanged()
+  end
+  for i = 1, #X.anims do
+    local a = X.anims[i]
+    if ui.selectable(X.animLabels[i], a == X.anim) and a ~= X.anim then
+      commit()
+      presets.assign(a.id, runtime.presetId, true)
+      animChanged()
+    end
+  end
+  if ui.selectable(T.animNew, false) then
+    commit()
+    local e = freshEntry(X.id)
+    if e then presets.newAnim(X.id, lookCopy(e), runtime.presetId) end
+    animChanged()
+  end
+end
+
+local function animRows()
+  K.label(T.anim)
+  ui.setNextItemWidth(K.CONTROL_W)
+  ui.combo('##sc_anim', X.animName, COMBO, animItems)
+  K.help(T.animHelp)
+  local a = X.anim
+  if not a then return end
+  K.label(T.animName)
+  ui.setNextItemWidth(K.CONTROL_W)
+  local label = '##sc_animName'
+  local s, changed, enter = ui.inputText(label, pending(label) and P.str or a.name)
+  if changed then
+    pend(label, K_ANIM_NAME, a.id, 0, 0)
+    P.str = s
+  end
+  if enter then commit() else released(label) end
+  for i = 1, #X.ap do
+    if i == 1 then K.label(T.animFor) else moreRow() end
+    if ui.checkbox(X.ap[i].label, X.apOn[i]) then
+      commit()
+      presets.assign(a.id, X.ap[i].id, not X.apOn[i])
+      animChanged()
+    end
+  end
+  moreRow()
+  if X.animShared then
+    if ui.button(T.animSplit) then
+      commit()
+      presets.splitAnim(a.id, runtime.presetId)
+      animChanged()
+    end
+    K.tip(T.animSplitTip)
+    ui.sameLine()
+  end
+  local now = runtime.clock
+  if confirmAnim > now then
+    if ui.button(T.animDeleteConfirm) then
+      confirmAnim = -1
+      P.on = false
+      presets.deleteAnim(a.id)
+      animChanged()
+    end
+  elseif ui.button(T.animDelete) then
+    confirmAnim = now + CONFIRM_TIME
+  end
+  if X.animShared then K.dim(T.animShared) end
+end
+
 local function details()
   local indent = ui.indent ~= nil
   if indent then ui.indent(INDENT) end
-  if X.custom then customRows() end
+  if X.custom then customRows() else animRows() end
   K.label(T.target)
   ui.setNextItemWidth(K.CONTROL_W)
   ui.combo('##sc_target', X.toName, COMBO, targetItems)
@@ -908,6 +1026,23 @@ local function baseLine()
     local before = runtime.presetId
     runtime.setBase(pick == 1 and 'off' or 'original')
     after(before, '')
+  end
+  if head.modified then
+    ui.sameLine()
+    local now = runtime.clock
+    if confirmReset > now then
+      if ui.button(T.resetConfirm) then
+        confirmReset = -1
+        commit()
+        local name = tostring(runtime.preset().name)
+        presets.resetBuiltin(runtime.presetId)
+        lastSave = runtime.clock
+        own = own + 1
+        flash(string.format(T.resetDone, name), K.GREEN, '')
+      end
+    elseif ui.button(T.reset) then
+      confirmReset = now + CONFIRM_TIME
+    end
   end
   message('')
 end

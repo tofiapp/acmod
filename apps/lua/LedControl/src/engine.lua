@@ -37,7 +37,7 @@ end
 
 -- preset: preset table; layout: detect layout; ST: car_state.ST (for availability notes).
 function M.compile(preset, layout, ST)
-  local C = { base = (preset and preset.base == 'original') and color.ORIGINAL or color.OFF, scen = {}, groups = {},
+  local C = { base = (preset and presets.baseOf(preset) == 'original') and color.ORIGINAL or color.OFF, scen = {}, groups = {},
     warnings = {}, presetId = preset and preset.id or '', layoutSig = layout and layout.signature or '' }
   if not layout then return C end
   local hasRole = {}

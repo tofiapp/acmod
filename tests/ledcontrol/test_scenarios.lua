@@ -159,11 +159,11 @@ frame(200)
 check(app.engine.find(rt.compiled, 'idle').active, 'idle: active after 3 s standing')
 car.speedKmh = 120
 
--- ---------------------------------------------------------------- copy-on-write, custom condition, persistence
+-- ---------------------------------------------------------------- built-in edited in place, custom condition, persistence
 
 local scId = rt.addCustom()
-check(rt.presetId:match('^user:') ~= nil, 'editing a built-in preset switches the car to a user copy')
-check(app.presets.get(rt.presetId).from == 'builtin:f1', 'user copy remembers its built-in base')
+check(rt.presetId == 'builtin:f1' and #app.presets.user == 0, 'editing a built-in preset keeps the car on it, no copy')
+check(app.presets.isModified('builtin:f1'), 'the built-in is marked as changed')
 rt.editScenario(scId, 'when', { { q = 'speed', op = '<', v = 60 }, { q = 'fuel', op = '<', v = 5 } })
 rt.editScenario(scId, 'look', { p = 'solid', c = { '#FFFFFF' } })
 rt.editScenario(scId, 'prio', 1)
@@ -186,8 +186,55 @@ frame(3)
 rt = app.runtime
 check(rt.presetId == userId, 'preset choice saved per car')
 local p = app.presets.get(userId)
-check(p and p.scenarios[scId] and #p.scenarios[scId].when == 2, 'custom scenario saved')
-check(p.scenarios.shiftLights.param == 50, 'changed parameter saved')
+local own = p and app.presets.ownOf(p) or {}
+check(own[scId] and #own[scId].when == 2, 'custom scenario saved in the built-in')
+check(own.shiftLights and own.shiftLights.param == 50, 'changed parameter saved')
+
+-- ---------------------------------------------------------------- animations: one look, several presets
+do
+  local P = app.presets
+  local function lookIn(presetId, id)
+    local list = P.effective(P.get(presetId))
+    for i = 1, #list do if list[i].id == id then return list[i].look, list[i] end end
+  end
+  rt.editScenario('shiftPoint', 'look', { p = 'blink', c = { '#00FF00', '#000000' }, hz = 3 })
+  local a = P.animFor('builtin:f1', 'shiftPoint')
+  check(a and a.look.p == 'blink' and P.animCount(a) == 1, 'a look edit makes an animation for this preset')
+  check(lookIn('builtin:f1', 'shiftPoint').c[1] == '#00FF00', 'the preset shows the animation')
+  check(lookIn('builtin:gt3', 'shiftPoint').c[1] == '#FF0000', 'other presets keep their own look')
+  P.assign(a.id, 'builtin:gt3', true)
+  check(lookIn('builtin:gt3', 'shiftPoint').c[1] == '#00FF00', 'ticked in GT3: GT3 shows the animation too')
+  rt.editScenario('shiftPoint', 'look', { p = 'blink', c = { '#0000FF', '#000000' }, hz = 3 })
+  check(lookIn('builtin:gt3', 'shiftPoint').c[1] == '#0000FF' and #P.animsOf('shiftPoint') == 1,
+    'editing the animation changes every ticked preset, no second animation')
+  local uid = P.create('builtin:gt3', 'Moje')
+  check(P.animFor(uid, 'shiftPoint') == a, 'a copy of a preset uses the same animations')
+  local b = P.splitAnim(a.id, uid)
+  check(b and P.animFor(uid, 'shiftPoint') == b and not a.presets[uid] and a.presets['builtin:gt3'],
+    'Jen pro tento preset: own copy, the others keep the original')
+  P.assign(b.id, 'builtin:minimal', true)
+  local _, e = lookIn('builtin:minimal', 'shiftPoint')
+  check(e.on == true, 'ticking an animation switches the scenario on in that preset (Minimální has it off)')
+  check(P.renameAnim(b.id, 'Zelené řazení') and b.name == 'Zelené řazení', 'rename')
+  local text = P.export('builtin:gt3')
+  check(text and text:find('#0000FF', 1, true), 'export carries the animation look')
+  P.delete(uid)
+  check(not b.presets[uid], 'a deleted preset is taken out of its animations')
+  loadApp()
+  frame(3)
+  P = app.presets
+  rt = app.runtime
+  a = P.animFor('builtin:gt3', 'shiftPoint')
+  check(a and a.look.c[1] == '#0000FF' and P.animFor('builtin:f1', 'shiftPoint') == a, 'animations saved and loaded')
+  check(P.animFor('builtin:minimal', 'shiftPoint') and P.animFor('builtin:minimal', 'shiftPoint').name == 'Zelené řazení',
+    'second animation saved with its name')
+  P.resetBuiltin('builtin:gt3')
+  check(not P.isModified('builtin:gt3') and lookIn('builtin:gt3', 'shiftPoint').c[1] == '#FF0000'
+    and P.animFor('builtin:f1', 'shiftPoint') == a, 'Obnovit výchozí: GT3 back to its own look, F1 keeps the animation')
+  P.deleteAnim(P.animFor('builtin:minimal', 'shiftPoint').id)
+  check(P.animFor('builtin:minimal', 'shiftPoint') == nil, 'deleted animation: back to the preset look')
+  P.resetBuiltin('builtin:minimal')
+end
 
 -- move a scenario up and down
 local function indexOf(id)

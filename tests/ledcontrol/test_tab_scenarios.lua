@@ -157,9 +157,9 @@ check(app.safety.uiError == nil, 'tab drawn without an error (' .. tostring(app.
 check(has(text, 'Základ (když nic nesvítí)') and drawn['Zhasnuto##base_off'] and drawn['Podle auta##base_orig'],
   'base look: one line with two choices')
 local help = capture(true)
-check(has(help, '„F1 styl“ je vestavěný preset') and has(help, presets.BUILTIN[1].note),
-  'base (?): preset name and note')
-check(has(help, 'první úprava vytvoří vaši vlastní kopii'), 'base (?): editing a built-in preset makes a copy')
+check(has(help, 'Změny se ukládají přímo do vestavěného presetu „F1 styl“') and has(help, presets.BUILTIN[1].note),
+  'base (?): preset name and note, edits go into the built-in')
+check(not drawn['Obnovit výchozí##resetBuiltin'], 'no reset button while the built-in is unchanged')
 check(not has(text, 'Preset: F1 styl') and not has(text, 'Nahoře je vyšší priorita'),
   'no extra lines above the list (preset name, intro)')
 check(has(text, 'BOX') and has(text, 'VLAJKY') and has(text, 'ŘAZENÍ') and has(text, 'START'),
@@ -247,24 +247,33 @@ end
 rt.setPreset('builtin:f1')
 frame(300)
 
--- ---------------------------------------------------------------- copy-on-write
+-- ---------------------------------------------------------------- built-in edited in place, reset
 
 local versionBefore = presets.version
 click('##on_flagBlue')
-check(rt.presetId:match('^user:') ~= nil, 'copy-on-write: switching a scenario off moves the car to a user copy')
-local userId = rt.presetId
-check(presets.get(userId).from == 'builtin:f1', 'copy-on-write: the copy remembers F1 styl')
-check(presets.BUILTIN[1].scenarios.flagBlue == nil, 'copy-on-write: the built-in preset is unchanged')
+check(rt.presetId == 'builtin:f1' and #presets.user == 0, 'a built-in preset is edited in place: no copy')
 check(entry('flagBlue').on == false and presets.version > versionBefore, 'on/off: blue flag off and saved')
-text = capture()
-check(has(text, 'Uloženo do vaší kopie „' .. presets.get(userId).name .. '“'), 'copy made: said under the row')
+check(presets.BUILTIN[1].scenarios.flagBlue == nil, 'the built-in definition itself is untouched (overlay)')
+capture()
+check(drawn['Obnovit výchozí##resetBuiltin'], 'changed built-in: reset button on the base line')
+click('Obnovit výchozí##resetBuiltin')
+check(entry('flagBlue').on == false, 'reset needs a second click')
+click('Opravdu obnovit?##resetBuiltin')
+check(entry('flagBlue').on == true and not presets.isModified('builtin:f1'), 'Obnovit výchozí: back to the built-in')
+check(has(capture(), 'má zase výchozí nastavení'), 'reset: said under the base line')
+
+-- a user preset for the rest of the tab tests
+local userId = presets.create('builtin:f1')
+rt.setPreset(userId)
+show(2)
+click('##on_flagBlue')
+check(entry('flagBlue').on == false and rt.presetId == userId, 'on/off in a user preset')
 help = capture(true)
 check(has(help, 'Změny se ukládají do tohoto presetu') and has(help, 'Vychází z presetu „F1 styl“'),
   'base (?): user preset edits are saved directly, and its base')
 click('##on_flagBlue')
 check(entry('flagBlue').on == true and rt.presetId == userId, 'on/off: back on, same user preset')
 frame(300)
-check(not has(capture(), 'Uloženo do vaší kopie'), 'copy message disappears after a few seconds')
 
 -- base look
 click('Podle auta##base_orig')
@@ -422,7 +431,11 @@ rt.setPreset('builtin:gt3')
 show(30)
 check(rt.presetId == 'builtin:gt3' and #presets.user == nUser, 'preset switch: no copy of the new built-in preset made')
 check(entry('limiter').look.c[1] == '#FF0000', 'preset switch: the new preset keeps its own colour')
-check(presets.get(userId).scenarios.limiter.look.c[1] == '#00FFFF', 'preset switch: the colour saved in the old preset')
+local function lookAt(pid, id)
+  local l = presets.effective(presets.get(pid))
+  for i = 1, #l do if l[i].id == id then return l[i].look end end
+end
+check(lookAt(userId, 'limiter').c[1] == '#00FFFF', 'preset switch: the colour saved in the old preset')
 rt.setPreset('builtin:f1')
 show(2)
 U.pick = { ['##c1'] = { 1, 1, 1 } }
@@ -430,15 +443,14 @@ show(1)                                         -- pending in the built-in prese
 U.pick = nil
 rt.setPreset('builtin:gt3')
 show(30)
-check(rt.presetId == 'builtin:gt3' and #presets.user == nUser
-  and presets.BUILTIN[1].scenarios.limiter.look.c[1] == '#0000FF',
-  'preset switch from a built-in preset: the pending colour is dropped, no copy made')
+check(rt.presetId == 'builtin:gt3' and #presets.user == nUser and lookAt('builtin:f1', 'limiter').c[1] == '#FFFFFF'
+  and lookAt('builtin:gt3', 'limiter').c[1] == '#FF0000',
+  'preset switch from a built-in preset: the pending colour saved in the built-in it was made in, no copy')
 rt.setPreset(userId)
 show(2)
 check(lookOf('limiter').c[1] == '#00FFFF', 'back in the user preset')
 
--- a pending colour in a built-in preset, then a combo edit (which makes the user copy): the colour is saved first,
--- both land in the copy
+-- a pending colour in a built-in preset, then a combo edit: the colour is saved first, both land in the built-in
 click('##on_limiter')
 click('##on_limiter')
 rt.setPreset('builtin:f1')
@@ -447,10 +459,9 @@ U.pick = { ['##c1'] = { 1, 0.5, 0 } }
 show(1)
 U.pick = nil
 pick('##sc_pattern', 'Pulzuje')
-local copyId = rt.presetId
-check(copyId:match('^user:') ~= nil and copyId ~= userId and lookOf('limiter').p == 'pulse'
-  and lookOf('limiter').c[1] == '#FF8000', 'pending colour + pattern combo on a built-in preset: both in the new copy')
-presets.delete(copyId)
+check(rt.presetId == 'builtin:f1' and #presets.user == nUser and lookOf('limiter').p == 'pulse'
+  and lookOf('limiter').c[1] == '#FF8000', 'pending colour + pattern combo on a built-in preset: both in it')
+presets.resetBuiltin('builtin:f1')
 rt.setPreset(userId)
 show(2)
 
@@ -725,7 +736,7 @@ loadApp()
 frame(3)
 check(rt.presetId == 'builtin:gt3', 'gt3: GT3 styl')
 help = capture(true)
-check(has(help, '„GT3 styl“ je vestavěný preset') and has(help, presets.BUILTIN[2].note), 'gt3: base (?)')
+check(has(help, 'vestavěného presetu „GT3 styl“') and has(help, presets.BUILTIN[2].note), 'gt3: base (?)')
 check(has(help, 'Nedostupné: auto nemá DRS'), 'gt3: DRS unavailable')
 check(has(help, 'Nedostupné: AC tuto vlajku zatím nehlásí'), 'gt3: red flag unavailable')
 check(has(help, 'Při 12610 ot/min (karta Otáčky)'), 'gt3: shift point note without ai.ini (97 % of the limiter)')
@@ -750,6 +761,57 @@ U.openCombo = nil
 check(drawn['od začátku po bod řazení'] and not drawn['podle prahů otáček auta'],
   'no thresholds: only the relative source offered')
 check(has(text, 'jde jen u aut, která mají práh otáček'), 'no thresholds: explained in (?)')
+
+-- ---------------------------------------------------------------- animations: one look in several presets
+
+do
+  rt.setPreset('builtin:gt3')
+  show(2)
+  expand('shiftPoint')
+  capture()
+  check(drawn['##sc_anim'] and not drawn['##sc_animName'], 'animation row: preset look, no name / presets yet')
+  pick('##sc_anim', 'Nová animace (kopie tohoto vzhledu)')
+  local a = presets.animFor('builtin:gt3', 'shiftPoint')
+  check(a and presets.animCount(a) == 1 and a.look.c[1] == '#FF0000', 'Nová animace: the current look, for this preset')
+  text = capture()
+  check(drawn['##sc_animName'] and drawn['F1 styl##ap_builtin:f1'] and drawn['GT3 styl##ap_builtin:gt3']
+    and drawn['Minimální##ap_builtin:minimal'], 'name row and one tick per preset')
+  check(not drawn['Jen pro tento preset##sc_animSplit'], 'not shared: no split button')
+  click('F1 styl##ap_builtin:f1')
+  check(a.presets['builtin:f1'] and lookAt('builtin:f1', 'shiftPoint').c[1] == '#FF0000', 'ticked: F1 uses it')
+  text = capture()
+  check(drawn['Jen pro tento preset##sc_animSplit'] and has(text, 'Úprava se projeví ve všech zaškrtnutých presetech.'),
+    'shared: split button and a note')
+  U.pick = { ['##c1'] = { 0, 1, 0 } }
+  show(1)
+  U.pick = nil
+  show(30)
+  check(lookAt('builtin:f1', 'shiftPoint').c[1] == '#00FF00' and lookOf('shiftPoint').c[1] == '#00FF00',
+    'a colour edit changes the animation in both presets')
+  U.type = { ['##sc_animName'] = 'Zelené řazení' }
+  U.active = '##sc_animName'
+  show(1)
+  U.active = nil
+  show(2)
+  check(a.name == 'Zelené řazení', 'rename the animation')
+  click('GT3 styl##ap_builtin:gt3')
+  check(not a.presets['builtin:gt3'] and lookOf('shiftPoint').c[1] == '#FF0000'
+    and lookAt('builtin:f1', 'shiftPoint').c[1] == '#00FF00', 'untick here: back to the preset look, F1 keeps it')
+  pick('##sc_anim', 'Zelené řazení##an_' .. a.id)
+  check(a.presets['builtin:gt3'] and lookOf('shiftPoint').c[1] == '#00FF00', 'picked again from the combo')
+  click('Jen pro tento preset##sc_animSplit')
+  local b = presets.animFor('builtin:gt3', 'shiftPoint')
+  check(b and b ~= a and a.presets['builtin:f1'] and not a.presets['builtin:gt3'], 'split: own copy here')
+  click('Smazat animaci##sc_animDel')
+  check(presets.anim(b.id) ~= nil, 'delete needs a second click')
+  click('Opravdu smazat?##sc_animDel')
+  check(presets.anim(b.id) == nil and lookOf('shiftPoint').c[1] == '#FF0000', 'deleted: back to the preset look')
+  pick('##sc_anim', 'Vzhled presetu')
+  check(app.safety.uiError == nil, 'animation rows: no UI error (' .. tostring(app.safety.uiError) .. ')')
+  presets.deleteAnim(a.id)
+  presets.resetBuiltin('builtin:gt3')
+  presets.resetBuiltin('builtin:f1')
+end
 
 -- ---------------------------------------------------------------- a car without LEDs
 

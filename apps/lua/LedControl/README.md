@@ -103,8 +103,18 @@ duha, vlastní snímky. Rychlost se zadává v Hz.
 - **GT3 styl**: plnění od krajů ke středu zelená – žlutá – červená, bod řazení bliká červeně.
 - **Minimální**: otáčky ukazuje auto samo, přidá jen pit limiter a modrou a žlutou vlajku.
 
-Vestavěné presety jsou relativní, fungují na libovolném počtu diod. Když vestavěný preset upravíte, vytvoří se jeho
-kopie a auto začne používat ji. Preset se pamatuje pro každé auto. Ruční animace z Editoru jsou vázané na počet
+Vestavěné presety jsou relativní, fungují na libovolném počtu diod. Úpravy vestavěného presetu se ukládají přímo do
+něj (od verze 0.4.0 už nevzniká skrytá kopie „(upravený)“); **Obnovit výchozí** vedle řádku Základ v kartě Scénáře
+vrátí jeho původní nastavení. Preset se pamatuje pro každé auto.
+
+### Animace
+
+Vzhled scénáře (vzor, barvy, blikání, snímky z Editoru) je **animace**. V kartě Scénáře rozklikněte scénář: řádek
+**Animace** vybere animaci (nebo *Vzhled presetu* = vzhled jen tohoto presetu), **Název** ji přejmenuje a **Platí
+pro** zaškrtne presety, ve kterých se použije. Úprava vzhledu změní animaci ve všech zaškrtnutých presetech.
+**Jen pro tento preset** z ní udělá samostatnou kopii, **Smazat animaci** vrátí presetům jejich vlastní vzhled.
+První úprava vzhledu, který ještě animací není, z něj animaci udělá (zatím jen pro aktuální preset).
+Vlastní podmínky patří vždy jen do svého presetu. Při sdílení se vzhled animací pošle s presetem. Ruční animace z Editoru jsou vázané na počet
 diod: na autě s jiným počtem se přepočítají, nebo (když přepočet vypnete) se scénář vypne s upozorněním.
 
 Sdílení: **Nastavení → Sdílení → Do schránky** dá do schránky jeden řádek textu začínající `LEDCONTROL-PRESET 1`.

@@ -2,7 +2,13 @@
 -- (what the LEDs show when no scenario is active: 'off' or 'original' = the car's own logic).
 -- Built-in presets are code and relative (they work on any LED count). User presets are stored sparse: missing
 -- scenario keys inherit from the built-in they were copied from ("from"), then from the catalogue, so new built-in
--- scenarios reach old presets. Editing a built-in preset makes a user copy first (copy-on-write).
+-- scenarios reach old presets. Built-in presets are edited in place: the changes are a sparse overlay (p.edits,
+-- saved as builtinEdits), "Obnovit výchozí" clears it. (Up to 0.3.2 an edit made a hidden copy "(upravený)" and the
+-- car switched to it, so changes seemed lost once the built-in was picked again.)
+-- Animations: the look of a catalogue scenario is a named animation in a library (M.anims) that applies to the
+-- presets ticked in it (anim.presets[presetId] = true; one animation per scenario and preset). A look edit goes into
+-- the animation of that scenario in that preset, a new one is made when there is none. Resolution of a look:
+-- catalogue <- built-in <- the preset's own entry <- the animation.
 -- Export / import: one line "LEDCONTROL-PRESET 1 " + JSON; imported text is parsed with JSON.parse under pcall
 -- and sanitised (never executed).
 
@@ -54,7 +60,13 @@ M.BUILTIN = {
   },
 }
 local BUILTIN_BY_ID = {}
-for i = 1, #M.BUILTIN do BUILTIN_BY_ID[M.BUILTIN[i].id] = M.BUILTIN[i] end
+for i = 1, #M.BUILTIN do
+  BUILTIN_BY_ID[M.BUILTIN[i].id] = M.BUILTIN[i]
+  M.BUILTIN[i].edits = { scenarios = {} }      -- the user's changes (base = nil: the built-in's own)
+end
+
+M.anims, M.nextAnim = {}, 1
+local animIdx = {}            -- [presetId][scenarioId] = animation
 
 -- ---------------------------------------------------------------- sanitising
 
@@ -151,25 +163,50 @@ local function sanitiseEntry(id, e)
   return out
 end
 
+function M.sanitiseScenarios(t)
+  local out = {}
+  if type(t) ~= 'table' then return out end
+  local n = 0
+  for id, e in pairs(t) do
+    if type(id) == 'string' and (scenarios.byId[id] or id:match('^custom:%d+$')) then
+      local clean = sanitiseEntry(id, e)
+      if clean then
+        out[id] = clean
+        n = n + 1
+        if n >= 80 then break end
+      end
+    end
+  end
+  return out
+end
+
+-- Clean copy of a stored animation, or nil.
+function M.sanitiseAnim(a)
+  if type(a) ~= 'table' or type(a.id) ~= 'string' or not a.id:match('^anim:%d+$') then return nil end
+  if not scenarios.byId[a.sc] then return nil end
+  local look = M.sanitiseLook(a.look)
+  if not look then return nil end
+  local out = { id = a.id, name = str(a.name, 40) or 'Animace', sc = a.sc, look = look, presets = {} }
+  if type(a.presets) == 'table' then
+    local n = 0
+    for id, on in pairs(a.presets) do
+      if on == true and type(id) == 'string' and (id:match('^builtin:[%w_]+$') or id:match('^user:%d+$')) then
+        out.presets[id] = true
+        n = n + 1
+        if n >= 100 then break end
+      end
+    end
+  end
+  return out
+end
+
 -- Clean copy of a user preset, or nil when it is not a preset at all.
 function M.sanitise(p)
   if type(p) ~= 'table' then return nil end
   local out = { v = 1, id = str(p.id, 40), name = str(p.name, 40) or 'Preset',
     from = BUILTIN_BY_ID[p.from] and p.from or nil, base = p.base == 'original' and 'original' or 'off',
     layout = str(p.layout, 40), scenarios = {} }
-  if type(p.scenarios) == 'table' then
-    local n = 0
-    for id, e in pairs(p.scenarios) do
-      if type(id) == 'string' and (scenarios.byId[id] or id:match('^custom:%d+$')) then
-        local clean = sanitiseEntry(id, e)
-        if clean then
-          out.scenarios[id] = clean
-          n = n + 1
-          if n >= 80 then break end
-        end
-      end
-    end
-  end
+  out.scenarios = M.sanitiseScenarios(p.scenarios)
   return out
 end
 
@@ -191,12 +228,171 @@ function M.load()
     local n = tonumber(M.user[i].id:match('%d+')) or 0
     if n >= M.nextId then M.nextId = n + 1 end
   end
+  local edits = type(t.builtinEdits) == 'table' and t.builtinEdits or {}
+  for i = 1, #M.BUILTIN do
+    local b = M.BUILTIN[i]
+    local e = type(edits[b.id]) == 'table' and edits[b.id] or {}
+    b.edits = { scenarios = M.sanitiseScenarios(e.scenarios),
+      base = (e.base == 'original' or e.base == 'off') and e.base or nil }
+  end
+  M.anims = {}
+  local list = type(t.anims) == 'table' and t.anims or {}
+  for i = 1, math.min(#list, 200) do
+    local a = M.sanitiseAnim(list[i])
+    if a and not seen[a.id] then
+      seen[a.id] = true
+      for id in pairs(a.presets) do if not M.get(id) then a.presets[id] = nil end end
+      M.anims[#M.anims + 1] = a
+    end
+  end
+  M.nextAnim = math.max(1, math.floor(tonumber(t.nextAnim) or 1))
+  for i = 1, #M.anims do
+    local n = tonumber(M.anims[i].id:match('%d+')) or 0
+    if n >= M.nextAnim then M.nextAnim = n + 1 end
+  end
+  M.reindex()
   M.version = M.version + 1
 end
 
 function M.save()
-  store.savePresets({ v = 1, nextId = M.nextId, list = M.user })
+  local edits = {}
+  for i = 1, #M.BUILTIN do
+    local b = M.BUILTIN[i]
+    if M.isModified(b.id) then edits[b.id] = b.edits end
+  end
+  M.reindex()
+  store.savePresets({ v = 1, nextId = M.nextId, list = M.user, builtinEdits = edits, anims = M.anims,
+    nextAnim = M.nextAnim })
   M.version = M.version + 1
+end
+
+-- ---------------------------------------------------------------- animations
+
+-- Rebuilds the lookup [presetId][scenarioId]; a scenario ticked in two animations of one preset keeps the first.
+function M.reindex()
+  animIdx = {}
+  for i = 1, #M.anims do
+    local a = M.anims[i]
+    for id in pairs(a.presets) do
+      local t = animIdx[id]
+      if not t then t = {}; animIdx[id] = t end
+      if not t[a.sc] then t[a.sc] = a end
+    end
+  end
+end
+
+function M.animFor(presetId, scId)
+  local t = animIdx[presetId]
+  return t and t[scId] or nil
+end
+
+function M.anim(id)
+  for i = 1, #M.anims do if M.anims[i].id == id then return M.anims[i] end end
+  return nil
+end
+
+-- Animations of one scenario, in library order (allocates: for UI rebuilds).
+function M.animsOf(scId)
+  local out = {}
+  for i = 1, #M.anims do if M.anims[i].sc == scId then out[#out + 1] = M.anims[i] end end
+  return out
+end
+
+-- Presets an animation applies to, in the order of M.all() (allocates).
+function M.presetsOf(a)
+  local out = {}
+  if not a then return out end
+  local all = M.all()
+  for i = 1, #all do if a.presets[all[i].id] then out[#out + 1] = all[i] end end
+  return out
+end
+
+local function uniqueAnimName(name, except)
+  local taken = {}
+  for i = 1, #M.anims do if M.anims[i] ~= except then taken[M.anims[i].name] = true end end
+  if not taken[name] then return name end
+  for i = 2, 99 do
+    local n = string.format('%s (%d)', name, i)
+    if not taken[n] then return n end
+  end
+  return name
+end
+
+-- Ticks / unticks a preset in an animation (no save). Ticking takes the preset out of the scenario's other animations.
+local function tick(a, presetId, on)
+  if on then
+    for i = 1, #M.anims do
+      local o = M.anims[i]
+      if o ~= a and o.sc == a.sc then o.presets[presetId] = nil end
+    end
+    a.presets[presetId] = true
+  else
+    a.presets[presetId] = nil
+  end
+  M.reindex()
+end
+
+-- New animation of scenario scId with the given look, applying to presetId (optional). Returns it.
+function M.newAnim(scId, look, presetId, name)
+  if not scenarios.byId[scId] then return nil end
+  local a = { id = 'anim:' .. M.nextAnim, sc = scId, look = M.sanitiseLook(look) or {}, presets = {},
+    name = uniqueAnimName(cutUtf8(name or scenarios.byId[scId].name, 40)) }
+  M.nextAnim = M.nextAnim + 1
+  M.anims[#M.anims + 1] = a
+  if presetId and M.get(presetId) then tick(a, presetId, true) end
+  M.save()
+  return a
+end
+
+-- Applies (on) or stops applying an animation in a preset. Applying also switches the scenario on in that preset.
+function M.assign(animId, presetId, on)
+  local a = M.anim(animId)
+  local p = M.get(presetId)
+  if not a or not p then return false end
+  tick(a, presetId, on == true)
+  if on then
+    local own = M.ownOf(p)
+    local e = own[a.sc] or {}
+    e.on = true
+    own[a.sc] = e
+  end
+  M.save()
+  return true
+end
+
+function M.renameAnim(animId, name)
+  local a = M.anim(animId)
+  if not a or type(name) ~= 'string' then return false end
+  name = cutUtf8((name:gsub('^%s+', ''):gsub('%s+$', '')), 40)
+  if name == '' then return false end
+  a.name = uniqueAnimName(name, a)
+  M.save()
+  return true
+end
+
+function M.deleteAnim(animId)
+  for i = 1, #M.anims do
+    if M.anims[i].id == animId then
+      table.remove(M.anims, i)
+      M.save()
+      return true
+    end
+  end
+  return false
+end
+
+-- A copy of an animation for presetId alone (the original keeps its other presets). Returns the copy.
+function M.splitAnim(animId, presetId)
+  local a = M.anim(animId)
+  if not a then return nil end
+  return M.newAnim(a.sc, a.look, presetId, a.name)   -- newAnim keeps a clean copy of the look
+end
+
+-- Number of presets an animation applies to.
+function M.animCount(a)
+  local n = 0
+  if a then for _ in pairs(a.presets) do n = n + 1 end end
+  return n
 end
 
 -- ---------------------------------------------------------------- access
@@ -229,8 +425,10 @@ M.deepCopy = deepCopy
 -- Returns an array sorted by priority of { id, def, custom, name, cat, on, prio, to, look, param, when, order }.
 function M.effective(preset)
   preset = preset or M.BUILTIN[1]
-  local base = nil
-  if not preset.builtin then base = BUILTIN_BY_ID[preset.from] end
+  local base, own = nil, nil
+  if preset.builtin then base, own = preset, preset.edits.scenarios
+  else base, own = BUILTIN_BY_ID[preset.from], preset.scenarios end
+  local anims = animIdx[preset.id]
   local list = {}
   for i = 1, #scenarios.list do
     local d = scenarios.list[i]
@@ -238,7 +436,7 @@ function M.effective(preset)
       look = d.look, param = d.param and d.param.default or nil, order = d.order }
     for pass = 1, 2 do
       local src
-      if pass == 1 then src = base and base.scenarios[d.id] else src = preset.scenarios[d.id] end
+      if pass == 1 then src = base and base.scenarios[d.id] else src = own[d.id] end
       if src then
         if src.on ~= nil then e.on = src.on end
         if src.prio then e.prio = src.prio end
@@ -247,9 +445,11 @@ function M.effective(preset)
         if src.param then e.param = src.param end
       end
     end
+    local a = anims and anims[d.id]
+    if a then e.look, e.anim = a.look, a end
     list[#list + 1] = e
   end
-  for id, o in pairs(preset.scenarios) do
+  for id, o in pairs(own) do
     if scenarios.isCustom(id) then
       list[#list + 1] = { id = id, def = nil, custom = true, name = o.name or 'Vlastní podmínka', cat = 'Vlastní',
         on = o.on ~= false, prio = o.prio or 100, to = o.to or 'all', look = o.look or scenarios.CUSTOM_LOOK,
@@ -296,7 +496,7 @@ function M.create(fromId, name)
   local src = M.get(fromId) or M.BUILTIN[1]
   local p
   if src.builtin then
-    p = { v = 1, from = src.id, base = src.base, scenarios = {} }
+    p = { v = 1, from = src.id, base = M.baseOf(src), scenarios = deepCopy(src.edits.scenarios) }
   else
     p = deepCopy(src)
   end
@@ -304,16 +504,48 @@ function M.create(fromId, name)
   p.name = uniqueName(name or (src.name .. ' (kopie)'))
   p.builtin = nil
   M.user[#M.user + 1] = p
+  -- the copy uses the same animations
+  for i = 1, #M.anims do
+    if M.anims[i].presets[src.id] then M.anims[i].presets[p.id] = true end
+  end
   M.save()
   return p.id
 end
 
--- Returns the id of a preset that may be edited: id itself for a user preset, a fresh copy for a built-in one.
+-- The id that takes an edit: the preset itself (built-ins are edited in place, see M.ownOf).
 function M.editable(id)
-  local p = M.get(id)
-  if p and not p.builtin then return id end
-  local src = p or M.BUILTIN[1]
-  return M.create(src.id, src.name .. ' (upravený)')
+  if M.get(id) then return id end
+  return M.BUILTIN[1].id
+end
+
+-- The table that holds a preset's own scenario entries: the overlay of a built-in, else the preset's.
+function M.ownOf(p)
+  if p.builtin then return p.edits.scenarios end
+  return p.scenarios
+end
+
+-- Base look of a preset ('off' / 'original'), with a built-in's change.
+function M.baseOf(p)
+  if not p then return 'off' end
+  if p.builtin then return p.edits.base or p.base end
+  return p.base
+end
+
+-- true when a built-in preset has changes of its own or animations applied to it.
+function M.isModified(id)
+  local p = BUILTIN_BY_ID[id]
+  if not p then return false end
+  return next(p.edits.scenarios) ~= nil or p.edits.base ~= nil or (animIdx[id] ~= nil and next(animIdx[id]) ~= nil)
+end
+
+-- Back to the built-in's own settings: its changes are cleared and no animation applies to it any more.
+function M.resetBuiltin(id)
+  local p = BUILTIN_BY_ID[id]
+  if not p then return false end
+  p.edits = { scenarios = {} }
+  for i = 1, #M.anims do M.anims[i].presets[id] = nil end
+  M.save()
+  return true
 end
 
 -- Sets one field of a scenario entry ('on', 'prio', 'to', 'look', 'param', 'name', 'when'); returns the preset id
@@ -321,8 +553,20 @@ end
 function M.setScenario(presetId, scId, field, value)
   local id = M.editable(presetId)
   local p = M.get(id)
-  local e = p.scenarios[scId]
-  if not e then e = {}; p.scenarios[scId] = e end
+  if field == 'look' and scenarios.byId[scId] then
+    -- the look of a catalogue scenario lives in an animation (shared by the presets ticked in it)
+    local a = M.animFor(id, scId)
+    if a then
+      a.look = M.sanitiseLook(value) or {}
+      M.save()
+    else
+      M.newAnim(scId, value, id)
+    end
+    return id
+  end
+  local own = M.ownOf(p)
+  local e = own[scId]
+  if not e then e = {}; own[scId] = e end
   if field == 'look' then value = M.sanitiseLook(value) end
   if field == 'when' then value = conditions.sanitise(value) end
   if field == 'name' then value = str(value, 40) or 'Vlastní podmínka' end
@@ -340,7 +584,9 @@ end
 
 function M.setBase(presetId, base)
   local id = M.editable(presetId)
-  M.get(id).base = base == 'original' and 'original' or 'off'
+  local p = M.get(id)
+  local b = base == 'original' and 'original' or 'off'
+  if p.builtin then p.edits.base = b ~= p.base and b or nil else p.base = b end
   M.save()
   return id
 end
@@ -353,14 +599,14 @@ function M.move(presetId, scId, delta)
   local other = at and list[at + delta]
   if not other then return presetId end
   local id = M.editable(presetId)
-  local p = M.get(id)
+  local own = M.ownOf(M.get(id))
   -- give everything explicit, spaced priorities so a swap is always visible
   for i = 1, #list do
-    local e = p.scenarios[list[i].id] or {}
+    local e = own[list[i].id] or {}
     e.prio = i * 10
-    p.scenarios[list[i].id] = e
+    own[list[i].id] = e
   end
-  p.scenarios[scId].prio, p.scenarios[other.id].prio = (at + delta) * 10, at * 10
+  own[scId].prio, own[other.id].prio = (at + delta) * 10, at * 10
   M.save()
   return id
 end
@@ -368,13 +614,14 @@ end
 function M.addCustom(presetId)
   local id = M.editable(presetId)
   local p = M.get(id)
+  local own = M.ownOf(p)
   local n = 1
-  while p.scenarios['custom:' .. n] do n = n + 1 end
+  while own['custom:' .. n] do n = n + 1 end
   local scId = 'custom:' .. n
   local last = 0
   local list = M.effective(p)
   for i = 1, #list do if list[i].prio > last then last = list[i].prio end end
-  p.scenarios[scId] = { name = 'Vlastní podmínka ' .. n, on = true, prio = math.min(999, last + 1), to = 'all',
+  own[scId] = { name = 'Vlastní podmínka ' .. n, on = true, prio = math.min(999, last + 1), to = 'all',
     look = deepCopy(scenarios.CUSTOM_LOOK), when = { { q = 'speed', op = '<', v = 60 } } }
   M.save()
   return id, scId
@@ -382,7 +629,7 @@ end
 
 function M.removeScenario(presetId, scId)
   local id = M.editable(presetId)
-  M.get(id).scenarios[scId] = nil
+  M.ownOf(M.get(id))[scId] = nil
   M.save()
   return id
 end
@@ -406,6 +653,7 @@ function M.delete(id)
   for i = 1, #M.user do
     if M.user[i].id == id then
       table.remove(M.user, i)
+      for k = 1, #M.anims do M.anims[k].presets[id] = nil end
       M.save()
       return true
     end
@@ -415,6 +663,8 @@ end
 
 function M.deleteAllUser()
   M.user, M.nextId = {}, 1
+  M.anims, M.nextAnim = {}, 1
+  for i = 1, #M.BUILTIN do M.BUILTIN[i].edits = { scenarios = {} } end
   M.save()
 end
 
@@ -424,8 +674,14 @@ function M.export(id)
   local p = M.get(id)
   if not p then return nil end
   local out
-  if p.builtin then out = { v = 1, name = p.name, from = p.id, base = p.base, scenarios = {} }
+  if p.builtin then out = { v = 1, name = p.name, from = p.id, base = M.baseOf(p), scenarios = deepCopy(p.edits.scenarios) }
   else out = M.sanitise(p); out.id = nil end
+  -- the animations it uses go along as plain looks
+  for scId, a in pairs(animIdx[id] or {}) do
+    local e = out.scenarios[scId] or {}
+    e.look = deepCopy(a.look)
+    out.scenarios[scId] = e
+  end
   return EXPORT_PREFIX .. JSON.stringify(out)
 end
 
