@@ -80,9 +80,9 @@ local function toX(params)
   return x
 end
 
-local function serialize(params, cost, passed, runs)
-  local lines = { string.format('-- cost %.4f, %d/%d runs pass (tuning set, physics rate, nominal and +-20 %% shifts)',
-    cost, passed, runs), 'return {' }
+local function serialize(params, cost, passed, runs, nscales)
+  local lines = { string.format('-- cost %.4f, %d/%d runs pass (tuning set, physics rate, %d grip/power scale(s))',
+    cost, passed, runs, nscales), 'return {' }
   for _, g in ipairs({ 'throttle', 'traction' }) do
     local keys = {}
     for k in pairs(params[g]) do keys[#keys + 1] = k end
@@ -110,17 +110,22 @@ local function gauss()
   return math.sqrt(-2 * math.log(rnd())) * math.cos(2 * math.pi * rnd())
 end
 
+-- Random search scores on the nominal cars only (fast); Nelder-Mead on nominal plus two opposite +-20 % shifts.
+local SCALES_RANDOM = { { 1, 1 } }
+local SCALES_NM = { { 1, 1 }, { 0.8, 1.2 }, { 1.2, 0.8 } }
+local scales = SCALES_RANDOM
+
 local best, bestX, bestInfo = math.huge, nil, nil
 local evals = 0
 local function f(x)
   local p = toParams(x)
-  local cost, passed, runs, fails = evaluate.evaluate(ROOT, 'tuning', p)
+  local cost, passed, runs, fails = evaluate.evaluate(ROOT, 'tuning', p, { scales = scales })
   evals = evals + 1
   if cost < best then
     best, bestX = cost, { unpack(x) }
     bestInfo = string.format('%d/%d pass', passed, runs)
     local fh = io.open(OUT .. '.lua', 'w')
-    fh:write(serialize(p, cost, passed, runs)); fh:close()
+    fh:write(serialize(p, cost, passed, runs, #scales)); fh:close()
     local fk = {}
     for k, n in pairs(fails) do fk[#fk + 1] = k .. ' ' .. n end
     table.sort(fk)
@@ -147,8 +152,11 @@ for i = 1, NRAND do
 end
 log(string.format('random search done: best %.4f (%s) after %d evals', best, bestInfo, evals))
 
--- 2. Nelder-Mead from the best point
-local simplex, values = { { unpack(bestX) } }, { best }
+-- 2. Nelder-Mead from the best point (re-scored on the wider scale set)
+scales = SCALES_NM
+best = math.huge
+local x1 = { unpack(bestX) }
+local simplex, values = { x1 }, { f(x1) }
 for k = 1, D do
   local x = { unpack(bestX) }
   x[k] = x[k] + (x[k] < 0.5 and 0.12 or -0.12)
