@@ -66,7 +66,7 @@ local function count(name) M.calls[name] = (M.calls[name] or 0) + 1 end
 function M.install(core)
   package.path = core .. '/?.lua;' .. package.path
   for k in pairs(package.loaded) do
-    if k:sub(1, 4) == 'src/' then package.loaded[k] = nil end
+    if k:sub(1, 4) == 'src/' or k:sub(1, 5) == 'core/' then package.loaded[k] = nil end
   end
 
   math.clamp = function (x, a, b) if x < a then return a elseif x > b then return b end return x end

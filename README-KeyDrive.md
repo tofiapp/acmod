@@ -68,6 +68,18 @@ nešlo poznat, jestli AC svůj klávesnicový filtr na řízení ještě použí
 
 ## Vývoj
 
+Logika plynu a řízení je v čistých Lua modulech `extension/lua/joypad-assist/KeyDrive/core/` (bez CSP). Hra je spouští
+přes `assist.lua`, simulátor a testy přímo.
+
+LuaJIT na Windows: stačí Python (`py`) a balík **lupa**, který LuaJIT 2.1 obsahuje hotový (nic se nekompiluje):
+
+```bat
+py -m pip install lupa
+py tests\keydrive\run_tests.py
+```
+
+Na Linuxu/macOS:
+
 ```bash
 pip install lupa && python tests/keydrive/run_tests.py   # testy KeyDrive
 ./build-keydrive.sh                                       # nebo build-keydrive.ps1 → dist/KeyDrive-<verze>.zip

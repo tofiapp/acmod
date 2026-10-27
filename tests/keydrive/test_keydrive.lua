@@ -907,5 +907,54 @@ do
     mock.override.fields.steer == math.huge and mock.override.fields.gas == 0, t)
 end
 
+-- 27. Core purity: core/*.lua run in a bare Lua 5.1 environment (no ac, ui, vec2, math.clamp ...), from plain tables,
+-- so the simulator and an external program can run them. Any unknown global is an error.
+do
+  local STD = { 'assert', 'error', 'ipairs', 'next', 'pairs', 'pcall', 'select', 'setmetatable', 'getmetatable',
+    'tonumber', 'tostring', 'type', 'unpack', 'rawget', 'rawset', 'xpcall' }
+  local bareMath = {}
+  for k, v in pairs(math) do if k ~= 'clamp' then bareMath[k] = v end end
+  local env = { math = bareMath, string = string, table = table }
+  for _, k in ipairs(STD) do env[k] = _G[k] end
+  local loaded = {}
+  env.require = function (name)
+    if loaded[name] then return loaded[name] end
+    assert(name:sub(1, 5) == 'core/', 'core requires non-core module ' .. name)
+    local chunk = assert(loadfile(CORE .. '/' .. name .. '.lua'))
+    setfenv(chunk, env)
+    loaded[name] = chunk()
+    return loaded[name]
+  end
+  setmetatable(env, { __index = function (_, k) error('core uses a non-standard global: ' .. tostring(k), 2) end,
+    __newindex = function (_, k) error('core sets a global: ' .. tostring(k), 2) end })
+  local ok, err = pcall(function ()
+    local Throttle, Steering = env.require('core/throttle'), env.require('core/steering')
+    local function v3(x, y, z) return { x = x, y = y, z = z } end
+    local wheels = {}
+    for i = 0, 3 do
+      wheels[i] = { ndSlip = 0.5, load = 3000, angularSpeed = 60, tyreRadius = 0.32, slipRatio = 0.01, slipAngle = 1,
+        look = v3(0, 0, 1), velocity = v3(0.02, 0, 20) }
+    end
+    local carState = { gear = 2, rpm = 5200, speedKmh = 72, localVelocity = v3(0, 0, 20), tractionType = 0,
+      wheels = wheels, look = v3(0, 0, 1), side = v3(1, 0, 0) }
+    local th = Throttle.new()
+    local st = Steering.new({ LIMIT_STRENGTH = 1, COUNTERSTEER = 1 })
+    th:configure(carState)
+    st:configure(carState, 540, 18)
+    local g, sOut
+    for i = 1, 400 do
+      wheels[2].ndSlip, wheels[3].ndSlip = i > 200 and 1.6 or 0.5, i > 200 and 1.6 or 0.5
+      g = th:update(0.003, true, carState, 0.4, sOut or 0)
+      sOut = st:update(0.003, false, true, carState)
+    end
+    return g, sOut
+  end)
+  check('core runs in a bare Lua environment', ok, err)
+  -- two instances do not share state
+  local Traction = dofile(CORE .. '/core/traction.lua')
+  local a, b = Traction.new(), Traction.new({ K_DOWN = 9 })
+  check('traction instances keep their own parameters', a.p.K_DOWN == 2.5 and b.p.K_DOWN == 9 and a.memory ~= b.memory)
+end
+
 print(string.format('KeyDrive: %d passed, %d failed', passed, failed))
 return failed > 0

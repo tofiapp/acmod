@@ -1,17 +1,19 @@
 -- KeyDrive: Gamepad FX script turning on/off keyboard inputs into smooth, grip-aware pedal and steering inputs.
 -- Runs in the physics thread (script.update every physics step, dt ~ 0.003 s).
+-- Thin game wrapper: reads settings, keys and the joypad state through CSP and runs the pure Lua cores
+-- (core/throttle.lua, core/steering.lua; the simulator in sim/ runs the same files). The brake is still here (phase 9).
 -- Throttle: ramp, manual cap, corner cap, traction limiter. Brake: ramp, manual cap, trail-brake release, lock
 -- limiter on longitudinal slip. Steering: speed-dependent rate, grip window for the front tyres, countersteer.
 
 if car.isAIControlled then return end
 
-local ramp = require('src/ramp')
+local ramp = require('core/ramp')
+local curve = require('core/curve')
+local Throttle = require('core/throttle')
+local Steering = require('core/steering')
 local keys = require('src/keys')
 local shared = require('src/shared')
-local traction = require('src/traction')
 local brakeLimiter = require('src/brake')
-local steering = require('src/steering')
-local curve = require('src/curve')
 
 local function loadSettings()
   local defaults = {
@@ -77,10 +79,6 @@ local P = {
   countersteerAssist = math.clamp(S.COUNTERSTEER_ASSIST / 100, 0, 1),
 }
 
-local THROTTLE_ASSIST_FALL = 1.5 -- per second: fastest throttle reduction an assist may make
-local THROTTLE_ASSIST_FALL_SEVERE = 4 -- per second while the wheels really spin (slip over twice the target)
-local CORNER_G_FULL = 1.5    -- lateral g at which the corner cap reduction is complete
-local CORNER_TAU = 0.15      -- s, smoothing of the corner factor
 local TRAIL_TAU = 0.2        -- s, smoothing of the steering amount used for the trail-brake release
 
 local live = shared.connect()
@@ -89,73 +87,60 @@ live.recordLog = flag(S.RECORD_LOG)
 live.targetSlip = P.targetSlip
 live.brakeTargetSlip = P.brakeTargetSlip
 
-local gasRequest = 0  -- ramped key throttle (the "foot" before limits)
+local throttleCore = Throttle.new({
+  RISE = P.throttleRise, FALL = P.throttleFall, MAX = P.maxThrottle, TRACTION = P.traction,
+  TARGET_SLIP = P.targetSlip, RESPONSE = P.tractionResponse, CORNER_REDUCTION = P.cornerThrottleReduction,
+})
+local traction = throttleCore.traction
+local steerCore = Steering.new({
+  STYLE_AC = P.steerStyleAC, RATE = P.steerRate, SLOWDOWN = P.steerSlowdown, CURVE = P.steerCurve,
+  RETURN = P.steerReturn, BOTH_RETURN = P.steerBothReturn, LIMIT_STRENGTH = P.steerLimitStrength,
+  TARGET = P.steerTarget, COUNTERSTEER = P.countersteerAssist,
+})
+local steering = steerCore.assist
+local keyRates = {}
+
 local gas, brake, steer = 0, 0, 0
 local brakeRequest = 0 -- ramped key brake before limits
-local steerRequest = 0 -- ramped key steering before the grip window
-local corner = 0      -- smoothed 0..1 corner load factor
 local trail = 0       -- smoothed |steer| for the trail-brake release
 local lastWritten, leakTime = 0, 0
 local hz = 0
 
-local function publishBinds()
+local function applyKeys()
   live.bindGas, live.bindBrake, live.bindLeft, live.bindRight = keys.gas, keys.brake, keys.left, keys.right
   live.bindGearUp, live.bindGearDown = keys.gearUp, keys.gearDown
+  keyRates.KB_SPEED, keyRates.KB_OPPOSITE, keyRates.KB_RESET = keys.steerSpeed, keys.steerOppositeSpeed,
+    keys.steerResetSpeed
+  steerCore:setParams(keyRates)
 end
 
 keys.read()
-publishBinds()
-traction.configure(car)
+applyKeys()
+throttleCore:configure(car)
 brakeLimiter.configure(car)
-steering.configure(car, ac.getJoypadState())
+do
+  local okL, lock, ratio = pcall(function ()
+    local st = ac.getJoypadState()
+    return st.steerLock + 0, st.steerRatio + 0
+  end)
+  steerCore:configure(car, okL and lock or nil, okL and ratio or nil)
+end
 
 local function reset()
-  gasRequest, gas, brakeRequest, brake, steerRequest, steer, corner, trail = 0, 0, 0, 0, 0, 0, 0, 0
+  gas, brakeRequest, brake, steer, trail = 0, 0, 0, 0, 0
   lastWritten, leakTime = 0, 0
-  traction.configure(car)
+  throttleCore:reset(car)
   brakeLimiter.configure(car)
-  steering.reset()
+  steerCore:reset()
 end
 
 ac.onCarJumped(car.index, reset)
 ac.onControlSettingsChanged(function ()
   keys.read()
-  publishBinds()
+  applyKeys()
 end)
 
 pcall(ac.loadRenderThreadModule, 'module_render')
-
-local function throttle(dt, kGas, state)
-  -- Corner cap: lateral g or steering, whichever is larger.
-  local gx = state.gForces.x
-  live.gx = gx
-  local g = math.abs(gx) / CORNER_G_FULL
-  local st = math.abs(steer)
-  local c = g > st and g or st
-  if c > 1 then c = 1 end
-  corner = corner + (c - corner) * math.min(1, dt / CORNER_TAU)
-  local cap = P.maxThrottle * (1 - P.cornerThrottleReduction * corner)
-
-  gasRequest = ramp.step(gasRequest, kGas and cap or 0, P.throttleRise, P.throttleFall, dt)
-
-  -- Traction in every forward gear. Not by the direction of travel: in a spin the car moves sideways or backwards
-  -- relative to its nose, and switching traction off there sent full throttle into the spin (user log).
-  local forward = car.gear > 0
-  live.cap = cap
-  local out
-  if P.traction and forward then
-    out = traction.update(dt, car, gasRequest, P.targetSlip, P.tractionResponse)
-  else
-    traction.reset()
-    out = gasRequest
-  end
-  -- Smoothness: the sent throttle never jumps. It drops at the key fall rate only when the driver lifts,
-  -- otherwise (traction, corner cap) at most THROTTLE_ASSIST_FALL per second.
-  local fall = gasRequest < gas and P.throttleFall
-    or (traction.severe and (P.traction and forward)) and THROTTLE_ASSIST_FALL_SEVERE or THROTTLE_ASSIST_FALL
-  local rise = P.throttleRise * ((P.traction and forward) and traction.riseScale or 1)
-  return ramp.step(gas, out, rise, fall, dt)
-end
 
 local brakeState = 3
 
@@ -179,60 +164,10 @@ local function brakeInput(dt, kBrake)
   return out
 end
 
-local counterHold = 0
--- Outward steering speed factor of AC's keyboard filter against km/h (measured, see steerInput).
-local AC_SPEED_CURVE = curve.parse('0:0.74 55:0.60 95:0.50 105:0.366 125:0.302 145:0.236 165:0.184 185:0.142 ' ..
-  '205:0.108 215:0.10 400:0.10')
-local AC_STANDSTILL = curve.eval(AC_SPEED_CURVE, 0)
 -- STEER_STYLE 0: if AC itself computes the keyboard steering in gamepad mode (Combine with keyboard), it arrives in
 -- the joypad state before KeyDrive writes it. Votes decide: a steering key held while the incoming value points the
 -- same way (and differs from what KeyDrive wrote last step, so it is not our own value echoed back) means AC steers.
 local acSteerVotes, lastWrittenSteer, steerFromAC = 0, 0, false
-
-local function steerInput(dt, kLeft, kRight)
-  local target
-  if kLeft and kRight then
-    target = P.steerBothReturn and 0 or steerRequest -- both keys: hold the angle, or return smoothly
-  else
-    target = (kRight and 1 or 0) - (kLeft and 1 or 0)
-  end
-  local rate
-  if P.steerStyleAC then
-    -- AC's own keyboard steering, measured in the normal keyboard mode (ac-reference.csv, Supercars Gen3 Supra,
-    -- STEERING_SPEED 1.75, OPPOSITE 2.5, RESET 1.8): outwards it turns at STEERING_SPEED times a factor that falls
-    -- with the car's speed (AC_KEYBOARD_SPEED_CURVE), independent of the wheel position and lateral g; back to the
-    -- centre at STEER_RESET_SPEED * STEERING_SPEED (3.15 /s measured); towards the other side while the wheels still
-    -- point the other way at STEERING_OPPOSITE_DIRECTION_SPEED * STEERING_SPEED (4.4 /s measured).
-    local back
-    if target == 0 or (kLeft and kRight) then
-      back = keys.steerResetSpeed * keys.steerSpeed
-    else
-      back = keys.steerOppositeSpeed * keys.steerSpeed
-    end
-    -- STEER_RATE scales all three rates; STEER_SPEED_SLOWDOWN blends the speed factor between the standstill value
-    -- (0 %: same speed everywhere) and AC's measured curve (100 %: exact copy).
-    local f = curve.eval(AC_SPEED_CURVE, math.abs(car.speedKmh))
-    f = AC_STANDSTILL - P.steerSlowdown * (AC_STANDSTILL - f)
-    rate = keys.steerSpeed * f * P.steerRate
-    back = back * P.steerRate
-    steerRequest = ramp.stepSigned(steerRequest, target, rate, back, dt)
-    if back > rate then rate = back end
-  else
-    rate = curve.eval(P.steerCurve, math.abs(car.speedKmh)) / 100
-    steerRequest = ramp.stepSigned(steerRequest, target, rate, rate * P.steerReturn, dt)
-  end
-  if car.gear < 0 or car.localVelocity.z < 0 then
-    steering.reset()
-    return steerRequest -- reversing: plain keys
-  end
-  local wanted = steering.update(dt, car, steerRequest, steer, P.steerTarget, P.steerLimitStrength, P.countersteerAssist)
-  -- The assist may never move the wheels faster than the keys do (user report: it grabbed the steering).
-  -- A countersteer (opt-in) has to be quick, and so does taking it back, else the car swings the other way.
-  if steering.countering then counterHold = 0.6 elseif counterHold > 0 then counterHold = counterHold - dt end
-  if counterHold > 0 then return wanted end
-  local maxRate = rate * math.max(1, P.steerReturn)
-  return ramp.stepSigned(steer, wanted, maxRate, maxRate, dt)
-end
 
 function script.update(dt)
   if car.isAIControlled then return end
@@ -247,7 +182,9 @@ function script.update(dt)
 
   local kGas, kBrake, kLeft, kRight = keys.gasDown(), keys.brakeDown(), keys.leftDown(), keys.rightDown()
 
-  gas = throttle(dt, kGas, state)
+  live.gx = state.gForces.x
+  gas = throttleCore:update(dt, kGas, car, state.gForces.x, steer)
+  live.cap = throttleCore.cap
   brake = brakeInput(dt, kBrake)
 
   if P.steerStyle == 0 and (kLeft ~= kRight) and math.abs(car.speedKmh) > 5 then
@@ -261,9 +198,9 @@ function script.update(dt)
   steerFromAC = P.steerStyle == 0 and acSteerVotes > 100
   if steerFromAC then
     steer = inSteer          -- AC's own keyboard steering, untouched
-    steerRequest = inSteer   -- so a later switch to KeyDrive's steering does not jump
+    steerCore:follow(inSteer) -- so a later switch to KeyDrive's steering does not jump
   else
-    steer = steerInput(dt, kLeft, kRight)
+    steer = steerCore:update(dt, kLeft, kRight, car)
   end
 
   state.gas = gas
@@ -288,7 +225,7 @@ function script.update(dt)
   live.steerFromAC = steerFromAC
   live.acSteerVotes = acSteerVotes
   live.outGas, live.outBrake, live.outSteer = gas, brake, steer
-  live.gasRequest = gasRequest
+  live.gasRequest = throttleCore.request
   live.slip = traction.slip
   live.slipRatio = traction.ratio
   live.usesNdSlip = traction.usesNdSlip
@@ -301,7 +238,7 @@ function script.update(dt)
   live.brakeSlip = brakeLimiter.slip
   live.brakeMemory = brakeLimiter.memory
   live.brakeState = brakeState
-  live.steerRequest = steerRequest
+  live.steerRequest = steerCore.request
   live.steerLo, live.steerHi = steering.lo, steering.hi
   live.frontAlpha = steering.alpha
   live.alphaPeak = steering.alphaPeak

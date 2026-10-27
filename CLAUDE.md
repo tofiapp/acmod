@@ -105,13 +105,15 @@ Research and verified API: `docs/keydrive-research.md`.
 ```
 extension/lua/joypad-assist/KeyDrive/
   manifest.ini, settings.ini   Gamepad FX script (settings.ini = CM settings, section KEYDRIVE)
-  assist.lua                   physics thread: reads keys, writes ac.getJoypadState().gas/brake/steer
-  module_render.lua            render thread (ac.loadRenderThreadModule): diagnostic overlay via script.drawUI
-  src/ramp.lua                 rate limiters in units/s (dt based)
-  src/keys.lua                 AC keyboard binds and keyboard steering rates from cfg/controls.ini ([KEYBOARD] GAS/BRAKE/LEFT/RIGHT, [GEARUP]/[GEARDN]/
-                               [HANDBRAKE] KEY; CM writes hex "0x53"), ac.isKeyDown. In gamepad mode AC does not
-                               forward keyboard gear keys (user report), so assist.lua sets state.gearUp/gearDown/handbrake
-  src/traction.lua             throttle traction "remembering foot": load-weighted ndSlip of the driven wheels (1 = tyre
+  assist.lua                   physics thread, thin game wrapper: settings, keys, joypad state -> cores; brake still here
+  core/                        PURE Lua 5.1/LuaJIT (no CSP API, no CSP globals like math.clamp; test 27 runs them in a
+                               bare env). Instances with params tables (DEFAULTS) so sim/ and the optimizer can run many.
+  core/throttle.lua            Throttle.new(params, tractionParams):update(dt, keyGas, car, latG, steer) -> 0..1: corner
+                               cap (off) -> key ramp -> traction cap -> final slew (assists fall <= 1.5 /s, 4 /s in a spin)
+  core/steering.lua            Steering.new(params):update(dt, kLeft, kRight, car) -> -1..1: AC keyboard copy (KB_* rates
+                               from controls.ini, RATE, SLOWDOWN) or CURVE style, then the optional assist; :follow(v)
+  core/ramp.lua, curve.lua     rate limiters (units/s), "x:y x:y" curves (STEER_SPEED_CURVE; spaces, not commas)
+  core/traction.lua            throttle traction "remembering foot": load-weighted ndSlip of the driven wheels (1 = tyre
                                peak; fallback wheel speed ratio), filtered 30 ms; absolute cap A; memory per gear AND
                                500 rpm band (lazy recovery 0.015/s); limit = lower of the current and next band, cap
                                eases down K_PRE 1.2/s before the revs get there. Crossing (throttle > 30 %): 95 % of
@@ -119,17 +121,19 @@ extension/lua/joypad-assist/KeyDrive/
                                the memory (0.3 floor after 0.4 s), hold between 80-100 % of the target, quick return
                                to 92 %, memory creeps 0.08/s with spare grip. Target must stay <= 1. Memory survives
                                teleports (reset only on script reload).
+  core/steer_assist.lua        grip window in road wheel degrees: delta from wheels[0..1].look, betaF / betaR from
+                               wheels[i].velocity (car.look/side, sign of side voted against the output); window
+                               betaF +- alphaPeak * target only reduces the request; countersteer = wheels along betaF
+                               when |betaR| > alphaPeak and betaF, betaR share the sign. Learns degPerUnit and
+                               alphaPeak (|slipAngle| / ndSlip at slipRatio ~ 0). Off below 20 km/h, fades in to 40.
+  src/keys.lua                 AC keyboard binds and keyboard steering rates from cfg/controls.ini ([KEYBOARD] GAS/BRAKE/LEFT/RIGHT, [GEARUP]/[GEARDN]/
+                               [HANDBRAKE] KEY; CM writes hex "0x53"), ac.isKeyDown. In gamepad mode AC does not
+                               forward keyboard gear keys (user report), so assist.lua sets state.gearUp/gearDown/handbrake
   src/brake.lua                brake lock limiter on LONGITUDINAL slip only: max -slipRatio / peakRatio over grounded wheels
                                (peakRatio learned from straight-running wheels: |slipRatio| / ndSlip, default 0.13),
                                predicted 0.04 s; multiplier k on the ramped brake (K_UP 4, K_DOWN 15, floor 0.15);
                                remembers the level where the lock value crossed the target; off below 10 km/h; car ABS
                                on -> left to it. (v0.4 used combined ndSlip: steering into a corner took the brake away.)
-  src/steering.lua             grip window in road wheel degrees: delta from wheels[0..1].look, betaF / betaR from
-                               wheels[i].velocity (car.look/side, sign of side voted against the output); window
-                               betaF +- alphaPeak * target only reduces the request; countersteer = wheels along betaF
-                               when |betaR| > alphaPeak and betaF, betaR share the sign. Learns degPerUnit and
-                               alphaPeak (|slipAngle| / ndSlip at slipRatio ~ 0). Off below 20 km/h, fades in to 40.
-  src/curve.lua                "x:y x:y" piecewise linear curve (STEER_SPEED_CURVE; spaces, not commas: CSP INI lists)
   src/recorder.lua             render thread: 60 s ring buffer at 40 Hz (keys, outputs, car, 4 wheels, body slip,
                                collisions, event flags) -> keydrive-log.csv every 10 s, keydrive-incident-N.csv 3 s
                                after SPIN/CRASH/OFF, in Documents/Assetto Corsa/logs/keydrive (fallback: script folder;
@@ -213,4 +217,6 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
   bridge (C:\AC-Claude, writes only into C:\AC-Claude\logs), subagents in .claude/agents/. README: README-KeyDrive.md.
 - Input method research (docs/keydrive-research.md, last section): user chose B (Gamepad FX) as the base plus a test of A.
   v0.9.2: STEER_RATE (% of AC's keyboard rates) and STEER_SPEED_SLOWDOWN (% of AC's slowdown with speed) for the AC copy;
-  KeyDriveKeyboardTest app. Next: user runs the keyboard test + v0.9.1/0.9.2 throttle; then phase 2 (core modules).
+  KeyDriveKeyboardTest app. Next: user runs the keyboard test + v0.9.1/0.9.2 throttle.
+- Phase 2 (v0.9.3): pure cores in core/ (see layout). Refactor verified bit-exact against v0.9.2 with a differential
+  test (6 settings x 12 random traces x 20000 steps, max diff 0). Next: phase 3 simulator in sim/.
