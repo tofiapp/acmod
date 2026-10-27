@@ -105,3 +105,25 @@ Pedals in keyboard mode (for later):
 - Throttle rises ~4.5 /s (0 -> 0.9 in 0.22 s); with rear ndSlip around 1 it dips quickly (0.90 -> 0.71 in 0.07 s) and
   returns, never below ~0.35-0.45 while the key is held, and still lets the rear reach ndSlip ~2 at full throttle.
 - Brake never goes to 1: it settles at 0.55-0.70 with small modulation, fronts at ndSlip ~0.65-0.75, no locking.
+
+## Input method decision (phase 1 of the new plan, October 2026)
+
+Three ways to get KeyDrive's values into AC were researched (sources: acc-lua-sdk, app-csp-defaults, acc-lua-internal,
+actools/Content Manager, AssettoServer + docs, vJoy, ViGEmBus; each claim checked by a second agent):
+
+| | A: Input method = Keyboard + `ac.overrideCarControls` | B: Gamepad FX (current) | C: vJoy virtual wheel |
+| --- | --- | --- | --- |
+| AC processing after our values | unknown, needs the in-game test (KeyDriveKeyboardTest) | none (user logs: car.steer = 270 x output at 0-250 km/h, no deadzone, no lag at 40 Hz; car.gas = written gas) | Wheel-mode gamma/filter/speed sensitivity/LOCK must be set neutral |
+| Update rate | render frames (60-165 Hz), apps only | every physics step (333 Hz) | external loop + DirectInput read, extra delay |
+| Other keys | native | gear/handbrake forwarded by KeyDrive (work, logs show shifts); others expected via Combine with keyboard, unverified | native (CM keyboard binding per wheel button) |
+| Online | likely (Unbound does not block it), server sees Keyboard | yes (AGA), server sees Gamepad; entry_list "Block Joystick" may refuse | yes, server sees Wheel |
+| Car data | full car state in the app | full car state | shared memory has no ndSlip |
+
+Facts behind A: `ac.overrideCarControls(carIndex)` is loaded only for apps, tools and new modes (common/ac_game.lua,
+`carcontrolsoverride`): `combineAxis = false` (0.3.0-preview125+) replaces pedals and handbrake instead of max-combining;
+`steer = math.huge` leaves AC's steering; `kers` default 0 would be Flag.Disable, so set Flag.Skip; `:active()` = read by
+physics within 2 frames. `physics.*` input functions need track permission (`[_SCRIPTING_PHYSICS] ALLOW_APPS`) and
+`forceUser*` invalidate laps: not usable. Gamepad FX most likely does not run in keyboard mode (per gamepad index).
+Decision (user): keep B as the base, test A with apps/lua/KeyDriveKeyboardTest; switch only if the test shows AC
+leaves the override untouched (gas while spinning, brake above 0.75, steering above 100 km/h).
+C rejected: fragile driver install, extra delay, no ndSlip.

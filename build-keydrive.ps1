@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-$parts = @('extension/lua/joypad-assist/KeyDrive', 'apps/lua/KeyDriveConfig')
+$parts = @('extension/lua/joypad-assist/KeyDrive', 'apps/lua/KeyDriveConfig', 'apps/lua/KeyDriveKeyboardTest')
 $core = Join-Path $PSScriptRoot 'extension\lua\joypad-assist\KeyDrive'
 $versionLine = Get-Content (Join-Path $core 'manifest.ini') | Where-Object { $_ -match '^VERSION\s*=' } | Select-Object -First 1
 $version = ($versionLine -replace '^VERSION\s*=\s*', '').Trim()

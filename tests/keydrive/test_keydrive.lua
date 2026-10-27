@@ -1,5 +1,5 @@
 -- KeyDrive tests: run through tests/keydrive/run_tests.py.
-local selfPath, CORE, APP = ...
+local selfPath, CORE, APP, KBTEST = ...
 local here = selfPath:match('^(.*)[/\\]')
 package.path = here .. '/?.lua;' .. package.path
 local mock = require('mock_csp')
@@ -749,6 +749,128 @@ do
   run(s, 1.5, 0.003)
   check('reverse gear: plain throttle', mock.joypad.gas > 0.95, mock.joypad.gas)
   mock.keys[VK_UP] = nil
+end
+
+-- 25. STEER_RATE scales AC's keyboard steering rates; STEER_SPEED_SLOWDOWN 0 keeps the standstill rate at any speed.
+do
+  local s = fresh({ STEER_RATE = 200 })
+  mock.car.speedKmh, mock.car.localVelocity.z = 145, 40
+  mock.keys[VK_RIGHT] = true
+  run(s, 0.2, 0.003)
+  check('STEER_RATE 200: twice AC outward rate', near(mock.joypad.steer, 0.2 * 1.75 * 0.236 * 2, 0.005), mock.joypad.steer)
+  mock.keys[VK_RIGHT] = nil
+  local before = mock.joypad.steer
+  run(s, 0.012, 0.003)
+  check('STEER_RATE 200: twice AC reset rate', near(mock.joypad.steer, before - 0.012 * 1.8 * 1.75 * 2, 0.004), mock.joypad.steer)
+  s = fresh({ STEER_SPEED_SLOWDOWN = 0 })
+  mock.car.speedKmh, mock.car.localVelocity.z = 145, 40
+  mock.keys[VK_RIGHT] = true
+  run(s, 0.2, 0.003)
+  check('SLOWDOWN 0: standstill rate at 145 km/h', near(mock.joypad.steer, 0.2 * 1.75 * 0.74, 0.005), mock.joypad.steer)
+  s = fresh({ STEER_SPEED_SLOWDOWN = 50 })
+  mock.car.speedKmh, mock.car.localVelocity.z = 145, 40
+  mock.keys[VK_RIGHT] = true
+  run(s, 0.2, 0.003)
+  check('SLOWDOWN 50: half of AC slowdown', near(mock.joypad.steer, 0.2 * 1.75 * (0.74 - 0.5 * (0.74 - 0.236)), 0.005),
+    mock.joypad.steer)
+  mock.keys[VK_RIGHT] = nil
+end
+
+-- 26. KeyDrive Keyboard Test app (input method variant A): drives through ac.overrideCarControls only in keyboard
+-- mode, replaces pedals (combineAxis = false), measures the car against what it wrote, and hands everything back.
+do
+  local function window(app)
+    mock.texts = {}
+    app.windowMain(1 / 60)
+    return table.concat(mock.texts, '\n')
+  end
+  local function frames(app, n, echo)
+    for _ = 1, n do
+      app.update(1 / 60)
+      local o = mock.override
+      if o and echo then
+        local f = o.fields
+        mock.car.gas = echo(f.gas)
+        mock.car.brake = f.brake
+        if f.steer ~= math.huge then mock.car.steer = f.steer * mock.car.steerLock end
+      end
+    end
+  end
+
+  -- Gamepad mode: refuses, never touches the controls.
+  mock.reset()
+  mock.controls.HEADER = { INPUT_METHOD = 'X360' }
+  local app = mock.load(KBTEST, 'KeyDriveKeyboardTest.lua')
+  mock.click['Zapnout test'] = true
+  local t = window(app)
+  frames(app, 30)
+  check('kb test: refused outside keyboard mode', mock.overrideCalls == 0 and t:find('není Keyboard', 1, true) ~= nil, t)
+
+  -- Keyboard mode: drives, pedals replaced, AC copy steering.
+  mock.reset()
+  mock.controls.HEADER = { INPUT_METHOD = 'KEYBOARD' }
+  app = mock.load(KBTEST, 'KeyDriveKeyboardTest.lua')
+  local c = mock.car
+  c.speedKmh, c.localVelocity.z = 145, 40
+  frames(app, 5)
+  check('kb test: no override before switching on', mock.overrideCalls == 0)
+  mock.click['Zapnout test'] = true
+  window(app)
+  check('kb test: override taken on switch-on', mock.overrideCalls == 1 and mock.override ~= nil)
+  mock.keys[VK_UP] = true
+  mock.keys[VK_RIGHT] = true
+  local same = function (g) return g end
+  frames(app, 30, same) -- 0.5 s
+  local f = mock.override.fields
+  check('kb test: combineAxis off while driving', f.combineAxis == false)
+  check('kb test: gas ramps 1.5 /s', near(f.gas, 0.75, 0.03), f.gas)
+  check('kb test: steering = AC copy at 145 km/h', near(f.steer, 0.5 * 1.75 * 0.236, 0.01), f.steer)
+  check('kb test: KERS left alone', f.kers == -1 and f.mguhMode == -1)
+  frames(app, 120, same)
+  t = window(app)
+  check('kb test: equal values reported as matching', t:find('Plyn: SEDÍ', 1, true) ~= nil and
+    t:find('Řízení: SEDÍ', 1, true) ~= nil, t)
+
+  -- AC changes the throttle after the override: reported.
+  mock.click['Vynulovat měření'] = true
+  window(app)
+  frames(app, 120, function (g) return g * 0.5 end)
+  t = window(app)
+  check('kb test: different throttle reported', t:find('Plyn: NESEDÍ', 1, true) ~= nil, t)
+
+  -- Input method changed to gamepad mid-test: hands the car back.
+  mock.controls.HEADER.INPUT_METHOD = 'X360'
+  for _, cb in ipairs(mock.callbacks.controls) do cb() end
+  frames(app, 2)
+  check('kb test: gamepad mode switches the test off', f.steer == math.huge and f.combineAxis == true and f.gas == 0
+    and f.clutch == 1, tostring(f.steer) .. ' ' .. tostring(f.combineAxis))
+
+  -- Switch off by the button, release on unload, CSV saved.
+  mock.controls.HEADER.INPUT_METHOD = 'KEYBOARD'
+  for _, cb in ipairs(mock.callbacks.controls) do cb() end
+  mock.click['Zapnout test'] = true
+  window(app)
+  frames(app, 30, same)
+  check('kb test: back on', f.combineAxis == false and f.gas > 0.3, f.gas)
+  mock.release()
+  check('kb test: release hands everything back', f.steer == math.huge and f.combineAxis == true and f.gas == 0
+    and f.brake == 0 and f.handbrake == 0 and f.clutch == 1)
+  local csv = mock.saved['cfg/keydrive/kb-test.csv']
+  check('kb test: CSV saved with meta line', csv ~= nil and csv:find('# input=KEYBOARD', 1, true) ~= nil)
+  check('kb test: CSV has rows', csv and select(2, csv:gsub('\n', '')) > 30, csv and select(2, csv:gsub('\n', '')))
+  mock.keys[VK_UP], mock.keys[VK_RIGHT] = nil, nil
+
+  -- Old CSP without combineAxis: refuses instead of mixing AC's keyboard pedals in.
+  mock.reset()
+  mock.controls.HEADER = { INPUT_METHOD = 'KEYBOARD' }
+  mock.noCombineAxis = true
+  app = mock.load(KBTEST, 'KeyDriveKeyboardTest.lua')
+  mock.click['Zapnout test'] = true
+  window(app)
+  frames(app, 5)
+  t = window(app)
+  check('kb test: no combineAxis -> test off with a message', t:find('combineAxis', 1, true) ~= nil and
+    mock.override.fields.steer == math.huge and mock.override.fields.gas == 0, t)
 end
 
 print(string.format('KeyDrive: %d passed, %d failed', passed, failed))

@@ -32,7 +32,13 @@ function M.reset()
   M.controls = { KEYBOARD = { GAS = 38, BRAKE = 40, LEFT = 37, RIGHT = 39 } }
   M.settings = {}
   M.connected = {}
-  M.callbacks = { jumped = {}, controls = {} }
+  M.callbacks = { jumped = {}, controls = {}, release = {} }
+  M.storage = {}
+  M.override = nil          -- table returned by ac.overrideCarControls (created on the first call)
+  M.overrideCalls = 0
+  M.noCombineAxis = false   -- true: the override struct has no combineAxis field (CSP older than preview125)
+  M.click = {}              -- button label -> true: ui.button returns true once
+  M.texts = {}              -- texts drawn by the last window call
   M.joypad = { gas = 0, brake = 0, steer = 0, clutch = 1, handbrake = 0, steerStickX = 0, gForces = vec(),
     steerLock = 270, steerRatio = 18 }
   local wheels = {}
@@ -47,6 +53,7 @@ function M.reset()
     index = 0, isAIControlled = false, physicsAvailable = true, speedKmh = 0, gas = 0, brake = 0,
     localVelocity = vec(), localAngularVelocity = vec(), gear = 1, rpm = 900, tractionType = 0, wheels = wheels,
     acceleration = vec(), collisionDepth = 0, wheelsOutside = 0, steer = 0, absMode = 0,
+    isUserControlled = true, steerLock = 270,
     look = vec(0, 0, 1), side = vec(1, 0, 0),
   }
   M.saved = {}
@@ -68,14 +75,45 @@ function M.install(core)
   rgbm = function (r, g, b, m) return { r = r, g = g, b = b, mult = m } end
 
   car = M.car
-  sim = { isPaused = false }
+  sim = { isPaused = false, isReplayActive = false, frame = 0 }
   __carIndex = 0
   __dirname = 'KD'
   io.save = function (path, data) M.saved[path] = data; return true end
+  io.createDir = function () return true end
   script = {}
 
   ac = {
-    FolderID = { Cfg = 'cfg' },
+    FolderID = { Cfg = 'cfg', Logs = 'logs' },
+    getSim = function () return sim end,
+    storage = function (defaults, prefix)
+      local t = {}
+      for k, v in pairs(defaults) do
+        local saved = M.storage[(prefix or '') .. k]
+        if saved == nil then t[k] = v else t[k] = saved end
+      end
+      return setmetatable({}, {
+        __index = t,
+        __newindex = function (_, k, v) t[k] = v; M.storage[(prefix or '') .. k] = v end,
+      })
+    end,
+    overrideCarControls = function ()
+      M.overrideCalls = M.overrideCalls + 1
+      if not M.override then
+        local fields = { gas = 0, brake = 0, steer = 0, clutch = 0, handbrake = 0, kers = 0, mguhMode = 0,
+          requestedGearIndex = 0, combineAxis = true }
+        local o = { fields = fields }
+        function o.active() return true end
+        M.override = setmetatable(o, {
+          __index = fields,
+          __newindex = function (_, k, v)
+            if fields[k] == nil or (k == 'combineAxis' and M.noCombineAxis) then error('no member ' .. k) end
+            fields[k] = v
+          end,
+        })
+      end
+      return M.override
+    end,
+    CarControlsInput = { Flag = { Skip = -1, Disable = 0, Enable = 1 } },
     getFolder = function () return 'cfg' end,
     INIConfig = {
       load = function (path)
@@ -92,7 +130,7 @@ function M.install(core)
     getCar = function () return M.car end,
     getCarID = function () return 'test_car' end,
     setDrawUIActive = function (v) M.drawUIActive = v end,
-    onRelease = function (cb) M.callbacks.release = cb end,
+    onRelease = function (cb) table.insert(M.callbacks.release, cb) end,
     StructItem = {
       key = function (k) return { __key = k } end,
       int32 = function () return 0 end,
@@ -116,8 +154,12 @@ function M.install(core)
     windowHeight = function () return 1080 end,
     drawRectFilled = function () count('drawRectFilled') end,
     setCursor = function () end,
-    text = function () count('text') end,
-    textColored = function () count('text') end,
+    text = function (t) count('text'); M.texts[#M.texts + 1] = t end,
+    textColored = function (t) count('text'); M.texts[#M.texts + 1] = t end,
+    button = function (label) local c = M.click[label]; M.click[label] = nil; return c == true end,
+    sameLine = function () end,
+    separator = function () end,
+    slider = function (_, value) return value end,
     pushFont = function () end,
     popFont = function () end,
   }
@@ -129,6 +171,10 @@ function M.load(core, file)
   local chunk = assert(loadfile(core .. '/' .. file))
   chunk()
   return script
+end
+
+function M.release()
+  for _, cb in ipairs(M.callbacks.release) do cb() end
 end
 
 function M.jump()

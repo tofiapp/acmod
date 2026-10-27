@@ -136,6 +136,10 @@ extension/lua/joypad-assist/KeyDrive/
                                v0.6 and older wrote into the script folder, which a reinstall wipes). Ask the user for
                                these files instead of guessing.
   src/shared.lua               ac.connect layout 'KeyDrive.Live.v8' (same layout on every side)
+apps/lua/KeyDriveKeyboardTest/ input method test, variant A (LAZY = FULL): with Input method = Keyboard drives gas/brake/
+                               steer via ac.overrideCarControls (combineAxis = false), compares car.gas/brake/steer with
+                               what it wrote (SEDÍ/NESEDÍ per channel), logs/keydrive/kb-test.csv; writeSafe() hands the car
+                               back (steer math.huge, combineAxis true, kers Skip) on off, input change and onRelease
 apps/lua/KeyDriveConfig/       companion app (phase 8 later). Now: window "KeyDrive Reference" + src/reference.lua, records
                                in NORMAL keyboard mode (KeyDrive inactive) keys, car.steer, front wheel angle, pedals,
                                speed, slip -> Documents/Assetto Corsa/logs/keydrive/ac-reference.csv (first line '#' meta:
@@ -204,4 +208,9 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
   5-12 km/h, AC's ndSlip consistent with the ratio even at low speed) took 0.6 s to catch at 1.5 /s.
   v0.9.1: traction only off in reverse/neutral GEAR; A never below FLOOR; slip > 2x target -> K_DOWN_SEVERE 5 and the
   sent throttle may fall 4 /s. A low-speed slip measure was tried and dropped (model launch worse, AC data consistent).
-Next: user test of v0.9.1 throttle, then phase 6.
+- New plan (user, ultracode): input method decision first, then pure Lua core modules, a simulator in sim/ with
+  scenarios + oracle, metrics with pass thresholds, an optimizer, calibration from real driving through the user's MCP
+  bridge (C:\AC-Claude, writes only into C:\AC-Claude\logs), subagents in .claude/agents/. README: README-KeyDrive.md.
+- Input method research (docs/keydrive-research.md, last section): user chose B (Gamepad FX) as the base plus a test of A.
+  v0.9.2: STEER_RATE (% of AC's keyboard rates) and STEER_SPEED_SLOWDOWN (% of AC's slowdown with speed) for the AC copy;
+  KeyDriveKeyboardTest app. Next: user runs the keyboard test + v0.9.1/0.9.2 throttle; then phase 2 (core modules).

@@ -30,6 +30,8 @@ local function loadSettings()
     BRAKE_USE_GAME_ABS = true,
     TRAIL_BRAKE_RELEASE = 40,
     STEER_STYLE = 0,
+    STEER_RATE = 100,
+    STEER_SPEED_SLOWDOWN = 100,
     STEER_SPEED_CURVE = '0:250 60:160 120:100 200:70',
     STEER_RETURN_SPEED = 150,
     STEER_BOTH_KEYS = 0,
@@ -65,6 +67,8 @@ local P = {
   trailBrakeRelease = math.clamp(S.TRAIL_BRAKE_RELEASE / 100, 0, 1),
   steerStyle = tonumber(S.STEER_STYLE) or 0, -- 0 auto: AC's own steering if AC sends it, 2 emulation of AC rates
   steerStyleAC = S.STEER_STYLE ~= 1,         -- emulation uses AC's keyboard rates (0 and 2), 1: KeyDrive's curve
+  steerRate = math.clamp(S.STEER_RATE / 100, 0.3, 3),                  -- scales AC's three keyboard rates
+  steerSlowdown = math.clamp(S.STEER_SPEED_SLOWDOWN / 100, 0, 1),     -- share of AC's slowdown with speed
   steerCurve = curve.parse(S.STEER_SPEED_CURVE, '0:250 60:160 120:100 200:70'), -- km/h -> % of full lock per s
   steerReturn = math.clamp(S.STEER_RETURN_SPEED / 100, 0.2, 5),
   steerBothReturn = S.STEER_BOTH_KEYS == 1 or S.STEER_BOTH_KEYS == true, -- false: hold the angle
@@ -179,6 +183,7 @@ local counterHold = 0
 -- Outward steering speed factor of AC's keyboard filter against km/h (measured, see steerInput).
 local AC_SPEED_CURVE = curve.parse('0:0.74 55:0.60 95:0.50 105:0.366 125:0.302 145:0.236 165:0.184 185:0.142 ' ..
   '205:0.108 215:0.10 400:0.10')
+local AC_STANDSTILL = curve.eval(AC_SPEED_CURVE, 0)
 -- STEER_STYLE 0: if AC itself computes the keyboard steering in gamepad mode (Combine with keyboard), it arrives in
 -- the joypad state before KeyDrive writes it. Votes decide: a steering key held while the incoming value points the
 -- same way (and differs from what KeyDrive wrote last step, so it is not our own value echoed back) means AC steers.
@@ -204,7 +209,12 @@ local function steerInput(dt, kLeft, kRight)
     else
       back = keys.steerOppositeSpeed * keys.steerSpeed
     end
-    rate = keys.steerSpeed * curve.eval(AC_SPEED_CURVE, math.abs(car.speedKmh))
+    -- STEER_RATE scales all three rates; STEER_SPEED_SLOWDOWN blends the speed factor between the standstill value
+    -- (0 %: same speed everywhere) and AC's measured curve (100 %: exact copy).
+    local f = curve.eval(AC_SPEED_CURVE, math.abs(car.speedKmh))
+    f = AC_STANDSTILL - P.steerSlowdown * (AC_STANDSTILL - f)
+    rate = keys.steerSpeed * f * P.steerRate
+    back = back * P.steerRate
     steerRequest = ramp.stepSigned(steerRequest, target, rate, back, dt)
     if back > rate then rate = back end
   else

@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
-# Builds dist/KeyDrive-<version>.zip with extension/lua/joypad-assist/KeyDrive (and apps/lua/KeyDriveConfig
-# once it exists), ready to drag into Content Manager. MirrorDelta keeps its own build.sh.
+# Builds dist/KeyDrive-<version>.zip with extension/lua/joypad-assist/KeyDrive (and apps/lua/KeyDriveConfig,
+# apps/lua/KeyDriveKeyboardTest), ready to drag into Content Manager. MirrorDelta keeps its own build.sh.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 CORE=extension/lua/joypad-assist/KeyDrive
 APP=apps/lua/KeyDriveConfig
+KBTEST=apps/lua/KeyDriveKeyboardTest
 VERSION=$(sed -n 's/^VERSION *= *//p' "$CORE/manifest.ini" | tr -d '\r')
 ZIP="dist/KeyDrive-$VERSION.zip"
 
 PARTS=("$CORE")
 [ -d "$APP" ] && PARTS+=("$APP")
+[ -d "$KBTEST" ] && PARTS+=("$KBTEST")
 
 mkdir -p dist
 rm -f "$ZIP"
