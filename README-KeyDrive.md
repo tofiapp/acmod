@@ -66,6 +66,22 @@ tlačítkem „Vypnout test“ se řízení vrátí AC.
 Pozor: zpomalení řízení s rychlostí je v testu schválně 0 % – ve vysoké rychlosti zatáčí rychleji než AC. Jinak by
 nešlo poznat, jestli AC svůj klávesnicový filtr na řízení ještě používá.
 
+## Export telemetrie z MCP mostu (C:\AC-Claude)
+
+`tools/ac-bridge/ac_export.py` přidá do tvého mostu export CSV. Sdílenou paměť AC jen čte a zapisuje výhradně do
+`C:\AC-Claude\logs`; cesty i názvy souborů si určuje sám a nic jiného nezapíše.
+
+1. Zkopíruj `ac_export.py` do `C:\AC-Claude\`.
+2. V `ac_telemetry_mcp.py` za vytvoření serveru (`mcp = FastMCP(...)`) přidej:
+   ```python
+   import ac_export
+   ac_export.register(mcp)
+   ```
+3. Claude pak umí zavolat `export_last_seconds(60)` (posledních N sekund, max. 600) nebo `export_last_lap()`
+   (poslední dokončené kolo).
+
+Samostatný test bez Clauda (AC musí běžet): `py C:\AC-Claude\ac_export.py --seconds 30`.
+
 ## Vývoj
 
 Logika plynu a řízení je v čistých Lua modulech `extension/lua/joypad-assist/KeyDrive/core/` (bez CSP). Hra je spouští
@@ -83,4 +99,19 @@ Na Linuxu/macOS:
 ```bash
 pip install lupa && python tests/keydrive/run_tests.py   # testy KeyDrive
 ./build-keydrive.sh                                       # nebo build-keydrive.ps1 → dist/KeyDrive-<verze>.zip
+python sim/run.py                                         # simulátor: sim/out/report.json + summary.txt
+python sim/optimize.py --mode 2 --procs 4                 # optimalizace na ladicích scénářích
 ```
+
+### Simulátor (sim/)
+
+Spouští stejné jádro plynu jako hra na modelu auta (přenos zatížení, křivka momentu, automatická spojka, řazení
+s výpadkem tahu, setrvačnost kol a motoru, Pacejka s kombinovaným prokluzem, boční zatížení ze scénáře, RWD/FWD/AWD,
+333 Hz fyzika, ovladač na 333 Hz i na 50–165 fps s trhanými snímky, šum a zpoždění senzoru). Supra je nakalibrovaná
+na tvoje logy. Ideální noha (orákulum) slouží jen ke srovnání. Skrytá sada `sim/scenarios/hidden/` se nikdy nepoužívá
+k ladění.
+
+Prahy (tvoje): prokluz ≤ 1,5× vrchol pneumatiky, nad 1,3× nejvýš 0,1 s, v ustáleném stavu ≤ 1 změna směru plynu za
+sekundu a rozptyl < 2 %, ztráta proti ideální noze ≤ 5 % na suchu. Navržené (moje, dokud je nepotvrdíš): ztráta
+≤ 15 % na mokru/studených/změně gripu/ťukání, smyk nápravy ≤ 0,1 s u všech pohonů, změny plynu od asistence
+≤ 5 /s, při couvání čistá rampa.

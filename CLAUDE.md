@@ -148,6 +148,13 @@ apps/lua/KeyDriveConfig/       companion app (phase 8 later). Now: window "KeyDr
                                in NORMAL keyboard mode (KeyDrive inactive) keys, car.steer, front wheel angle, pedals,
                                speed, slip -> Documents/Assetto Corsa/logs/keydrive/ac-reference.csv (first line '#' meta:
                                input method, AC keyboard rates, car). Use it to copy AC's own keyboard filter.
+sim/                           simulator (phase 3-5): model.lua (car), tyre.lua, runner.lua (333 Hz physics, controller at
+                               physics rate or 50-165 fps, sensor noise/delay, oracle), metrics.lua (THRESHOLDS: USER vs
+                               PROPOSAL), scenarios/ (tuning) + scenarios/hidden/ (NEVER tune on it), cars/ (rwd_supra
+                               calibrated to the user's logs), evaluate.lua + optimize.lua/.py, run.py -> sim/out/
+.claude/agents/                sim-engineer, throttle-tuner, telemetry-analyst, reviewer (short summaries)
+tools/ac-bridge/ac_export.py   CSV export for the user's MCP bridge: reads AC shared memory read-only, writes ONLY into
+                               C:\AC-Claude\logs (generated names, path guard); register(mcp) adds two tools
 tests/keydrive/                own mock + tests: python tests/keydrive/run_tests.py
 build-keydrive.sh / .ps1       dist/KeyDrive-<version>.zip (extension/... + apps/lua/KeyDriveConfig/...)
 ```

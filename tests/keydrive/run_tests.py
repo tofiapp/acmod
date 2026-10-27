@@ -33,7 +33,10 @@ def main():
     bad = syntax_check(lua)
     run = lua.eval("function(path, core, app, kbtest) return assert(loadfile(path))(path, core, app, kbtest) end")
     failed = run(str(HERE / "test_keydrive.lua"), str(CORE), str(APP), str(KBTEST))
-    sys.exit(1 if (bad or failed) else 0)
+    sys.path.insert(0, str(HERE))
+    import test_bridge
+    bridge_failed = test_bridge.run()
+    sys.exit(1 if (bad or failed or bridge_failed) else 0)
 
 
 if __name__ == "__main__":
