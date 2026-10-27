@@ -10,10 +10,12 @@
 --   - drivetrain: engine torque curve x throttle (engine braking when off), rev limiter, gear ratios, auto-clutch at
 --     launch (engine held at the launch rpm while the clutch slips), sequential upshift with an ignition cut and the
 --     engine's speed mismatch released into the wheels after the shift (the slip spike seen in real logs);
---     driven axles have their own speed (locked axle; AWD = open centre with a fixed torque split);
+--     every wheel has its own speed; per axle a locked differential (both wheels at one speed, the inside wheel
+--     spins first in corners: the user's Supra logs) or an open one (equal torque, each wheel free); AWD = open
+--     centre with a fixed torque split;
 --   - wheel and engine inertia (engine inertia reflected through the gear ratio once the clutch is locked).
 -- Integration: fixed physics step (333 Hz like AC) split into substeps (the wheel slip equation is stiff at low speed).
--- Not modelled yet (extensible): yaw/steering dynamics, brakes, differential locking, tyre temperature.
+-- Not modelled yet (extensible): yaw/steering dynamics, brakes, limited-slip differentials, tyre temperature.
 
 local tyre = require('tyre')
 
@@ -51,6 +53,8 @@ function M.prepare(profile, scale)
   c.mu = profile.mu * (scale.grip or 1)                         -- longitudinal peak friction
   c.muLat = (profile.muLat or profile.mu) * (scale.grip or 1)   -- lateral peak friction
   c.torqueCurve = parseCurve(profile.torque)
+  c.clutchCurve = profile.clutchSlipRpm and parseCurve(profile.clutchSlipRpm) or nil
+  tyre.setTail(profile.tyreTail or 1)
   c.torqueScale = scale.power or 1
   -- overall ratio (engine rad/s per wheel rad/s) from rpm per km/h: omega_e / omega_w = rpmPerKmh * 0.377 * r
   c.ratios = {}
@@ -59,6 +63,8 @@ function M.prepare(profile, scale)
   c.driveFront = profile.drive == 'FWD' and 1 or profile.drive == 'AWD' and (profile.frontShare or 0.4) or 0
   c.driveRear = 1 - c.driveFront
   c.tractionType = profile.drive == 'RWD' and 0 or profile.drive == 'FWD' and 1 or 2
+  c.lockedF = profile.diffFront == 'locked'
+  c.lockedR = (profile.diffRear or 'locked') == 'locked'
   return c
 end
 
@@ -77,7 +83,8 @@ function M.newState(car, v, gear)
   local r = car.tyreRadius
   local s = {
     t = 0, x = 0, v = v, ax = 0,
-    wf = v / r, wr = v / r,       -- axle angular speeds
+    w = { [0] = v / r, v / r, v / r, v / r }, -- wheel angular speeds
+    wf = v / r, wr = v / r,       -- axle mean angular speeds
     we = 0,                       -- engine angular speed
     gear = gear or 1,
     cut = 0,                      -- remaining ignition cut of a shift, s
@@ -85,7 +92,7 @@ function M.newState(car, v, gear)
     locked = true,                -- clutch locked
     -- outputs of the last step (per wheel 0 FL, 1 FR, 2 RL, 3 RR)
     fz = { [0] = 0, 0, 0, 0 }, kappa = { [0] = 0, 0, 0, 0 }, nd = { [0] = 0, 0, 0, 0 },
-    sy = { [0] = 0, 0, 0, 0 }, slideF = false, slideR = false, uF = 0, uR = 0,
+    sy = { [0] = 0, 0, 0, 0 }, fx = { [0] = 0, 0, 0, 0 }, slideF = false, slideR = false, uF = 0, uR = 0, fxTotal = 0,
     rpm = 0, driveTorque = 0, limiter = false,
   }
   local ratio = ratioOf(car, s.gear)
@@ -97,12 +104,13 @@ function M.newState(car, v, gear)
 end
 
 function M.copyState(src, dst)
-  dst = dst or { fz = {}, kappa = {}, nd = {}, sy = {} }
+  dst = dst or { fz = {}, kappa = {}, nd = {}, sy = {}, w = {}, fx = {} }
   for k, v in pairs(src) do
     if type(v) ~= 'table' then dst[k] = v end
   end
   for i = 0, 3 do
     dst.fz[i], dst.kappa[i], dst.nd[i], dst.sy[i] = src.fz[i], src.kappa[i], src.nd[i], src.sy[i]
+    dst.w[i], dst.fx[i] = src.w[i], src.fx[i]
   end
   return dst
 end
@@ -135,27 +143,63 @@ local function engineTorque(car, rpm, throttle)
 end
 M.engineTorque = engineTorque
 
--- One axle's force for wheel speed w; returns Fx (both wheels) and fills per-wheel outputs.
-local function axleForces(car, s, env, i0, w, v, fzL, fzR, ay, axleShare)
+-- Integrates one axle's wheel speeds. Locked: one speed, torque minus both tyre forces. Open: equal torque to each
+-- wheel, each with its own tyre force (the engine's reflected inertia split between them, a diagonal approximation).
+-- Rolling resistance acts as a wheel torque (keeps standstill stable).
+local function integrateAxle(car, s, i0, locked, torque, jEngine, jWheel, h)
   local r = car.tyreRadius
-  local kappa = (w * r - v) / math.max(math.abs(v), VMIN)
+  local w = s.w
+  if locked then
+    local wa = (w[i0] + w[i0 + 1]) * 0.5
+    local rra = car.crr * (s.fz[i0] + s.fz[i0 + 1]) * r
+    wa = wa + (torque - (s.fx[i0] + s.fx[i0 + 1]) * r + rr(wa, rra)) / (2 * jWheel + jEngine) * h
+    w[i0], w[i0 + 1] = wa, wa
+  else
+    for i = i0, i0 + 1 do
+      w[i] = w[i] + (torque * 0.5 - s.fx[i] * r + rr(w[i], car.crr * s.fz[i] * r)) / (jWheel + jEngine * 0.5) * h
+    end
+  end
+end
+
+-- One wheel: slip ratio from the wheel speed w and the wheel's own ground speed vi, lateral share u.
+-- Returns Fx and whether the lateral share could be carried. When it cannot (the axle slides), the lateral demand
+-- gets priority: the longitudinal force is what is left of the total force f(s) (a sliding car turns its tyre forces
+-- sideways; without this, spinning the wheels in a corner would cost nothing).
+local function wheelForce(car, s, i, w, vi, fz, mu, u)
+  local kappa = (w * car.tyreRadius - vi) / math.max(math.abs(vi), VMIN)
   local sx = kappa / car.kappaPeak
-  local kL, kR = env.muScale * env.muWheel[i0], env.muScale * env.muWheel[i0 + 1]
-  local muL, muR = car.mu * kL, car.mu * kR
-  -- lateral share this axle must carry (lateral friction may be higher than longitudinal, as in AC's tyres)
-  local fyNeed = car.mass * math.abs(ay) * G * axleShare
-  local cap = car.muLat * (kL * fzL + kR * fzR)
-  local u = cap > 1 and fyNeed / cap or 0
   local sxa = sx < 0 and -sx or sx
   local sy, ok = 0, true
   if u > 0 then sy, ok = tyre.solveLateral(sxa, u) end
   local sAbs = math.sqrt(sxa * sxa + sy * sy)
-  local fshare = sAbs > 1e-9 and tyre.f(sAbs) * sx / sAbs or 0
-  local fx = (muL * fzL + muR * fzR) * fshare
-  s.kappa[i0], s.kappa[i0 + 1] = kappa, kappa
-  s.nd[i0], s.nd[i0 + 1] = sAbs, sAbs
-  s.sy[i0], s.sy[i0 + 1] = sy, sy
-  return fx, ok, u
+  local f = sAbs > 1e-9 and tyre.f(sAbs) or 0
+  local share
+  if ok then
+    share = sAbs > 1e-9 and f * sxa / sAbs or 0
+  else
+    local rest = f * f - u * u
+    share = rest > 0 and math.sqrt(rest) or 0
+  end
+  if sx < 0 then share = -share end
+  s.kappa[i], s.nd[i], s.sy[i] = kappa, sAbs, sy
+  return mu * fz * share, ok
+end
+
+-- One axle. In a corner the inside wheel travels a shorter path (yaw rate ay / v): with a locked axle it slips more
+-- and spins first, as in the user's logs (rear max/min ndSlip ~1.2-1.3 in corners). Forces go to s.fx[i].
+local function axleForces(car, s, env, i0, v, fzL, fzR, ay, axleShare)
+  local kL, kR = env.muScale * env.muWheel[i0], env.muScale * env.muWheel[i0 + 1]
+  -- lateral share this axle must carry, split by load x grip (lateral friction may be higher than longitudinal,
+  -- as in AC's tyres)
+  local fyNeed = car.mass * math.abs(ay) * G * axleShare
+  local cap = car.muLat * (kL * fzL + kR * fzR)
+  local u = cap > 1 and fyNeed / cap or 0
+  local yaw = ay * G / math.max(math.abs(v), 3)       -- ay > 0: left turn, left wheels inside
+  local dv = yaw * car.track * 0.5
+  local fxL, okL = wheelForce(car, s, i0, s.w[i0], v - dv, fzL, car.mu * kL, u)
+  local fxR, okR = wheelForce(car, s, i0 + 1, s.w[i0 + 1], v + dv, fzR, car.mu * kR, u)
+  s.fx[i0], s.fx[i0 + 1] = fxL, fxR
+  return fxL + fxR, okL and okR, u
 end
 
 -- Advances the car by dt. `throttle` 0..1 (what the controller sent); env: { muScale, muWheel[0..3], ay (g) }.
@@ -165,10 +209,9 @@ function M.step(car, s, env, throttle, dt)
   local m = car.mass
   local L = car.wheelbase
   local idleW = car.idleRpm * math.pi / 30
-  local launchW = car.launchRpm * math.pi / 30
   local limitW = car.revLimit * math.pi / 30
   local ratio = ratioOf(car, s.gear)
-  local Jw = car.wheelInertia * 2       -- per axle
+  local Jw = car.wheelInertia          -- per wheel
   local Je = car.engineInertia
   local ay = env.ay or 0
   for _ = 1, SUBSTEPS do
@@ -181,7 +224,7 @@ function M.step(car, s, env, throttle, dt)
     if fzR < 100 then fzR = 100 end
     local latT = m * math.abs(ay) * G * car.cgHeight / car.track
     local dF, dR = latT * car.frontWeight, latT * (1 - car.frontWeight)
-    local sg = ay >= 0 and 0.5 or -0.5 -- ay > 0: the left wheels are on the inside
+    local sg = ay >= 0 and 1 or -1 -- ay > 0: the left wheels are on the inside (each loses dF, the outside gains dF)
     local fzFL, fzFR = fzF * 0.5 - dF * sg, fzF * 0.5 + dF * sg
     local fzRL, fzRR = fzR * 0.5 - dR * sg, fzR * 0.5 + dR * sg
     if fzFL < 50 then fzFL = 50 end
@@ -190,8 +233,8 @@ function M.step(car, s, env, throttle, dt)
     if fzRR < 50 then fzRR = 50 end
     s.fz[0], s.fz[1], s.fz[2], s.fz[3] = fzFL, fzFR, fzRL, fzRR
 
-    local fxF, okF, uF = axleForces(car, s, env, 0, s.wf, v, fzFL, fzFR, ay, car.frontWeight)
-    local fxR, okR, uR = axleForces(car, s, env, 2, s.wr, v, fzRL, fzRR, ay, 1 - car.frontWeight)
+    local fxF, okF, uF = axleForces(car, s, env, 0, v, fzFL, fzFR, ay, car.frontWeight)
+    local fxR, okR, uR = axleForces(car, s, env, 2, v, fzRL, fzRR, ay, 1 - car.frontWeight)
     s.slideF, s.slideR, s.uF, s.uR = not okF, not okR, uF, uR
 
     -- drivetrain
@@ -210,19 +253,22 @@ function M.step(car, s, env, throttle, dt)
       s.locked = false
     else
       local wsAbs = ws < 0 and -ws or ws
-      -- auto-clutch (like AC's): slips while the wheels turn the engine slower than the launch speed for this
-      -- throttle, so the engine stays between idle and the launch rpm; locks above it, re-opens below 90 % of it
-      -- (a spin that briefly lifts the wheel speed does not lock the clutch for good)
-      local target = idleW + (launchW - idleW) * thr
-      if s.locked and s.cut <= 0 and s.sync == 0 and wsAbs < target * 0.9 and s.gear ~= 0 then s.locked = false end
+      -- auto-clutch (like AC's, fitted to the user's logs): while the wheels turn the engine slower than the
+      -- clutch-slip speed for this throttle, the clutch slips and the engine revs towards that speed (with its own
+      -- inertia, no jumps); it locks once the wheels reach it and opens again only near a stall. In the logs the
+      -- Supra's clutch slips in 1st gear up to 50-60 km/h at 4000-5600 rpm.
+      local target = (car.clutchCurve and evalCurve(car.clutchCurve, thr) or
+        (car.idleRpm + (car.launchRpm - car.idleRpm) * thr)) * math.pi / 30
+      if s.locked and s.cut <= 0 and s.sync == 0 and wsAbs < idleW * 1.1 then s.locked = false end
       if not s.locked then
-        if wsAbs >= target then
+        if wsAbs >= target or wsAbs >= s.we then
           s.locked = true
           s.we = wsAbs
         else
-          s.we = target
+          s.we = s.we + (target - s.we) * math.min(1, h / 0.12)
+          if s.we < idleW then s.we = idleW end
           tEng = engineTorque(car, s.we * 30 / math.pi, thr)
-          tClutch = tEng > 0 and tEng or 0
+          tClutch = tEng > 0 and tEng * (car.slipClutchScale or 1) or 0
         end
       end
       if s.locked then
@@ -238,11 +284,11 @@ function M.step(car, s, env, throttle, dt)
         engineJ = Je
         if s.cut > 0 then
           -- during the cut the engine sheds part of the mismatch on its own (no torque to the wheels)
-          s.sync = s.sync - s.sync * math.min(1, h / (car.shiftTime * 2))
+          s.sync = s.sync * math.exp(math.log(car.shiftKeep or 0.6) * h / car.shiftTime)
           tClutch = 0
         elseif s.sync ~= 0 then
           -- release the rest of the mismatch (an upshift drives the wheels harder for a moment)
-          local d = s.sync * math.min(1, h / TAU_SYNC)
+          local d = s.sync * math.min(1, h / (car.syncTau or TAU_SYNC))
           tClutch = tClutch + Je * d / h
           s.sync = s.sync - d
           if math.abs(s.sync) < 0.5 then s.sync = 0 end
@@ -253,13 +299,10 @@ function M.step(car, s, env, throttle, dt)
     local tw = (tClutch or 0) * ratio
     local twF, twR = tw * car.driveFront, tw * car.driveRear
     local JeW = engineJ * ratio * ratio
-    local JF = Jw + JeW * car.driveFront
-    local JR = Jw + JeW * car.driveRear
-    -- rolling resistance as a wheel torque (keeps standstill stable)
-    local rrF = car.crr * (fzF) * r
-    local rrR = car.crr * (fzR) * r
-    s.wf = s.wf + (twF - fxF * r + rr(s.wf, rrF)) / JF * h
-    s.wr = s.wr + (twR - fxR * r + rr(s.wr, rrR)) / JR * h
+    integrateAxle(car, s, 0, car.lockedF, twF, JeW * car.driveFront, Jw, h)
+    integrateAxle(car, s, 2, car.lockedR, twR, JeW * car.driveRear, Jw, h)
+    s.wf, s.wr = (s.w[0] + s.w[1]) * 0.5, (s.w[2] + s.w[3]) * 0.5
+    s.fxTotal = fxF + fxR
 
     local drag = 0.5 * RHO * car.cda * v * math.abs(v)
     local a = (fxF + fxR - drag) / m

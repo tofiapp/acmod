@@ -3,7 +3,7 @@ return {
   description = 'Obrubník: vnitřní kola 0,15 s na obrubníku (grip × 0,4) při plném plynu v zatáčce',
   group = 'dry', start = { gear = 3, rpm = 4500 }, duration = 5,
   gas = { { 0.2, 5 } }, shift = 'auto', maxGear = 3,
-  ay = '0:0.8 5:0.8',
+  ayRel = '0:0.53 5:0.53',
   kerbs = { { t = 2.0, len = 0.15, wheels = { 0, 2 }, mu = 0.4 } },
   steady = { { 3.5, 5 } },
 }

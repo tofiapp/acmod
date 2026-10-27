@@ -26,7 +26,6 @@ if PARAMS_FILE and PARAMS_FILE ~= '' then
   local p = dofile(PARAMS_FILE)
   params, tractionParams = p.throttle, p.traction
 end
-local target = params and params.TARGET_SLIP or 1
 
 local dir = SET == 'hidden' and '/sim/scenarios/hidden/' or '/sim/scenarios/'
 local names = dofile(ROOT .. dir .. 'index.lua')
@@ -39,21 +38,41 @@ local function hash(str)
   return h
 end
 
-local report = { set = SET, scale = scale, thresholds = metrics.THRESHOLDS, runs = {} }
+local report = { set = SET, scale = scale, thresholds = metrics.THRESHOLDS, runs = {}, selfTest = {} }
 local lines = {}
 local total, passed = 0, 0
 local failsByCheck = {}
+local rise, fall = params and params.RISE or 1.2, params and params.FALL or 4
+
+local function fmt(v, f) return v and string.format(f, v) or '-' end
 
 for _, name in ipairs(names) do
   local scn = dofile(ROOT .. dir .. name .. '.lua')
   for _, carName in ipairs(CARS) do
     local car = dofile(ROOT .. '/sim/cars/' .. carName .. '.lua')
-    local oracleTr = runner.run(scn, { car = car, oracle = true, seed = hash(name .. carName), grip = scale.grip,
-      power = scale.power, oracleRise = params and params.RISE or 1.2, oracleFall = params and params.FALL or 4 })
+    local common = { car = car, grip = scale.grip, power = scale.power, seed = hash(name .. carName) }
+    local function with(extra)
+      local o = {}
+      for k, v in pairs(common) do o[k] = v end
+      for k, v in pairs(extra) do o[k] = v end
+      return o
+    end
+    local oracleTr = runner.run(scn, with({ oracle = true, oracleRise = rise, oracleFall = fall }))
+    local zeroTr = runner.run(scn, with({ zero = true }))
+    local ref = { oracle = oracleTr, zero = zeroTr, rise = rise, fall = fall }
+    -- self-test: a plain ramp without traction control must never beat the oracle
+    if scn.group ~= 'reverse' then
+      local plain = runner.run(scn, with({ rate = 'physics', controller = controllers.plainRamp(rise, fall) }))
+      local pr = metrics.evaluate(scn, plain, ref)
+      if pr.values.loss and pr.values.loss < -0.01 then
+        report.selfTest[#report.selfTest + 1] = string.format('%s %s: plain ramp beats the oracle by %.1f %%',
+          name, carName, -pr.values.loss * 100)
+      end
+    end
     for _, rate in ipairs(rates) do
-      local tr = runner.run(scn, { car = car, rate = rate, seed = hash(name .. carName .. rate),
-        controller = controllers.keydrive(params, tractionParams), grip = scale.grip, power = scale.power })
-      local res = metrics.evaluate(scn, tr, oracleTr, target)
+      local tr = runner.run(scn, with({ rate = rate, seed = hash(name .. carName .. rate),
+        controller = controllers.keydrive(params, tractionParams) }))
+      local res = metrics.evaluate(scn, tr, ref)
       total = total + 1
       if res.pass then passed = passed + 1 end
       local failed = {}
@@ -65,14 +84,15 @@ for _, name in ipairs(names) do
       end
       table.sort(failed)
       report.runs[#report.runs + 1] = { scenario = name, car = carName, rate = rate, fps = tr.fps, pass = res.pass,
-        checks = res.checks, values = res.values, group = scn.group }
+        checks = res.checks, values = res.values, notGraded = res.na, group = scn.group }
       local v = res.values
-      lines[#lines + 1] = string.format('%-22s %-13s %-7s %-4s slip %5s  >1.3 %5s  loss %6s  rate %5.1f  %s',
-        name, carName, rate, res.pass and 'OK' or 'FAIL',
-        v.peakSlip and string.format('%.2f', v.peakSlip) or '-',
-        v.over13Time and string.format('%.2fs', v.over13Time) or '-',
-        v.loss and string.format('%.1f%%', v.loss * 100) or '-', v.maxRate or 0,
-        #failed > 0 and ('[' .. table.concat(failed, ',') .. ']') or '')
+      lines[#lines + 1] = string.format('%-21s %-12s %-7s %-4s slip %5s >1.3 %5s slide %5s loss %6s rate %4s ' ..
+        'jerk %5s dir/s %4s std %5s %s%s',
+        name, carName, rate, res.pass and 'OK' or 'FAIL', fmt(v.peakSlip, '%.2f'), fmt(v.over13Time, '%.2f'),
+        fmt(v.slideTime, '%.2f'), fmt(v.loss and v.loss * 100, '%.1f%%'), fmt(v.maxRate, '%.1f'),
+        fmt(v.maxJerk, '%.0f'), fmt(v.steadyDirChanges, '%.1f'), fmt(v.steadyStd, '%.3f'),
+        #failed > 0 and ('[' .. table.concat(failed, ',') .. ']') or '',
+        #res.na > 0 and (' n/a:' .. table.concat(res.na, ',')) or '')
     end
   end
 end
@@ -87,15 +107,18 @@ f:close()
 local head = {
   string.format('KeyDrive simulator: set %s, grip x%.2f, power x%.2f: %d/%d runs pass', SET, scale.grip, scale.power,
     passed, total),
-  string.format('Thresholds: peak slip <= %.1fx target, above 1.3x <= %.2f s, steady <= %d dir. changes/s and std < %.2f, ' ..
-    'loss vs oracle <= %d %% (dry), RWD rear slide <= %.2f s', metrics.THRESHOLDS.peakSlip, metrics.THRESHOLDS.over13Time,
+  string.format('Thresholds (user): peak slip <= %.1fx tyre peak, above 1.3x <= %.2f s, steady <= %d dir. changes/s ' ..
+    'and std < %.2f, loss vs oracle <= %d %% dry. Proposed: loss <= %d %% wet/cold/grip/tapping, axle slide <= %.2f s, ' ..
+    'assist rate <= %.0f /s, reverse = plain ramp', metrics.THRESHOLDS.peakSlip, metrics.THRESHOLDS.over13Time,
     metrics.THRESHOLDS.steadyDirChanges, metrics.THRESHOLDS.steadyStd, metrics.THRESHOLDS.lossDry * 100,
-    metrics.THRESHOLDS.rearSlideTime),
+    metrics.THRESHOLDS.lossOther * 100, metrics.THRESHOLDS.slideTime, metrics.THRESHOLDS.maxRate),
 }
 local fk = {}
 for k, n in pairs(failsByCheck) do fk[#fk + 1] = k .. ' ' .. n end
 table.sort(fk)
 head[#head + 1] = 'Failures by check: ' .. (#fk > 0 and table.concat(fk, ', ') or 'none')
+head[#head + 1] = 'Self-test (plain ramp vs oracle): ' .. (#report.selfTest > 0 and table.concat(report.selfTest, '; ')
+  or 'ok')
 head[#head + 1] = ''
 local text = table.concat(head, '\n') .. '\n' .. table.concat(lines, '\n') .. '\n'
 local f2 = assert(io.open(outDir .. '/summary' .. suffix .. '.txt', 'w'))

@@ -5,10 +5,11 @@ return {
   mass = 1350, wheelbase = 2.63, cgHeight = 0.52, frontWeight = 0.62, track = 1.55,
   tyreRadius = 0.31, mu = 1.0, muLat = 1.1, kappaPeak = 0.09, alphaPeakDeg = 6,
   wheelInertia = 1.0, engineInertia = 0.15,
-  idleRpm = 850, launchRpm = 3000, revLimit = 6800, shiftRpm = 6500,
+  idleRpm = 850, launchRpm = 4000, revLimit = 6800, shiftRpm = 6500,
+  clutchSlipRpm = '0:850 0.5:2800 1:4000', tyreTail = 0.8,
   torque = '850:180 1500:280 1800:350 4500:350 5500:330 6200:300 6800:270',
   engineBrake = 45,
   rpmPerKmh = { 111, 67, 47, 36, 30, 25 }, reverseRpmPerKmh = 105,
-  shiftTime = 0.25, shiftKeep = 0.3,
+  shiftTime = 0.25, shiftKeep = 0.3, syncTau = 0.05,
   cda = 0.68, cla = 0.05, aeroFront = 0.5, crr = 0.013,
 }

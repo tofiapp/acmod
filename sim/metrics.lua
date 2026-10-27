@@ -1,21 +1,32 @@
--- Metrics and pass/fail checks for one run (phase 4). Thresholds are the user's; change them only with a reason
--- written next to them.
+-- Metrics and pass/fail checks for one run (phase 4).
+-- The user's thresholds are marked USER; the ones Claude had to add are marked PROPOSAL (shown to the user, change
+-- only with a reason written here).
 
 local M = {}
 
 M.THRESHOLDS = {
-  peakSlip = 1.5,        -- peak driven-wheel slip <= 1.5 x target
-  over13Time = 0.10,     -- s: slip above 1.3 x target at most 0.1 s in one go
-  steadyDirChanges = 1,  -- per second: throttle direction changes in steady state
-  steadyStd = 0.02,      -- throttle standard deviation in steady state ("variance < 2 %": std of the 0..1 throttle)
-  lossDry = 0.05,        -- loss against the oracle in the dry (speed gain integral)
-  rearSlideTime = 0.10,  -- s, RWD: rear axle cannot carry its lateral load (friction ellipse), proposed by Claude:
-                         -- same budget as the slip overshoot (the user gave no number)
+  peakSlip = 1.5,        -- USER: peak driven-wheel slip <= 1.5 x target (target = tyre peak, ndSlip 1)
+  over13Time = 0.10,     -- USER: slip above 1.3 x target at most 0.1 s in one go
+  steadyDirChanges = 1,  -- USER: throttle direction changes per second in steady state
+  steadyStd = 0.02,      -- USER: "variance < 2 %": std of the 0..1 throttle around its trend in steady state
+  lossDry = 0.05,        -- USER: loss against the oracle in the dry
+  lossOther = 0.15,      -- PROPOSAL: loss bound in wet / cold / grip-change / tapping (else a timid controller
+                         -- would pass them for free)
+  slideTime = 0.10,      -- PROPOSAL: an axle cannot carry its lateral load (friction ellipse) at most 0.1 s in one
+                         -- go, every drive type (USER asked for RWD ellipse safety, no number given)
+  maxRate = 5,           -- PROPOSAL: throttle changes made by the assist at most 5 /s (the user wants smooth, never a
+                         -- step); the driver's own key edges are excluded
+  reverseFollow = 0.01,  -- PROPOSAL: in reverse/neutral the throttle is the plain key ramp (no regulation)
 }
 
-local SAMPLE = 0.025 -- s, 40 Hz resampling for rates (like the in-game log)
+local TARGET = 1          -- grading reference: the tyre peak, independent of the controller's TARGET_SLIP
+local SAMPLE = 0.025      -- s, 40 Hz resampling for the steady-state statistics (like the in-game log)
+local RATE_WINDOW = 0.1   -- s, throttle rate and jerk are measured over 100 ms (at 50 fps with hitches the throttle
+                          -- moves in frame-sized steps; what the driver feels is the change over ~0.1 s)
+local DEADBAND = 0.005    -- a throttle direction change must be at least 0.5 % to count
+local SETTLE = 1.0        -- s after a disturbance (key edge, shift, kerb, grip change) before "steady state"
+local MIN_GAIN = 0.5      -- m: loss is n/a when the oracle covers less than this more than a car with no throttle
 
--- Longest contiguous time (s) where pred(i) holds, among samples where gate(i) holds.
 local function longest(tr, dt, pred, gate)
   local best, cur = 0, 0
   for i = 1, tr.n do
@@ -29,18 +40,8 @@ local function longest(tr, dt, pred, gate)
   return best
 end
 
--- target: the controller's slip target (ndSlip units, 1 = tyre peak)
-function M.evaluate(scn, tr, oracleTr, target)
-  target = target or 1
-  local T = M.THRESHOLDS
-  local dt = tr.t[2] - tr.t[1]
-  local res = { checks = {}, values = {} }
-  local val, chk = res.values, res.checks
-  local nan = false
-  for i = 1, tr.n do if tr.thr[i] ~= tr.thr[i] then nan = true end end
-  chk.noNaN = not nan
-
-  -- gas phases: key held, forward gear, 50 ms after the press (the press itself is the driver's)
+-- Raw values shared by controller and oracle traces.
+local function raw(tr, dt)
   local held = {}
   local since = 0
   for i = 1, tr.n do
@@ -48,90 +49,190 @@ function M.evaluate(scn, tr, oracleTr, target)
     held[i] = tr.key[i] and tr.gear[i] > 0 and since > 0.05
   end
   local gate = function (i) return held[i] end
+  local peak = 0
+  for i = 1, tr.n do if held[i] and tr.nd[i] > peak then peak = tr.nd[i] end end
+  return {
+    held = held,
+    peakSlip = peak / TARGET,
+    over13Time = longest(tr, dt, function (i) return tr.nd[i] > 1.3 * TARGET end, gate),
+    slideTime = longest(tr, dt, function (i) return tr.slideR[i] or tr.slideF[i] end, gate),
+  }
+end
 
-  if scn.group ~= 'reverse' then
-    local peak = 0
-    for i = 1, tr.n do if held[i] and tr.nd[i] > peak then peak = tr.nd[i] end end
-    val.peakSlip = peak / target
-    chk.peakSlip = val.peakSlip <= T.peakSlip
-    val.over13Time = longest(tr, dt, function (i) return tr.nd[i] > 1.3 * target end, gate)
-    chk.over13Time = val.over13Time <= T.over13Time
-    if tr.drive == 'RWD' then
-      val.rearSlideTime = longest(tr, dt, function (i) return tr.slideR[i] end, gate)
-      chk.rearSlideTime = val.rearSlideTime <= T.rearSlideTime
+local function distance(tr, dt)
+  local d = 0
+  for i = 1, tr.n do d = d + math.abs(tr.v[i]) * dt end
+  return d
+end
+
+-- Disturbance times: key edges, shifts, kerbs, grip changes (from the scenario).
+local function disturbances(scn, tr)
+  local t = { 0 }
+  for i = 2, tr.n do if tr.key[i] ~= tr.key[i - 1] or tr.gear[i] ~= tr.gear[i - 1] then t[#t + 1] = tr.t[i] end end
+  for _, s in ipairs(tr.shifts or {}) do t[#t + 1] = s end
+  for _, k in ipairs(scn.kerbs or {}) do t[#t + 1] = k.t; t[#t + 1] = k.t + k.len end
+  if scn.mu then
+    local prev
+    for x, y in tostring(scn.mu):gmatch('(-?[%d%.]+)%s*:%s*(-?[%d%.]+)') do
+      if prev and math.abs(tonumber(y) - prev) > 0.05 then t[#t + 1] = tonumber(x) end
+      prev = tonumber(y)
     end
   end
+  table.sort(t)
+  return t
+end
 
-  -- smoothness on a 40 Hz resample: max rate and jerk of the throttle while the key is held (driver edges excluded)
+-- Direction changes per second and detrended std of the throttle over [t0, t1].
+local function windowStats(tr, every, t0, t1)
+  local xs, ts = {}, {}
+  for i = 1, tr.n, every do
+    if tr.t[i] >= t0 and tr.t[i] <= t1 then xs[#xs + 1], ts[#ts + 1] = tr.thr[i], tr.t[i] end
+  end
+  if #xs < 8 then return nil end
+  local n = #xs
+  local mt, mx = 0, 0
+  for k = 1, n do mt, mx = mt + ts[k], mx + xs[k] end
+  mt, mx = mt / n, mx / n
+  local sxy, sxx = 0, 0
+  for k = 1, n do sxy, sxx = sxy + (ts[k] - mt) * (xs[k] - mx), sxx + (ts[k] - mt) ^ 2 end
+  local slope = sxx > 0 and sxy / sxx or 0
+  local var = 0
+  for k = 1, n do var = var + (xs[k] - (mx + slope * (ts[k] - mt))) ^ 2 end
+  local changes, dir, ref = 0, 0, xs[1]
+  for k = 2, n do
+    local d = xs[k] - ref
+    if math.abs(d) > DEADBAND then
+      local sgn = d > 0 and 1 or -1
+      if dir ~= 0 and sgn ~= dir then changes = changes + 1 end
+      dir, ref = sgn, xs[k]
+    end
+  end
+  return changes / (t1 - t0), math.sqrt(var / n)
+end
+
+-- Summary of a reference trace (oracle or zero throttle) that evaluate() needs; lets the optimizer cache them.
+function M.summarize(tr)
+  local dt = tr.t[2] - tr.t[1]
+  local r = raw(tr, dt)
+  return { peakSlip = r.peakSlip, over13Time = r.over13Time, slideTime = r.slideTime, dist = distance(tr, dt) }
+end
+
+-- ref: { oracle = trace or summary, zero = trace or summary (throttle 0), rise, fall (the controller's key ramp) }
+function M.evaluate(scn, tr, ref)
+  local T = M.THRESHOLDS
+  local dt = tr.t[2] - tr.t[1]
+  local res = { checks = {}, values = {}, na = {} }
+  local val, chk, na = res.values, res.checks, res.na
+  chk.noNaN = (tr.nanCount or 0) == 0
   local every = math.max(1, math.floor(SAMPLE / dt + 0.5))
-  local maxRate, maxJerk, prevRate = 0, 0, nil
-  local edgeGuard = 0.3
-  local function nearEdge(i)
-    local k = math.floor(edgeGuard / dt)
-    for j = math.max(1, i - k), math.min(tr.n, i + k), math.max(1, math.floor(k / 6)) do
-      if tr.key[j] ~= tr.key[i] then return true end
-    end
-    return false
-  end
-  for i = 1 + every, tr.n, every do
-    if held[i] and held[i - every] and not nearEdge(i) then
-      local rate = (tr.thr[i] - tr.thr[i - every]) / (every * dt)
-      if math.abs(rate) > maxRate then maxRate = math.abs(rate) end
-      if prevRate then
-        local jerk = math.abs(rate - prevRate) / (every * dt)
-        if jerk > maxJerk then maxJerk = jerk end
-      end
-      prevRate = rate
-    else
-      prevRate = nil
-    end
-  end
-  val.maxRate, val.maxJerk = maxRate, maxJerk
 
-  -- steady state windows from the scenario
-  if scn.steady then
-    local worstDir, worstStd = 0, 0
-    for _, w in ipairs(scn.steady) do
-      local xs = {}
-      for i = 1, tr.n, every do
-        if tr.t[i] >= w[1] and tr.t[i] <= w[2] then xs[#xs + 1] = tr.thr[i] end
+  if scn.group == 'reverse' then
+    -- no regulation: the throttle must be the plain key ramp
+    -- (at render-frame rate the controller holds its value between calls: compare with the ramp at the last call)
+    local r, worst, held = 0, 0, 0
+    local rise, fall = ref.rise or 1.2, ref.fall or 4
+    for i = 1, tr.n do
+      if tr.key[i] then r = math.min(1, r + rise * dt) else r = math.max(0, r - fall * dt) end
+      if tr.called[i] then held = r end
+      if tr.gear[i] <= 0 then
+        local d = math.abs(tr.thr[i] - held)
+        if d > worst then worst = d end
       end
-      if #xs > 4 then
-        local dir, changes, mean = 0, 0, 0
-        for k = 1, #xs do mean = mean + xs[k] end
-        mean = mean / #xs
-        local var = 0
-        for k = 1, #xs do var = var + (xs[k] - mean) ^ 2 end
-        local std = math.sqrt(var / #xs)
-        local ref = xs[1]
-        for k = 2, #xs do
-          local d = xs[k] - ref
-          if math.abs(d) > 0.002 then
-            local sgn = d > 0 and 1 or -1
-            if dir ~= 0 and sgn ~= dir then changes = changes + 1 end
-            dir, ref = sgn, xs[k]
-          end
+    end
+    val.reverseFollow = worst
+    chk.reverseFollow = worst <= T.reverseFollow
+  else
+    local c = raw(tr, dt)
+    local o = ref.oracle and (ref.oracle.dist and ref.oracle or M.summarize(ref.oracle)) or nil
+    local z = ref.zero and (ref.zero.dist and ref.zero or M.summarize(ref.zero)) or nil
+    val.peakSlip, val.over13Time, val.slideTime = c.peakSlip, c.over13Time, c.slideTime
+    if o then val.oraclePeakSlip, val.oracleOver13Time, val.oracleSlideTime = o.peakSlip, o.over13Time, o.slideTime end
+    -- a check the oracle itself cannot meet is not graded (scenario infeasible for this car)
+    local function graded(name, value, bound, oracleValue)
+      if oracleValue and oracleValue > bound then na[#na + 1] = name; return end
+      chk[name] = value <= bound
+    end
+    graded('peakSlip', c.peakSlip, T.peakSlip, o and o.peakSlip)
+    graded('over13Time', c.over13Time, T.over13Time, o and o.over13Time)
+    graded('slideTime', c.slideTime, T.slideTime, o and o.slideTime)
+
+    -- loss: distance covered, normalised by what the oracle gains over a car with no throttle at all
+    if o and z then
+      local go, gc, gz = o.dist, distance(tr, dt), z.dist
+      val.lossBase = go - gz
+      if go - gz >= MIN_GAIN then
+        val.loss = (go - gc) / (go - gz)
+        local bound = scn.group == 'dry' and T.lossDry or T.lossOther
+        val.lossBound = bound
+        chk.loss = val.loss <= bound
+      else
+        na[#na + 1] = 'loss'
+      end
+    end
+
+    -- smoothness: rate of the throttle while the key is held, away from the driver's key edges
+    local maxRate, maxJerk, prevRate = 0, 0, nil
+    local guard = math.floor(0.3 / dt)
+    local lastEdge = -1e9
+    local edgeAt = {}
+    for i = 2, tr.n do if tr.key[i] ~= tr.key[i - 1] then edgeAt[#edgeAt + 1] = i end end
+    local function nearEdge(i)
+      for _, e in ipairs(edgeAt) do if math.abs(e - i) <= guard then return true end end
+      return false
+    end
+    local rw = math.max(1, math.floor(RATE_WINDOW / dt + 0.5))
+    for i = 1 + rw, tr.n, rw do
+      if c.held[i] and c.held[i - rw] and not nearEdge(i) then
+        local rate = (tr.thr[i] - tr.thr[i - rw]) / (rw * dt)
+        if math.abs(rate) > maxRate then maxRate = math.abs(rate) end
+        if prevRate then
+          local jerk = math.abs(rate - prevRate) / (rw * dt)
+          if jerk > maxJerk then maxJerk = jerk end
         end
-        local perSec = changes / (w[2] - w[1])
-        if perSec > worstDir then worstDir = perSec end
-        if std > worstStd then worstStd = std end
+        prevRate = rate
+      else
+        prevRate = nil
       end
     end
-    val.steadyDirChanges, val.steadyStd = worstDir, worstStd
-    chk.steadyDirChanges = worstDir <= T.steadyDirChanges
-    chk.steadyStd = worstStd < T.steadyStd
-  end
+    val.maxRate, val.maxJerk = maxRate, maxJerk
+    chk.maxRate = maxRate <= T.maxRate
 
-  -- loss against the oracle: integral of the speed gain
-  if oracleTr then
-    local function gain(x)
-      local g = 0
-      for i = 1, x.n do g = g + (x.v[i] - x.v0) * dt end
-      return g
+    -- steady state: every stretch with the key held in one forward gear, at least SETTLE after a disturbance and
+    -- at least 1 s long; plus the scenario's own windows
+    local dist = disturbances(scn, tr)
+    local windows = {}
+    local startT
+    local function close(tEnd)
+      if startT and tEnd - startT >= 1 then windows[#windows + 1] = { startT, tEnd } end
+      startT = nil
     end
-    local go, gc = gain(oracleTr), gain(tr)
-    val.loss = go > 1e-6 and 1 - gc / go or 0
-    if scn.group == 'dry' then chk.lossDry = val.loss <= T.lossDry end
+    local di = 1
+    for i = 1, tr.n do
+      local t = tr.t[i]
+      while dist[di + 1] and dist[di + 1] <= t do di = di + 1 end
+      local quiet = t - (dist[di] or 0) >= SETTLE
+      if c.held[i] and quiet then
+        if not startT then startT = t end
+      else
+        close(t)
+      end
+    end
+    close(tr.t[tr.n])
+    for _, w in ipairs(scn.steady or {}) do windows[#windows + 1] = w end
+    local worstDir, worstStd = 0, 0
+    for _, w in ipairs(windows) do
+      local d, sd = windowStats(tr, every, w[1], w[2])
+      if d then
+        if d > worstDir then worstDir = d end
+        if sd > worstStd then worstStd = sd end
+      end
+    end
+    val.steadyWindows = #windows
+    if #windows > 0 then
+      val.steadyDirChanges, val.steadyStd = worstDir, worstStd
+      chk.steadyDirChanges = worstDir <= T.steadyDirChanges
+      chk.steadyStd = worstStd < T.steadyStd
+    end
   end
 
   res.pass = true

@@ -48,6 +48,15 @@ M.DEFAULTS = {
   MEMORY_RECOVERY = 0.015, -- per second back towards 1
   LEARN_MARGIN = 0.95,  -- each crossing remembers this fraction of the level it happened at
   LEARN_MIN = 0.3,      -- crossings below this throttle teach nothing
+  -- MODE 2 ("regulator", phase 5 candidate): slip regulator on the cap with prediction and anti-windup
+  MODE = 1,             -- 1 = remembering foot (above), 2 = regulator
+  D_TAU = 0.02,         -- s, low-pass of the slip rate
+  PRED = 0.03,          -- s, look-ahead: the cap reacts to slip + PRED * (rising slip rate)
+  AW = 0.08,            -- anti-windup: the cap stays at most this much above the requested throttle
+  K_UP = 0.8,           -- per second, cap recovery with spare grip (scaled by how much grip is spare)
+  FALL_MAX = 5,         -- per second, fastest cap reduction
+  V_REF = 0,            -- m/s, low-speed reference: below it the slip is scaled by speed / V_REF (0 = off)
+  MEM = 1,              -- MODE 2: 1 = use the per gear/rpm memory as the return level after a cut, 0 = no memory
 }
 
 local RPM_BAND = 500
@@ -86,6 +95,7 @@ function M.new(params)
     crossBand = -1,     -- rpm band where the current spin started
     crossGear = 0,
     crossOut = 1,       -- throttle when the current spin started
+    slipRate = 0, prevSlip = 0,
   }, M)
   for g = 1, GEARS do
     o.memory[g], o.stamp[g], o.known[g] = {}, {}, {}
@@ -115,6 +125,7 @@ end
 
 function M:reset()
   self.slip, self.ratio, self.k, self.limit, self.riseScale, self.memoryNow = 0, 0, 1, 1, 1, 1
+  self.slipRate, self.prevSlip = 0, 0
   self.active, self.airborne = false, false
   self.overTime = 0
   self.A = 1
@@ -157,10 +168,114 @@ local function setLevel(self, g, b, m)
   self.memory[g][b], self.stamp[g][b], self.known[g][b] = m, self.clock, m < 1
 end
 
+-- MODE 2: regulator. The cap A follows the slip: down when slip + PRED * rising slip rate is over the target
+-- (proportional, at most FALL_MAX per second, not below FLOOR), up at K_UP while there is spare grip. A never sits
+-- more than AW above the requested throttle (anti-windup: a cut starts from what is really sent). With MEM, a cut
+-- teaches the per gear/rpm memory like MODE 1 and the cap returns quickly (K_BACK) up to RETURN x that level.
+local function update2(self, dt, carState, requested, target, response)
+  local P = self.p
+  local gear = carState.gear
+  if gear < 1 then gear = 1 elseif gear > GEARS then gear = GEARS end
+  local band = math.floor(carState.rpm / RPM_BAND)
+  if band < 0 then band = 0 elseif band > BANDS - 1 then band = BANDS - 1 end
+  local useMem = P.MEM ~= 0
+  local mem = useMem and level(self, gear, band) or 1
+  local ahead = useMem and level(self, gear, band + 1) or 1
+  local lim = mem < ahead and mem or ahead
+  local T = lim < 1 and lim * P.RETURN or 1
+
+  local A = self.A
+  if requested < 0.02 or gear ~= self.lastGear then
+    A = requested
+    self.lastGear = gear
+    self.overTime = 0
+  end
+
+  local slip, ratio = measure(self, carState)
+  if slip == nil then
+    self.airborne = true
+  else
+    self.airborne = false
+    if P.V_REF > 0 then
+      local v = carState.localVelocity.z
+      v = v < 0 and -v or v
+      if v < P.V_REF then slip = slip * math.max(v, 2) / P.V_REF end
+    end
+    local a = math.min(1, dt / P.SLIP_TAU)
+    local s0 = self.slip
+    self.slip = s0 + (slip - s0) * a
+    self.ratio = self.ratio + (ratio - self.ratio) * a
+    local rate = (self.slip - s0) / dt
+    self.slipRate = self.slipRate + (rate - self.slipRate) * math.min(1, dt / P.D_TAU)
+    local sp = self.slip + P.PRED * (self.slipRate > 0 and self.slipRate or 0)
+    if A > requested + P.AW then A = requested + P.AW end
+    local out = requested < A and requested or A
+    local e = sp / target - 1
+    if e > 0 and requested > 0.05 then
+      if self.overTime == 0 and useMem and out > P.LEARN_MIN and self.slip > target then
+        local m = (out < mem and out or mem) * P.LEARN_MARGIN
+        setLevel(self, gear, band, m)
+        mem = m
+        self.crossBand, self.crossGear, self.crossOut = band, gear, out
+      end
+      if self.slip > target then self.overTime = self.overTime + dt end
+      local kd = P.K_DOWN * e
+      if e > 1 then kd = kd + P.K_DOWN_SEVERE * (e - 1) end
+      if kd > P.FALL_MAX then kd = P.FALL_MAX end
+      if A > P.FLOOR then
+        A = A - kd * response * dt
+        if A < P.FLOOR then A = P.FLOOR end
+      end
+    else
+      if useMem and self.overTime > 0 and self.crossBand >= 0 and self.crossGear == gear and out > P.LEARN_MIN * 0.5 then
+        local m = (self.crossOut + out) * 0.5
+        if m < level(self, gear, self.crossBand) then setLevel(self, gear, self.crossBand, m) end
+        if m < level(self, gear, band) then setLevel(self, gear, band, m) end
+        mem = level(self, gear, band)
+        ahead = level(self, gear, band + 1)
+        lim = mem < ahead and mem or ahead
+        T = lim < 1 and lim * P.RETURN or 1
+      end
+      self.crossBand = -1
+      self.overTime = 0
+      local hold = target * P.HOLD_BAND
+      if self.slip < hold then
+        local spare = 1 - self.slip / hold
+        if A < T then
+          A = A + P.K_BACK * response * dt
+          if A > T then A = T end
+        else
+          A = A + P.K_UP * spare * response * dt
+          if useMem and mem < 1 and A > T then
+            setLevel(self, gear, band, math.min(1, mem + P.CREEP * response * dt))
+          end
+        end
+        if A > 1 then A = 1 end
+      end
+    end
+  end
+  self.A = A
+  local out = requested < A and requested or A
+  self.k = requested > 0.02 and out / requested or 1
+  self.limit = A
+  self.severe = self.slip > 2 * target
+  self.memoryNow = mem
+  self.active = out < requested - 0.005 and requested > 0.02
+  return out
+end
+
 -- Returns the throttle to send. `requested` is the ramped key throttle, `target` the slip target in ndSlip units
 -- (1 = tyre peak, keep it <= 1: past the peak the slip runs away), `response` scales the rates (1 = default).
 function M:update(dt, carState, requested, target, response)
   local P = self.p
+  if P.MODE == 2 then
+    self.clock = self.clock + dt
+    if not self.available or target <= 0 then
+      self.active = false
+      return requested
+    end
+    return update2(self, dt, carState, requested, target, response)
+  end
   self.clock = self.clock + dt
   if not self.available or target <= 0 then
     self.active = false

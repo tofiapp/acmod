@@ -8,10 +8,20 @@ local M = {}
 local B, C, E = 1.57, 1.65, 0.3   -- chosen so that the maximum sits at s = 1 (C * atan(arg(1)) = pi / 2)
 local atan, sin, sqrt = math.atan, math.sin, math.sqrt
 
+-- Past the peak the force falls towards a tail; TAIL scales that fall (1 = plain Pacejka, f(10) = 0.64; 0.72 fitted to
+-- the user's Supra logs: median longitudinal g at rear ndSlip 20-80 is ~0.7 of the value at the peak).
+local TAIL = 1
+
+function M.setTail(k)
+  TAIL = k or 1
+end
+
 function M.f(s)
   if s < 0 then return -M.f(-s) end
   local bs = B * s
-  return sin(C * atan(bs - E * (bs - atan(bs))))
+  local v = sin(C * atan(bs - E * (bs - atan(bs))))
+  if s > 1 then v = 1 - (1 - v) * TAIL end
+  return v
 end
 
 -- Lateral share g(sy) = f(s) * sy / s for a given sx (both >= 0).
