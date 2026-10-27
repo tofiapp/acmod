@@ -15,6 +15,9 @@ local ORANGE, BLUE, GREEN, RED, YELLOW, WHITE, PURPLE, CYAN =
 
 local function always() return true end
 
+M.LIMITER_AT = 0.985
+local LIMITER_AT = M.LIMITER_AT
+
 local function hasSide(layout)
   if not layout then return false end
   for i = 1, #layout.groups do if layout.groups[i].role == 'side' then return true end end
@@ -63,11 +66,13 @@ M.list = {
 
   { id = 'limiter', name = 'Omezovač otáček', cat = 'Řazení', to = 'main', hold = 0.15,
     look = { p = 'blink', c = { BLUE, '#000000' }, hz = 8 },
-    test = function (ST) return ST.engineLimiter or (ST.limiterKnown and ST.rpm >= ST.limiterRpm * 0.995) end,
-    avail = always },
+    -- 98.5 %: on the limiter the RPM bounces below the cut, a frame often never reached 99.5 % (it never blinked)
+    test = function (ST) return ST.engineLimiter or (ST.limiterKnown and ST.rpm >= ST.limiterRpm * LIMITER_AT) end,
+    avail = function (ST) return true, string.format('od %d ot/min (karta Otáčky)', math.floor(ST.limiterRpm * LIMITER_AT + 0.5)) end },
   { id = 'shiftPoint', name = 'Ideální bod řazení', cat = 'Řazení', to = 'main',
     look = { p = 'solid', c = { PURPLE } },
-    test = function (ST) return ST.gear > 0 and ST.rpm >= ST.shiftUp end,
+    -- also in neutral (revving in the pits showed only the shift lights, never this)
+    test = function (ST) return ST.rpm >= ST.shiftUp end,
     avail = function (ST) return true, string.format('při %d ot/min (karta Otáčky)', ST.shiftUp) end },
   { id = 'shiftLights', name = 'Řadicí světla podle otáček', cat = 'Řazení', to = 'main',
     param = { name = 'Začátek', unit = '% bodu řazení', default = 75, min = 30, max = 99 },

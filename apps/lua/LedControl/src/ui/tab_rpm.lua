@@ -12,6 +12,7 @@ local presets = require('src/presets')
 local patterns = require('src/patterns')
 local color = require('src/color')
 local detect = require('src/detect')
+local LIMITER_AT = require('src/scenarios').LIMITER_AT
 
 local rpm = runtime.rpm
 local ST = runtime.ST
@@ -220,7 +221,7 @@ local function refresh()
     setColours(k, cl.p == 'fill' and zoneColour(cl, u) or cl.c1)
   end
 
-  local limit = rpm.limiter * 0.995
+  local limit = rpm.limiter * LIMITER_AT
   if not shiftOn then hint = HINT_NO_SHIFT
   elseif ledsOn and ledMax >= limit then hint = HINT_LEDS
   elseif not ledsOn and start >= rpm.shift then hint = HINT_START
@@ -284,7 +285,7 @@ local function bar(w)
   local r = ST.rpm
   local first = ledsOn and ledMin or start
   local fill = BAR_IDLE
-  if ST.engineLimiter or r >= rpm.limiter * 0.995 then fill = K.RED
+  if ST.engineLimiter or r >= rpm.limiter * LIMITER_AT then fill = K.RED
   elseif r >= rpm.shift then fill = K.BLUE
   elseif r >= first then fill = K.GREEN end
   rect(x0, y0, x0 + w, y0 + BAR_H, BAR_BG)

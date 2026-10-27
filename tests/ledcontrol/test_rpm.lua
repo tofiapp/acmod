@@ -31,6 +31,16 @@ check(litCount() == 15 and not limiterActive(app), 'whole row lit at the shift p
 env.car.rpm = 10960
 frame(2)
 check(limiterActive(app), 'limiter blinks at 99.5 % of the limiter')
+env.car.rpm = 3000
+frame(20)
+env.car.rpm = 10850                 -- 98.6 %: the RPM bouncing on the cut, never 99.5 %
+frame(2)
+check(limiterActive(app), 'limiter blinks while the RPM bounces just under the cut (98.5 %)')
+env.car.rpm, env.car.gear = 10700, 0
+frame(20)
+check(app.engine.find(app.runtime.compiled, 'shiftPoint').active and not limiterActive(app),
+  'shift point also in neutral (revving in the pits)')
+env.car.gear = 3
 
 -- learning the real limiter from AC's flag
 env.car.rpm = 10400
