@@ -824,12 +824,35 @@ do
   local f = mock.override.fields
   check('kb test: combineAxis off while driving', f.combineAxis == false)
   check('kb test: gas ramps 1.5 /s', near(f.gas, 0.75, 0.03), f.gas)
-  check('kb test: steering = AC copy at 145 km/h', near(f.steer, 0.5 * 1.75 * 0.236, 0.01), f.steer)
+  check('kb test: steering faster than AC at 145 km/h (slowdown 0)', near(f.steer, 0.5 * 1.75 * 0.74, 0.01), f.steer)
   check('kb test: KERS left alone', f.kers == -1 and f.mguhMode == -1)
   frames(app, 120, same)
   t = window(app)
   check('kb test: equal values reported as matching', t:find('Plyn: SEDÍ', 1, true) ~= nil and
     t:find('Řízení: SEDÍ', 1, true) ~= nil, t)
+  check('kb test: fast steering, equal values not reported as different',
+    t:find('Řízení rychleji než AC (nad 100 km/h): NESEDÍ', 1, true) == nil, t)
+
+  -- AC applies its own keyboard steering filter after the override: the fast-steering check catches it.
+  mock.click['Vynulovat měření'] = true
+  window(app)
+  mock.keys[VK_RIGHT] = nil
+  frames(app, 60, same)
+  mock.keys[VK_LEFT] = true
+  local acSteer = mock.car.steer / 270
+  for _ = 1, 40 do
+    app.update(1 / 60)
+    local fl = mock.override.fields
+    mock.car.gas, mock.car.brake = fl.gas, fl.brake
+    -- AC's filter: towards the written value at most 1.75 * 0.236 /s
+    local step = 1.75 * 0.236 / 60
+    acSteer = acSteer + math.max(-step, math.min(step, fl.steer - acSteer))
+    mock.car.steer = acSteer * 270
+  end
+  t = window(app)
+  check('kb test: AC steering filter after the override reported', t:find('Řízení rychleji než AC (nad 100 km/h): NESEDÍ', 1, true) ~= nil, t)
+  mock.keys[VK_LEFT] = nil
+  mock.keys[VK_RIGHT] = true
 
   -- AC changes the throttle after the override: reported.
   mock.click['Vynulovat měření'] = true
@@ -837,6 +860,17 @@ do
   frames(app, 120, function (g) return g * 0.5 end)
   t = window(app)
   check('kb test: different throttle reported', t:find('Plyn: NESEDÍ', 1, true) ~= nil, t)
+
+  -- Mouse steering on: refused.
+  mock.controls.KEYBOARD.MOUSE_STEER = '1'
+  for _, cb in ipairs(mock.callbacks.controls) do cb() end
+  frames(app, 2)
+  check('kb test: mouse steering switches the test off', f.steer == math.huge and f.combineAxis == true)
+  mock.controls.KEYBOARD.MOUSE_STEER = '0'
+  for _, cb in ipairs(mock.callbacks.controls) do cb() end
+  mock.click['Zapnout test'] = true
+  window(app)
+  frames(app, 30, same)
 
   -- Input method changed to gamepad mid-test: hands the car back.
   mock.controls.HEADER.INPUT_METHOD = 'X360'

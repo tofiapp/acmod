@@ -63,6 +63,9 @@ tlačítkem „Vypnout test“ se řízení vrátí AC.
    zatáčky nad 100 km/h.
 4. Okno ukazuje u plynu, brzdy a řízení **SEDÍ** / **NESEDÍ**. Pošli `kb-test.csv` a screenshot okna.
 
+Pozor: zpomalení řízení s rychlostí je v testu schválně 0 % – ve vysoké rychlosti zatáčí rychleji než AC. Jinak by
+nešlo poznat, jestli AC svůj klávesnicový filtr na řízení ještě používá.
+
 ## Vývoj
 
 ```bash

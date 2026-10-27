@@ -9,8 +9,9 @@
 -- unless set to math.huge. While the test is on, this app computes its own gas, brake and steering from AC's keyboard
 -- binds (smooth ramps, steering = KeyDrive's copy of AC's keyboard steering) and writes them every frame. It then
 -- compares what the car really runs (car.gas, car.brake, car.steer) with what was written:
---   - equal everywhere, also with the rear wheels spinning, with brake above 0.75 and at high speed: AC does not
---     process the override, variant A works;
+--   - equal everywhere, also with the driven wheels spinning (AC's keyboard throttle help), with brake above 0.75 (AC
+--     holds keyboard brake at 0.55-0.70) and while steering faster than AC's keyboard filter allows above 100 km/h: AC
+--     does not process the override, variant A works;
 --   - different: AC still applies its keyboard filter after the override.
 -- The app runs only while its window is open (LAZY = FULL); closing it gives the car back to AC.
 -- A CSV of the last 120 s goes to Documents/Assetto Corsa/logs/keydrive/kb-test.csv.
@@ -24,8 +25,9 @@ local S = ac.storage({
   maxBrake = 100,    -- % brake with the brake key held
   brakeRise = 300,   -- % per second
   steerRate = 100,   -- % of AC's keyboard steering rates
-  slowdown = 100,    -- % of AC's steering slowdown with speed
-}, 'kdkt_')
+  slowdown = 0,      -- % of AC's steering slowdown with speed. 0 by default: the test must steer faster than AC's own
+                     -- keyboard filter, else a filter applied after the override would pass our values unchanged
+}, 'kdkt2_')
 
 local GAS_FALL = 6       -- per second
 local BRAKE_FALL = 8     -- per second
@@ -52,7 +54,7 @@ end
 -- AC keyboard binds and input method
 
 local K = { gas = 38, brake = 40, left = 37, right = 39, handbrake = -1,
-  steerSpeed = 1.75, steerOpposite = 2.5, steerReset = 1.8, method = '?' }
+  steerSpeed = 1.75, steerOpposite = 2.5, steerReset = 1.8, method = '?', mouseSteer = 0, mousePedals = 0 }
 
 local function parse(cfg, section, key, fallback)
   local v = cfg:get(section, key, '')
@@ -68,7 +70,10 @@ local function readControls()
   K.brake = parse(cfg, 'KEYBOARD', 'BRAKE', K.brake)
   K.left = parse(cfg, 'KEYBOARD', 'LEFT', K.left)
   K.right = parse(cfg, 'KEYBOARD', 'RIGHT', K.right)
-  K.handbrake = parse(cfg, 'HANDBRAKE', 'KEY', -1)
+  K.handbrake = parse(cfg, 'HANDBRAKE', 'KEY', -1) -- Content Manager keeps the keyboard handbrake here
+  if K.handbrake <= 0 then K.handbrake = parse(cfg, 'KEYBOARD', 'HANDBRAKE', -1) end
+  K.mouseSteer = parse(cfg, 'KEYBOARD', 'MOUSE_STEER', 0)
+  K.mousePedals = parse(cfg, 'KEYBOARD', 'MOUSE_ACCELERATOR_BRAKE', 0)
   K.steerSpeed = math.max(0.1, parse(cfg, 'KEYBOARD', 'STEERING_SPEED', 1.75))
   K.steerOpposite = math.max(0.1, parse(cfg, 'KEYBOARD', 'STEERING_OPPOSITE_DIRECTION_SPEED', 2.5))
   K.steerReset = math.max(0.1, parse(cfg, 'KEYBOARD', 'STEER_RESET_SPEED', 1.8))
@@ -129,9 +134,9 @@ end
 
 local function newStat() return { n = 0, bad = 0, max = 0, sum = 0 } end
 local stats = {
-  gas = newStat(), gasSpin = newStat(),       -- all samples / rear wheels spinning (where AC's keyboard TC acts)
+  gas = newStat(), gasSpin = newStat(),       -- all samples / driven wheels spinning (where AC's keyboard TC acts)
   brake = newStat(), brakeHigh = newStat(),   -- all / written brake above 0.75 (AC's keyboard brake stays <= 0.7)
-  steer = newStat(), steerFast = newStat(),   -- all / above 100 km/h (where AC's steering slows down most)
+  steer = newStat(), steerFast = newStat(),   -- all / above 100 km/h while steering faster than AC's keyboard filter
 }
 local function resetStats()
   for _, s in pairs(stats) do s.n, s.bad, s.max, s.sum = 0, 0, 0, 0 end
@@ -147,6 +152,7 @@ end
 local wGas, wBrake, wSteer = 0, 0, 0
 local pGas, pBrake, pSteer = 0, 0, 0
 local readByPhysics = false
+local lastStep = 1 / 60  -- dt of the last write step (rate of the last steering change)
 
 local function errOf(actual, now, prev)
   local a, b = math.abs(actual - now), math.abs(actual - prev)
@@ -165,6 +171,7 @@ local COLUMNS = {
   { 'w_steer', '%.4f' }, { 'car_steer', '%.4f' }, { 'steer_deg', '%.2f' },
   { 'speed_kmh', '%.1f' }, { 'gear', '%d' }, { 'rpm', '%.0f' },
   { 'nd_fl', '%.3f' }, { 'nd_fr', '%.3f' }, { 'nd_rl', '%.3f' }, { 'nd_rr', '%.3f' },
+  { 'car_clutch', '%.3f' }, { 'tc_active', '%d' }, { 'abs_active', '%d' },
 }
 local NC = #COLUMNS
 local header, rowFormat
@@ -189,6 +196,13 @@ do
   end
 end
 
+-- Optional car fields (not in the public SDK): probed once, logged as -1 when missing.
+local function probe(name)
+  return pcall(function () return car[name] and 1 or 0 end)
+end
+local hasClutch = pcall(function () return car.clutch + 0 end)
+local hasTC, hasABS = probe('tractionControlInAction'), probe('absInAction')
+
 local lastDt = 0
 local function sample(steerLock)
   head = head % SIZE + 1
@@ -198,10 +212,14 @@ local function sample(steerLock)
   v[4][head] = readByPhysics and 1 or 0
   v[5][head] = down(K.gas) and 1 or 0; v[6][head] = down(K.brake) and 1 or 0
   v[7][head] = down(K.left) and 1 or 0; v[8][head] = down(K.right) and 1 or 0
-  v[9][head] = wGas; v[10][head] = car.gas; v[11][head] = wBrake; v[12][head] = car.brake
-  v[13][head] = wSteer; v[14][head] = car.steer / steerLock; v[15][head] = car.steer
+  -- w_* = the value written in the previous frame: the one the car state of this frame can already show
+  v[9][head] = pGas; v[10][head] = car.gas; v[11][head] = pBrake; v[12][head] = car.brake
+  v[13][head] = pSteer; v[14][head] = car.steer / steerLock; v[15][head] = car.steer
   v[16][head] = car.speedKmh; v[17][head] = car.gear; v[18][head] = car.rpm
   v[19][head] = w[0].ndSlip; v[20][head] = w[1].ndSlip; v[21][head] = w[2].ndSlip; v[22][head] = w[3].ndSlip
+  v[23][head] = hasClutch and car.clutch or -1
+  v[24][head] = hasTC and (car.tractionControlInAction and 1 or 0) or -1
+  v[25][head] = hasABS and (car.absInAction and 1 or 0) or -1
 end
 
 local row = {}
@@ -260,7 +278,8 @@ end
 
 local function canRun()
   if K.method ~= 'KEYBOARD' then return false, 'Input method v AC není Keyboard (teď: ' .. K.method .. ').' end
-  if not car.isUserControlled then return false, 'Auto teď neřídíte vy.' end
+  if K.mouseSteer ~= 0 or K.mousePedals ~= 0 then return false, 'Vypněte v AC řízení a pedály myší.' end
+  if not car.isUserControlled or car.isAIControlled then return false, 'Auto teď neřídíte vy.' end
   if sim.isReplayActive then return false, 'Běží replay.' end
   return true, ''
 end
@@ -288,15 +307,22 @@ function script.update(dt)
       add(stats.gas, eG, GAS_TOL)
       add(stats.brake, eB, GAS_TOL)
       add(stats.steer, eS, STEER_TOL)
-      local w = car.wheels
-      local rear = math.max(w[2].ndSlip, w[3].ndSlip)
-      if rear > 1.2 and wGas > 0.3 then add(stats.gasSpin, eG, GAS_TOL) end
+      local w, t = car.wheels, car.tractionType
+      local spin = t == 1 and math.max(w[0].ndSlip, w[1].ndSlip) or t == 0 and math.max(w[2].ndSlip, w[3].ndSlip)
+        or math.max(w[0].ndSlip, w[1].ndSlip, w[2].ndSlip, w[3].ndSlip)
+      if spin > 1.2 and wGas > 0.3 then add(stats.gasSpin, eG, GAS_TOL) end
       if wBrake > 0.75 then add(stats.brakeHigh, eB, GAS_TOL) end
-      if car.speedKmh > 100 and math.abs(wSteer) > 0.01 then add(stats.steerFast, eS, STEER_TOL) end
+      -- Steering only tells something where the written value moved faster than AC's own keyboard filter would let it
+      -- (else a filter after the override would pass it unchanged).
+      local acRate = K.steerSpeed * speedFactor(math.abs(car.speedKmh))
+      if car.speedKmh > 100 and math.abs(wSteer - pSteer) > 1.5 * acRate * lastStep then
+        add(stats.steerFast, eS, STEER_TOL)
+      end
     end
 
     -- 2. New values from the keys.
     local d = dt > 0.05 and 0.05 or dt
+    lastStep = d
     pGas, pBrake, pSteer = wGas, wBrake, wSteer
     wGas = approach(wGas, down(K.gas) and S.maxGas / 100 or 0, S.gasRise / 100, GAS_FALL, d)
     wBrake = approach(wBrake, down(K.brake) and S.maxBrake / 100 or 0, S.brakeRise / 100, BRAKE_FALL, d)
@@ -393,7 +419,10 @@ function script.windowMain(dt)
   verdictLine('Brzda', stats.brake, GAS_TOL, 100, '%')
   verdictLine('Brzda nad 75 %', stats.brakeHigh, GAS_TOL, 100, '%')
   verdictLine('Řízení', stats.steer, STEER_TOL, car.steerLock, '°')
-  verdictLine('Řízení nad 100 km/h', stats.steerFast, STEER_TOL, car.steerLock, '°')
+  verdictLine('Řízení rychleji než AC (nad 100 km/h)', stats.steerFast, STEER_TOL, car.steerLock, '°')
+  if S.slowdown > 60 then
+    ui.textColored('Pro test řízení nastavte zpomalení s rychlostí na 0 (jinak AC filtr nejde poznat).', WARN)
+  end
   ui.text(string.format('Teď: plyn %.0f/%.0f %%, brzda %.0f/%.0f %%, volant %.0f/%.0f°  (zapsáno/v autě)',
     wGas * 100, car.gas * 100, wBrake * 100, car.brake * 100, wSteer * car.steerLock, car.steer))
 
