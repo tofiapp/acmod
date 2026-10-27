@@ -8,7 +8,8 @@ M.THRESHOLDS = {
   peakSlip = 1.5,        -- USER: peak driven-wheel slip <= 1.5 x target (target = tyre peak, ndSlip 1)
   over13Time = 0.10,     -- USER: slip above 1.3 x target at most 0.1 s in one go
   steadyDirChanges = 1,  -- USER: throttle direction changes per second in steady state
-  steadyStd = 0.02,      -- USER: "variance < 2 %": std of the 0..1 throttle around its trend in steady state
+  steadyStd = 0.02,      -- USER: "variance < 2 %": std of the 0..1 throttle around its 0.5 s moving average in steady
+                         -- state (a ramp or a plateau is not variance, wobble is)
   lossDry = 0.05,        -- USER: loss against the oracle in the dry
   lossOther = 0.15,      -- PROPOSAL: loss bound in wet / cold / grip-change / tapping (else a timid controller
                          -- would pass them for free)
@@ -82,22 +83,26 @@ local function disturbances(scn, tr)
   return t
 end
 
--- Direction changes per second and detrended std of the throttle over [t0, t1].
+-- Direction changes per second and std of the throttle around its own 0.5 s moving average over [t0, t1]
+-- (a slow trend, e.g. the key ramp reaching full throttle, is not variance; wobble faster than ~1 Hz is).
+local MA_WINDOW = 0.5
 local function windowStats(tr, every, t0, t1)
-  local xs, ts = {}, {}
+  local xs = {}
   for i = 1, tr.n, every do
-    if tr.t[i] >= t0 and tr.t[i] <= t1 then xs[#xs + 1], ts[#ts + 1] = tr.thr[i], tr.t[i] end
+    if tr.t[i] >= t0 and tr.t[i] <= t1 then xs[#xs + 1] = tr.thr[i] end
   end
-  if #xs < 8 then return nil end
   local n = #xs
-  local mt, mx = 0, 0
-  for k = 1, n do mt, mx = mt + ts[k], mx + xs[k] end
-  mt, mx = mt / n, mx / n
-  local sxy, sxx = 0, 0
-  for k = 1, n do sxy, sxx = sxy + (ts[k] - mt) * (xs[k] - mx), sxx + (ts[k] - mt) ^ 2 end
-  local slope = sxx > 0 and sxy / sxx or 0
-  local var = 0
-  for k = 1, n do var = var + (xs[k] - (mx + slope * (ts[k] - mt))) ^ 2 end
+  if n < 8 then return nil end
+  local dt = (tr.t[2] - tr.t[1]) * every
+  local half = math.max(1, math.floor(MA_WINDOW / dt / 2 + 0.5))
+  local var, cnt = 0, 0
+  for k = 1 + half, n - half do
+    local m = 0
+    for j = k - half, k + half do m = m + xs[j] end
+    m = m / (2 * half + 1)
+    var = var + (xs[k] - m) ^ 2
+    cnt = cnt + 1
+  end
   local changes, dir, ref = 0, 0, xs[1]
   for k = 2, n do
     local d = xs[k] - ref
@@ -107,7 +112,7 @@ local function windowStats(tr, every, t0, t1)
       dir, ref = sgn, xs[k]
     end
   end
-  return changes / (t1 - t0), math.sqrt(var / n)
+  return changes / (t1 - t0), cnt > 0 and math.sqrt(var / cnt) or 0
 end
 
 -- Summary of a reference trace (oracle or zero throttle) that evaluate() needs; lets the optimizer cache them.

@@ -57,6 +57,10 @@ M.DEFAULTS = {
   FALL_MAX = 5,         -- per second, fastest cap reduction
   V_REF = 0,            -- m/s, low-speed reference: below it the slip is scaled by speed / V_REF (0 = off)
   MEM = 1,              -- MODE 2: 1 = use the per gear/rpm memory as the return level after a cut, 0 = no memory
+  LAT_SPLIT = 1,        -- MODE 2: regulate the longitudinal part of the slip (slipRatio / learned peak ratio) against
+                        -- what the friction ellipse leaves: sqrt(target^2 - lateral^2). In a corner the tyres already
+                        -- use part of the combined ndSlip sideways; without this the cap never rises there.
+  KAPPA_PEAK = 0.12,    -- slip ratio at the tyre's peak (start value; learned from straight-running driven wheels)
 }
 
 local RPM_BAND = 500
@@ -96,6 +100,7 @@ function M.new(params)
     crossGear = 0,
     crossOut = 1,       -- throttle when the current spin started
     slipRate = 0, prevSlip = 0,
+    sx = 0, kappaPeak = p.KAPPA_PEAK, hasRatio = false, lateral = 0, targetX = 1,
   }, M)
   for g = 1, GEARS do
     o.memory[g], o.stamp[g], o.known[g] = {}, {}, {}
@@ -120,12 +125,15 @@ function M:configure(carState)
   self.available = okR and finite(r) and w.tyreRadius > 0.05
   local okN, nd = pcall(function () return w.ndSlip end)
   self.usesNdSlip = okN and type(nd) == 'number' and finite(nd)
+  local okS, sr = pcall(function () return w.slipRatio + w.slipAngle end)
+  self.hasRatio = self.usesNdSlip and okS and type(sr) == 'number' and finite(sr)
   self:reset()
 end
 
 function M:reset()
   self.slip, self.ratio, self.k, self.limit, self.riseScale, self.memoryNow = 0, 0, 1, 1, 1, 1
   self.slipRate, self.prevSlip = 0, 0
+  self.sx, self.lateral, self.targetX = 0, 0, 1
   self.active, self.airborne = false, false
   self.overTime = 0
   self.A = 1
@@ -151,6 +159,35 @@ local function measure(self, carState)
   local slip = nd and ndSum / loadSum or ratio / FALLBACK_SCALE
   if not finite(slip) or not finite(ratio) then return nil end
   return slip, ratio
+end
+
+-- Load-weighted |slipRatio| of the driven wheels (AC's own slip ratio), and online learning of the peak slip ratio
+-- from wheels running nearly straight (|slipAngle| < 1.5 deg): ndSlip is normalised to the peak there, so
+-- peak = |slipRatio| / ndSlip (the brake limiter learns its peak the same way).
+local function measureLong(self, dt)
+  local wheels, driven = self.wheels, self.driven
+  local sum, loadSum = 0, 0
+  for k = 1, self.drivenCount do
+    local w = wheels[driven[k]]
+    local load = w.load
+    if load > MIN_LOAD then
+      local sr = w.slipRatio
+      if sr < 0 then sr = -sr end
+      sum = sum + sr * load
+      loadSum = loadSum + load
+      local nd = w.ndSlip
+      local sa = w.slipAngle
+      if sa < 0 then sa = -sa end
+      if sa < 1.5 and nd > 0.3 and nd < 1.5 then
+        local p = sr / nd
+        if p > 0.04 and p < 0.4 then self.kappaPeak = self.kappaPeak + (p - self.kappaPeak) * math.min(1, dt / 2) end
+      end
+    end
+  end
+  if loadSum <= 0 then return nil end
+  local r = sum / loadSum
+  if not finite(r) then return nil end
+  return r
 end
 
 -- Remembered level of a band with the slow recovery applied.
@@ -202,23 +239,47 @@ local function update2(self, dt, carState, requested, target, response)
       if v < P.V_REF then slip = slip * math.max(v, 2) / P.V_REF end
     end
     local a = math.min(1, dt / P.SLIP_TAU)
-    local s0 = self.slip
-    self.slip = s0 + (slip - s0) * a
+    self.slip = self.slip + (slip - self.slip) * a
     self.ratio = self.ratio + (ratio - self.ratio) * a
-    local rate = (self.slip - s0) / dt
+    -- regulated quantity: the combined slip, or (LAT_SPLIT) its longitudinal part against what the ellipse leaves
+    local reg, tgt = self.slip, target
+    if P.LAT_SPLIT ~= 0 and self.hasRatio then
+      local r = measureLong(self, dt)
+      if r then
+        local sxNow = r / self.kappaPeak
+        if P.V_REF > 0 then
+          local v = carState.localVelocity.z
+          v = v < 0 and -v or v
+          if v < P.V_REF then sxNow = sxNow * math.max(v, 2) / P.V_REF end
+        end
+        self.sx = self.sx + (sxNow - self.sx) * a
+        local s2, x2 = self.slip * self.slip, self.sx * self.sx
+        local lat = s2 > x2 and math.sqrt(s2 - x2) or 0
+        self.lateral = lat
+        local rest = target * target - lat * lat
+        local minT = 0.2 * target
+        tgt = rest > minT * minT and math.sqrt(rest) or minT
+        reg = self.sx
+      end
+    end
+    self.targetX = tgt
+    local s0 = self.prevSlip
+    self.prevSlip = reg
+    local rate = (reg - s0) / dt
     self.slipRate = self.slipRate + (rate - self.slipRate) * math.min(1, dt / P.D_TAU)
-    local sp = self.slip + P.PRED * (self.slipRate > 0 and self.slipRate or 0)
+    local sp = reg + P.PRED * (self.slipRate > 0 and self.slipRate or 0)
+    target = tgt
     if A > requested + P.AW then A = requested + P.AW end
     local out = requested < A and requested or A
     local e = sp / target - 1
     if e > 0 and requested > 0.05 then
-      if self.overTime == 0 and useMem and out > P.LEARN_MIN and self.slip > target then
+      if self.overTime == 0 and useMem and out > P.LEARN_MIN and reg > target then
         local m = (out < mem and out or mem) * P.LEARN_MARGIN
         setLevel(self, gear, band, m)
         mem = m
         self.crossBand, self.crossGear, self.crossOut = band, gear, out
       end
-      if self.slip > target then self.overTime = self.overTime + dt end
+      if reg > target then self.overTime = self.overTime + dt end
       local kd = P.K_DOWN * e
       if e > 1 then kd = kd + P.K_DOWN_SEVERE * (e - 1) end
       if kd > P.FALL_MAX then kd = P.FALL_MAX end
@@ -239,8 +300,8 @@ local function update2(self, dt, carState, requested, target, response)
       self.crossBand = -1
       self.overTime = 0
       local hold = target * P.HOLD_BAND
-      if self.slip < hold then
-        local spare = 1 - self.slip / hold
+      if reg < hold then
+        local spare = 1 - reg / hold
         if A < T then
           A = A + P.K_BACK * response * dt
           if A > T then A = T end
@@ -258,7 +319,7 @@ local function update2(self, dt, carState, requested, target, response)
   local out = requested < A and requested or A
   self.k = requested > 0.02 and out / requested or 1
   self.limit = A
-  self.severe = self.slip > 2 * target
+  self.severe = self.prevSlip > 2 * target
   self.memoryNow = mem
   self.active = out < requested - 0.005 and requested > 0.02
   return out

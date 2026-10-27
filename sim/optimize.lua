@@ -35,6 +35,7 @@ if MODE == 2 then
     { 'FALL_MAX', 'traction', 1, 5 },
     { 'V_REF', 'traction', 0, 8 },
     { 'MEM', 'traction', 0, 1 },
+    { 'LAT_SPLIT', 'traction', 0, 1 },
   }) do SPACE[#SPACE + 1] = p end
 else
   for _, p in ipairs({
@@ -61,7 +62,7 @@ local function toParams(x)
     local v
     if sp[5] then v = math.exp(math.log(sp[3]) + (math.log(sp[4]) - math.log(sp[3])) * u)
     else v = sp[3] + (sp[4] - sp[3]) * u end
-    if sp[1] == 'MEM' then v = v >= 0.5 and 1 or 0 end
+    if sp[1] == 'MEM' or sp[1] == 'LAT_SPLIT' then v = v >= 0.5 and 1 or 0 end
     t[sp[2]][sp[1]] = v
   end
   return t
