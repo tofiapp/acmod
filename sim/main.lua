@@ -64,7 +64,9 @@ for _, name in ipairs(names) do
     if scn.group ~= 'reverse' then
       local plain = runner.run(scn, with({ rate = 'physics', controller = controllers.plainRamp(rise, fall) }))
       local pr = metrics.evaluate(scn, plain, ref)
-      if pr.values.loss and pr.values.loss < -0.01 then
+      -- (only a fair win counts: a ramp that beats it by spinning or sliding is not an oracle defect)
+      if pr.values.loss and pr.values.loss < -0.01 and (pr.values.slideTime or 0) <= metrics.THRESHOLDS.slideTime
+          and (pr.values.peakSlip or 0) <= metrics.THRESHOLDS.peakSlip then
         report.selfTest[#report.selfTest + 1] = string.format('%s %s: plain ramp beats the oracle by %.1f %%',
           name, carName, -pr.values.loss * 100)
       end
