@@ -175,20 +175,26 @@ function M.evaluate(scn, tr, ref)
 
     -- recovery after a disturbance: time until the throttle is back at the request or the slip is near the peak
     if scn.recovery then
-      -- measured as the delay beyond what the driver's own key ramp (RISE) needs from the throttle at that moment
+      -- measured from the moment the spin of the disturbance is over (slip back under 0.8 of the peak) as the delay
+      -- beyond what the driver's own key ramp (RISE) needs from the throttle at that moment
       local t0 = scn.recovery.after
-      local rec, thr0 = nil, nil
+      local i0 = nil
       for i = 1, tr.n do
-        if tr.t[i] >= t0 then
-          thr0 = thr0 or tr.thr[i]
+        if tr.t[i] >= t0 and tr.nd[i] < 0.8 * TARGET then i0 = i; break end
+      end
+      local rec, thr0
+      if i0 then
+        thr0 = tr.thr[i0]
+        for i = i0, tr.n do
           if tr.key[i] and (tr.thr[i] >= tr.req[i] - 0.05 or tr.nd[i] >= 0.8 * TARGET) then
-            rec = tr.t[i] - t0
+            rec = tr.t[i] - tr.t[i0]
             break
           end
         end
       end
       local rampTime = thr0 and math.max(0, (1 - 0.05 - thr0) / (ref.rise or 1.2)) or 0
-      val.recoveryTime = math.max(0, (rec or (tr.t[tr.n] - t0)) - rampTime)
+      local span = i0 and (tr.t[tr.n] - tr.t[i0]) or 0
+      val.recoveryTime = math.max(0, (rec or span) - rampTime)
       chk.recoveryTime = val.recoveryTime <= T.recoveryTime
     end
 

@@ -113,8 +113,8 @@ function M.evaluate(root, set, params, opts)
           local tr = runner.run(sc.def, { car = car.def, grip = sg[1], power = sg[2], rate = rate,
             seed = hash(sc.name .. car.name .. rate), controller = controllers.keydrive(params.throttle, params.traction) })
           local res = metrics.evaluate(sc.def, tr, ref)
-          -- the user's own car (the Supra) counts double
-          total = total + M.runCost(res) * (car.name == 'rwd_supra' and 2 or 1)
+          -- the user's own cars (Supercars Gen3 Supra and Mustang) count double
+          total = total + M.runCost(res) * ((car.name == 'rwd_supra' or car.name == 'rwd_mustang') and 2 or 1)
           runs = runs + 1
           if res.pass then passed = passed + 1 end
           for k, ok in pairs(res.checks) do if not ok then fails[k] = (fails[k] or 0) + 1 end end
