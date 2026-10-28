@@ -54,11 +54,13 @@ local function bounds(cv, W, H, what)
     end
     if c[1] == 'text' then
       local w, size = c[14], c[11]
-      if w > (x2 - x1) + 0.5 then
-        problems[#problems + 1] = string.format('text "%s" %.0f px wide in a %.0f px box', c[10], w, x2 - x1)
+      local bw, bh = x2 - x1, y2 - y1
+      if c[15] == 90 or c[15] == 270 then bw, bh = bh, bw end   -- a turned text runs along the box's height
+      if w > bw + 0.5 then
+        problems[#problems + 1] = string.format('text "%s" %.0f px wide in a %.0f px box', c[10], w, bw)
       end
-      if size * 1.2 > (y2 - y1) * 1.35 + 0.5 then
-        problems[#problems + 1] = string.format('text "%s" %.0f px high in a %.0f px box', c[10], size * 1.2, y2 - y1)
+      if size * 1.2 > bh * 1.35 + 0.5 then
+        problems[#problems + 1] = string.format('text "%s" %.0f px high in a %.0f px box', c[10], size * 1.2, bh)
       end
     end
   end
@@ -74,8 +76,8 @@ local function dump(cv, W, H, name)
       f:write(string.format('rect %.2f %.2f %.2f %.2f %.4f %.4f %.4f %.4f %.2f\n', c[2], c[3], c[4], c[5], c[6], c[7], c[8],
         c[9], c[10] or 0))
     else
-      f:write(string.format('text %.2f %.2f %.2f %.2f %.4f %.4f %.4f %.4f %.2f %d %d|%s\n', c[2], c[3], c[4], c[5], c[6],
-        c[7], c[8], c[9], c[11], c[12], c[13], c[10]))
+      f:write(string.format('text %.2f %.2f %.2f %.2f %.4f %.4f %.4f %.4f %.2f %d %d %d|%s\n', c[2], c[3], c[4], c[5], c[6],
+        c[7], c[8], c[9], c[11], c[12], c[13], c[15] or 0, c[10]))
     end
   end
   f:close()
@@ -426,6 +428,101 @@ local last = orig.textures.txDiffuse
 check(type(last) == 'table' and last.n == 0 and last.background == nil and display.lastRestore:find('pozadím', 1, true),
   'no filename: restored by an empty paint over the original background (' .. tostring(display.lastRestore) .. ')')
 env.noVertices = {}
+
+-- ---------------------------------------------------------------- region from the mesh UVs, texture slots, rotation
+
+H.displayCar(1)
+env.storage = {}
+-- the mesh shows the right half of the top quarter: 512, 0 – 512 x 256 of the 1024 x 1024 texture
+env.displayMesh.uvs = { { 0.5, 0 }, { 1, 0 }, { 1, 0.25 }, { 0.5, 0.25 } }
+env.displayMesh.texSlots = { 'txDiffuse', 'txNormal', 'txEmissive' }
+env.displayMesh.shader = 'ksPerPixelMultiMap_emissive'
+app = H.loadApp()
+frame(3)
+display = require('src/display')
+display.cfg().on = true
+env.car.speedKmh, env.car.rpm, env.car.gear = 120, 9000, 3
+frame(10)
+local function liveCopy()
+  for _, c in ipairs(env.displayMesh.parent.children) do if c.created and not c.disposed then return c end end
+end
+local uc = liveCopy()
+local ux, uy, uw, uh = display.regionOf(1)
+check(display.regionSource(1) == 'uv' and ux == 512 and uy == 0 and uw == 512 and uh == 256,
+  string.format('region from the mesh UVs: %d, %d %d x %d (config says 112, 272 800 x 480)', ux, uy, uw, uh))
+check(uc and type(uc.textures.txDiffuse) == 'table' and type(uc.textures.txEmissive) == 'table'
+  and uc.textures.txEmissive.region.from.x == 512, 'automatic slots: txDiffuse and txEmissive painted')
+check(math.abs(uc.material.ksEmissive.r - 1) < 1e-6 and display.describe(1):find('doplněná', 1, true),
+  'no own glow: ksEmissive 1 so the page glows (' .. tostring(display.describe(1)) .. ')')
+bounds(uc.textures.txDiffuse, 512, 256, 'page in the UV region 512 x 256')
+display.cfg().regionMode = 'config'
+display.retake()
+frame(5)
+ux, uy, uw, uh = display.regionOf(1)
+check(display.regionSource(1) == 'config' and ux == 112 and uy == 272 and uw == 800 and uh == 480,
+  'region source switched to the car config: DISPLAY_POS / SIZE')
+display.cfg().regionMode = nil
+display.cfg().slot = 'txDiffuse'
+display.retake()
+frame(5)
+uc = liveCopy()
+check(uc and type(uc.textures.txDiffuse) == 'table' and uc.textures.txEmissive == nil, 'slot txDiffuse: only txDiffuse painted')
+display.cfg().slot = nil
+-- rotation: drawn upright in a 256 x 512 box, turned clockwise onto the 512 x 256 region
+for _, r in ipairs({ 90, 180, 270 }) do
+  display.cfg().rotation = r
+  display.retake()
+  frame(5)
+  uc = liveCopy()
+  local rc = uc and uc.textures.txDiffuse
+  bounds(rc, 512, 256, 'rotation ' .. r .. ': page inside the region')
+  local turned, full = true, false
+  for i = 1, rc.n do
+    local e = rc.cmds[i]
+    if e[1] == 'text' and e[15] ~= r then turned = false end
+    if e[1] == 'rect' and e[2] < 0.5 and e[3] < 0.5 and e[4] > 511.5 and e[5] > 255.5 then full = true end
+  end
+  check(turned and full, 'rotation ' .. r .. ': every text turned, the background covers the region')
+  if r == 90 then dump(rc, 512, 256, 'rotated_90_512x256') end
+end
+display.cfg().rotation = nil
+-- calibration: a grid over the whole texture, the region outlined with corners 1-4
+display.retake()
+frame(5)
+display.setCalibrate(true)
+frame(5)
+uc = liveCopy()
+local cc = uc and uc.textures.txDiffuse
+check(cc and cc.region.from.x == 0 and cc.region.size.x == 1024 and cc.region.size.y == 1024,
+  'calibration: painted over the whole texture')
+local seen = {}
+for i = 1, cc.n do if cc.cmds[i][1] == 'text' then seen[cc.cmds[i][10]] = true end end
+check(seen['1'] and seen['2'] and seen['3'] and seen['4'] and seen['512'] and seen['512, 0  512×256'],
+  'calibration: corners, grid numbers and the region numbers')
+bounds(cc, 1024, 1024, 'calibration grid')
+dump(cc, 1024, 1024, 'calibration_1024x1024')
+local p0 = env.paints
+frame(30)
+check(env.paints == p0, 'calibration: painted once, not every frame')
+display.cfg().adjust = { { 0, 16, 0, -32 } }
+display.applyRegion(1)
+frame(5)
+check(env.paints > p0, 'calibration: a region change paints the grid again')
+display.setCalibrate(false)
+frame(5)
+uc = liveCopy()
+check(uc and uc.textures.txDiffuse.region.from.x == 512 and uc.textures.txDiffuse.region.from.y == 16
+  and uc.textures.txDiffuse.region.size.y == 224, 'calibration off: taken again, page back in the corrected region')
+-- what the profile keeps
+local store = require('src/store')
+local kept = store.sanitiseCar({ display = { on = true, page = 2, slot = 'txDiffuse', regionMode = 'config', rotation = 90,
+  adjust = { [2] = { 4, -8, 'x', 100000 } } } }).display
+check(kept.slot == 'txDiffuse' and kept.regionMode == 'config' and kept.rotation == 90 and kept.adjust[1] == nil
+  and kept.adjust[2][1] == 4 and kept.adjust[2][2] == -8 and kept.adjust[2][3] == 0 and kept.adjust[2][4] == 4096,
+  'saved per car: slot, region source, rotation, region correction (sanitised)')
+local bad = store.sanitiseCar({ display = { slot = 'txNormal', rotation = 45, regionMode = 'x' } }).display
+check(bad.slot == nil and bad.rotation == nil and bad.regionMode == nil, 'bad values dropped')
+env.displayMesh.uvs, env.displayMesh.texSlots, env.displayMesh.shader = nil, nil, nil
 
 -- ---------------------------------------------------------------- the tab: drawn, no UI error, no allocation
 

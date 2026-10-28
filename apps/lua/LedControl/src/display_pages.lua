@@ -346,6 +346,65 @@ local function overlay(W, H, d, o)
   if hasSub then text(d.overlaySub, W * 0.05, H * 0.6, W * 0.9, H * 0.3, 400, 0.5, fg) end
 end
 
+-- ---------------------------------------------------------------- calibration grid
+
+-- The whole texture TW x TH: a grid with pixel coordinates, the region rx, ry, rw, rh filled and outlined, corners
+-- numbered 1-4 clockwise from the top left, a strip on the edge where the top of the page lands (rot: clockwise
+-- rotation of the page) and the region's numbers in its middle. Seen on the car, it tells which part of the texture
+-- the display shows and how it is turned.
+local numbers = {}
+local function num(n)
+  local s = numbers[n]
+  if not s then s = tostring(n); numbers[n] = s end
+  return s
+end
+local CORNER_COLOURS = { 0xFF3030, 0x30FF30, 0x3080FF, 0xFFFFFF }
+local regionText, regionFor = '', ''
+function M.calibration(TW, TH, rx, ry, rw, rh, rot)
+  pageH = TH
+  ui.pushDWriteFont(style.font)
+  rect(0, 0, TW, TH, 0x000000)
+  rect(rx, ry, rw, rh, 0x183058)
+  -- top of the page
+  local e = math.max(4, math.min(rw, rh) * 0.08)
+  if rot == 90 then rect(rx + rw - e, ry, e, rh, 0xFF8000)
+  elseif rot == 180 then rect(rx, ry + rh - e, rw, e, 0xFF8000)
+  elseif rot == 270 then rect(rx, ry, e, rh, 0xFF8000)
+  else rect(rx, ry, rw, e, 0xFF8000) end
+  -- grid: every cell carries its top left corner, x (cyan) over y (pink), so any part of the texture tells where it is
+  local step = 32
+  while math.max(TW, TH) / step > 16 do step = step * 2 end
+  local lw = math.max(1, step / 48)
+  local fs = step * 0.26
+  for x = step, TW - 1, step do rect(x - lw / 2, 0, lw, TH, 0x505050) end
+  for y = step, TH - 1, step do rect(0, y - lw / 2, TW, lw, 0x505050) end
+  for x = 0, TW - 1, step do
+    for y = 0, TH - 1, step do
+      text(num(x), x + lw * 2, y + lw, step * 0.85, fs * 1.25, fs, 0, 0x80E0FF)
+      text(num(y), x + lw * 2, y + lw + fs * 1.25, step * 0.85, fs * 1.25, fs, 0, 0xFF90C0)
+    end
+  end
+  -- outline
+  local o = math.max(2, math.min(rw, rh) * 0.02)
+  rect(rx, ry, rw, o, 0xFFD200); rect(rx, ry + rh - o, rw, o, 0xFFD200)
+  rect(rx, ry, o, rh, 0xFFD200); rect(rx + rw - o, ry, o, rh, 0xFFD200)
+  -- corners 1..4 clockwise
+  local c = math.min(rw, rh) * 0.22
+  local m = o + e
+  rect(rx + m, ry + m, c, c, CORNER_COLOURS[1]); text('1', rx + m, ry + m, c, c, c, 0.5, 0x000000)
+  rect(rx + rw - m - c, ry + m, c, c, CORNER_COLOURS[2]); text('2', rx + rw - m - c, ry + m, c, c, c, 0.5, 0x000000)
+  rect(rx + rw - m - c, ry + rh - m - c, c, c, CORNER_COLOURS[3])
+  text('3', rx + rw - m - c, ry + rh - m - c, c, c, c, 0.5, 0x000000)
+  rect(rx + m, ry + rh - m - c, c, c, CORNER_COLOURS[4]); text('4', rx + m, ry + rh - m - c, c, c, c, 0.5, 0x000000)
+  local key = rx * 1e12 + ry * 1e8 + rw * 1e4 + rh
+  if key ~= regionFor then
+    regionFor = key
+    regionText = string.format('%d, %d  %d×%d', rx, ry, rw, rh)
+  end
+  text(regionText, rx + rw * 0.1, ry + rh * 0.35, rw * 0.8, rh * 0.3, rh * 0.3, 0.5, 0xFFD200)
+  ui.popDWriteFont()
+end
+
 -- Draws page `page` (index in PAGES) of size W x H at the current origin, with a takeover overlay on top.
 function M.draw(page, W, H, d)
   pageH = H

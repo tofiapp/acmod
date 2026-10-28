@@ -34,6 +34,10 @@ def used_names():
             names.add(m.group(1) + "." + m.group(2) + ("." + m.group(3) if m.group(3) and m.group(2)[0].isupper() else ""))
         for m in re.finditer(r":([A-Za-z_]\w*)\(", code):
             methods.add(m.group(1))
+        # a method called under pcall: pcall(obj.method, obj, ...)
+        for m in re.finditer(r"pcall\(\s*([\w\[\].]+)\.([A-Za-z_]\w*)\s*,\s*([\w\[\].]+)\s*[,)]", code):
+            if m.group(1) == m.group(3):
+                methods.add(m.group(2))
     return sorted(names), sorted(methods)
 
 

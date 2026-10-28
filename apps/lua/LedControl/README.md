@@ -160,21 +160,28 @@ Nastavení vzhledu (sbalené sekce):
   diody a pruhů; písmo (Bahnschrift, Segoe UI, Arial, Consolas); zaoblení; jas; rychlost v km/h nebo mph.
 - **Řada diod**: zobrazit / skrýt, počet políček (4–24), výška, mezera.
 - **Vlastní stránka**: co je na kterém místě.
-- **Oblast displeje**: posun a velikost oblasti v textuře, když stránka sedí posunutá nebo oříznutá. Po úpravě se
-  displej převezme znovu, aby v textuře nezůstal starý snímek.
+- **Oblast displeje**: kam v textuře se kreslí. **Výchozí oblast** je *Podle meshe* (část textury, kterou mesh displeje
+  opravdu ukazuje, z jeho UV) nebo *Podle konfigurace auta* (`DISPLAY_POS` / `DISPLAY_SIZE`); když hra vrcholy meshe
+  nevydá, jde jen konfigurace. **Otočení** 0 / 90 / 180 / 270° pro displej, který leží v textuře bokem.
+  **Kalibrace** nakreslí přes celou texturu mřížku: v každém políčku je modře x a pod ním růžově y (pixely textury),
+  žlutý rámeček je oblast, kam se kreslí, rohy 1–4 jdou po směru hodinových ručiček a oranžový pruh je horní okraj
+  stránky. Podle čísel u okrajů displeje nastavte posun a velikost, aby rámeček seděl na okraje. Po úpravě se displej
+  převezme znovu, aby v textuře nezůstal starý snímek. Oprava oblasti se ukládá pro auto.
 
 Rozvržení se řídí tvarem displeje: na úzkém pruhu (např. MoTeC, šířka víc než 2,4× výška) jsou údaje vedle sebe, na
 vysokém displeji pod sebou, jinak klasicky. **Velikost textu** a **Okraje** (sekce Vzhled) je doladí.
 
 Jas (hned pod stránkou, nesbalený): **Svit displeje** mění, jak silně displej svítí sám (emisivita jeho materiálu,
 100 % = jako v autě, až 400 %); **Jas barev** tlumí barvy stránky; **V noci ztlumit** podle času na trati (před 6:00
-a od 20:00) ztlumí obojí na zadanou hodnotu. Když displej sám nesvítí, karta to napíše a jde měnit jen Jas barev.
+a od 20:00) ztlumí obojí na zadanou hodnotu. Materiál, který sám nesvítí, dostane emisivitu 1, aby stránka svítila
+jako displej a nebyla nasvícená jako plast.
 
 Funguje u aut, která mají displej jako „scriptable display“ CSP (sekce `[SCRIPTABLE_DISPLAY_...]` v konfiguraci auta).
 Normálně se kreslí do kopie displeje a původní se schová. Když hra z meshe displeje kopii udělat nedovolí (nevydá jeho
 vrcholy, třeba `motec_data_display`), kreslí se přímo do displeje a po vypnutí se vrátí jeho původní textura; karta to
-napíše. Po vypnutí (nebo po pádu skriptu) je displej zpátky. Když po převzetí zůstane displej černý, zkuste v sekci
-**Textura** druhou volbu.
+napíše. Po vypnutí (nebo po pádu skriptu) je displej zpátky. Sekce **Textura**: *Automaticky* kreslí do txDiffuse a,
+když ho materiál má, i do txEmissive; když po převzetí zůstane displej černý, zkuste jen txDiffuse nebo jen txEmissive.
+Řádek **Materiál** ukáže shader, textury materiálu, kam se kreslí, emisivitu a oblast (je i v Kopírovat diagnostiku).
 
 ### Klávesy
 

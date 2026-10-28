@@ -49,8 +49,13 @@ def render(path):
                 draw.rectangle(box, fill=colour(r, g, b, a))
         elif row.startswith("text "):
             head, _, text = row.partition("|")
-            x1, y1, x2, y2, r, g, b, a, size, ha, va = head.split()[1:12]
+            parts = head.split()
+            x1, y1, x2, y2, r, g, b, a, size, ha, va = parts[1:12]
+            rot = int(parts[12]) if len(parts) > 12 else 0
             x1, y1, x2, y2, size = float(x1), float(y1), float(x2), float(y2), float(size)
+            # the box as drawn before a turn (ui.beginRotation / endPivotRotation), text laid out in it, then turned
+            bw, bh = (y2 - y1, x2 - x1) if rot in (90, 270) else (x2 - x1, y2 - y1)
+            boxImg = Image.new("RGBA", (max(1, int(round(bw))), max(1, int(round(bh)))), (0, 0, 0, 0))
             font = load_font(size)
             box = draw.textbbox((0, 0), text, font=font)
             tw, th = box[2] - box[0], box[3] - box[1]
@@ -62,15 +67,17 @@ def render(path):
                 layer = layer.resize((max(1, int(target)), max(1, th)))
                 tw = layer.size[0]
             ha, va = int(ha), int(va)
-            x = x1 if ha < 0 else (x2 - tw if ha > 0 else (x1 + x2 - tw) / 2)
-            y = y1 if va < 0 else (y2 - th if va > 0 else (y1 + y2 - th) / 2)
+            x = 0 if ha < 0 else (bw - tw if ha > 0 else (bw - tw) / 2)
+            y = 0 if va < 0 else (bh - th if va > 0 else (bh - th) / 2)
             # clipped to the box, as ui.dwriteDrawTextClipped does
-            px, py = int(round(x)), int(round(y))
-            cx1, cy1 = max(0, int(x1) - px), max(0, int(y1) - py)
-            cx2, cy2 = min(layer.size[0], int(x2) - px), min(layer.size[1], int(y2) - py)
+            boxImg.paste(layer, (int(round(x)), int(round(y))), layer)
+            if rot:
+                boxImg = boxImg.rotate(-rot, expand=True)
+            px, py = int(round(x1)), int(round(y1))
+            cx1, cy1 = max(0, -px), max(0, -py)
+            cx2, cy2 = min(boxImg.size[0], w - px), min(boxImg.size[1], h - py)
             if cx2 > cx1 and cy2 > cy1:
-                part = layer.crop((cx1, cy1, cx2, cy2))
-                img.alpha_composite(part, (px + cx1, py + cy1))
+                img.alpha_composite(boxImg.crop((cx1, cy1, cx2, cy2)), (px + cx1, py + cy1))
     out = path.with_suffix(".png")
     img.save(out)
     return out, img

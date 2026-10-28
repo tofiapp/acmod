@@ -15,13 +15,18 @@
 -- Refresh: at most S.displayHz paints per second and only when something drawn changed (a number fingerprint of
 -- every value on the page), so a standing car is not repainted at all.
 --
--- UNSURE (needs the game): which texture slot a display uses (txDiffuse by default, txEmissive selectable); whether
--- the callback's coordinates are relative to the region (assumed, as the licence plate code draws at 0, 0); whether
--- a copy's cloned material keeps receiving the display script's texture (the copy's slot is replaced, so it should
--- not matter); how expensive a paint is.
+-- Region: the bounding box of the mesh's UVs (the part of the texture the display really shows) when the game gives
+-- the vertices, else DISPLAY_POS / DISPLAY_SIZE; a per car correction, a rotation and a calibration grid on top.
+-- Slots: txDiffuse, plus txEmissive when the material has that slot; a material without its own glow gets
+-- ksEmissive 1, so the page is not lit like plastic.
+--
+-- UNSURE (needs the game): whether the callback's coordinates are relative to the region (assumed, as the licence
+-- plate code draws at 0, 0); the UV orientation (v down, as texture pixels); whether AC multiplies ksEmissive by
+-- txEmissive / txDiffuse on every display shader; whether a copy's cloned material keeps receiving the display
+-- script's texture (the copy's slot is replaced, so it should not matter); how expensive a paint is.
 
 local csp = require('src/csp')
-local ac, vec2, vec3, rgbm = csp.ac, csp.vec2, csp.vec3, csp.rgbm
+local ac, ui, vec2, vec3, rgbm = csp.ac, csp.ui, csp.vec2, csp.vec3, csp.rgbm
 local config = require('src/config')
 local engine = require('src/engine')
 local presets = require('src/presets')
@@ -42,10 +47,14 @@ local M = {
 }
 
 local VIRTUAL_N = 12
+-- texture slots painted: 1 automatic (txDiffuse, plus txEmissive when the material has that slot, so the page glows
+-- like the car's own display), 2 txDiffuse only, 3 txEmissive only
 local SLOTS = { 'txDiffuse', 'txEmissive' }
 M.SLOTS = SLOTS
+M.SLOT_MODES = { 'auto', 'txDiffuse', 'txEmissive' }
 
 local profile, carId, saveFn = nil, '', nil
+local timer, lastFp, t = 0, -1, 0      -- paint timer, fingerprint of the last paint, clock
 local function save() if saveFn then pcall(saveFn) end end
 M.save = save
 local function bump() M.version = M.version + 1 end
@@ -177,17 +186,66 @@ local function release(i)
   M.nTaken = M.nTaken - 1
 end
 
-local function slotName()
+local function slotMode()
   local s = cfg().slot
-  for i = 1, #SLOTS do if SLOTS[i] == s then return s end end
-  return SLOTS[1]
+  if s == 'txDiffuse' or s == 'txEmissive' then return s end
+  return 'auto'
+end
+M.slotMode = slotMode
+
+-- what a mesh's material offers: shader name, texture slots, whether it has txEmissive
+local function materialInfo(ref)
+  local info = { shader = '?', slots = {}, emissiveSlot = false }
+  local okS, sh = pcall(ref.shaderName, ref, 1)
+  if okS and sh then info.shader = tostring(sh) end
+  local okC, n = pcall(ref.getTextureSlotsCount, ref, 1)
+  if okC and tonumber(n) then
+    for k = 1, math.min(16, n) do
+      local okN, name = pcall(ref.getTextureSlotName, ref, 1, k)
+      if okN and name then
+        info.slots[#info.slots + 1] = name
+        if name == 'txEmissive' then info.emissiveSlot = true end
+      end
+    end
+  end
+  return info
+end
+
+-- the slots to paint on a mesh with this material
+local function slotsFor(info)
+  local m = slotMode()
+  if m == 'txDiffuse' then return { 'txDiffuse' } end
+  if m == 'txEmissive' then return { 'txEmissive' } end
+  if info.emissiveSlot then return { 'txDiffuse', 'txEmissive' } end
+  return { 'txDiffuse' }
+end
+
+-- part of the texture the mesh shows: bounding box of its UVs in texture pixels (nil when unusable)
+local function uvBox(v, res)
+  local okN, n = pcall(v.size, v)
+  if not okN or not n or n < 3 then return nil end
+  local u1, v1, u2, v2 = math.huge, math.huge, -math.huge, -math.huge
+  for k = 1, math.min(n, 20000) do
+    local vert = v:get(k)
+    local uv = vert and vert.uv
+    if uv then
+      if uv.x < u1 then u1 = uv.x end
+      if uv.y < v1 then v1 = uv.y end
+      if uv.x > u2 then u2 = uv.x end
+      if uv.y > v2 then v2 = uv.y end
+    end
+  end
+  u1, v1, u2, v2 = math.max(0, u1), math.max(0, v1), math.min(1, u2), math.min(1, v2)
+  if u2 - u1 < 0.02 or v2 - v1 < 0.02 then return nil end
+  return { math.floor(u1 * res.x + 0.5), math.floor(v1 * res.y + 0.5), math.floor((u2 - u1) * res.x + 0.5),
+    math.floor((v2 - v1) * res.y + 0.5) }
 end
 
 local function take(i)
   local d = M.displays[i]
   local root = ac.findNodes('carRoot:0')
-  local slot = slotName()
-  local t = { copies = {}, origs = {}, direct = {}, targets = {}, isDirect = {}, params = nil, mode = '' }
+  local t = { copies = {}, origs = {}, direct = {}, targets = {}, isDirect = {}, slots = {}, infos = {}, params = nil,
+    mode = '', uv = nil }
   for _, name in ipairs(d.meshes) do
     local ref = root:findMeshes(name)
     for k = 1, #ref do
@@ -195,11 +253,14 @@ local function take(i)
       local okV, v = pcall(one.getVertices, one)
       local okI, ix = pcall(one.getIndices, one)
       local copy = nil
+      if okV and v and not t.uv then t.uv = uvBox(v, d.res) end
       if okV and okI and v and ix then
         local okC, c = pcall(one:getParent().createMesh, one:getParent(),
           string.format('__ledcontrol_disp_%d_%d', i, #t.copies + 1), nil, v, ix, false, true)
         if okC and c and #c > 0 then copy = c end
       end
+      local info = materialInfo(one)
+      local slots = slotsFor(info)
       if copy then
         t.copies[#t.copies + 1] = copy
         copy:assignMaterialFrom(one)
@@ -207,12 +268,15 @@ local function take(i)
         t.origs[#t.origs + 1] = one
         t.targets[#t.targets + 1] = copy
       else
-        local okF, file = pcall(one.getTextureSlotFilename, one, 1, slot)
         one:ensureUniqueMaterials()
-        t.direct[#t.direct + 1] = { ref = one, slot = slot, file = okF and file or nil }
+        for q = 1, #slots do
+          local okF, file = pcall(one.getTextureSlotFilename, one, 1, slots[q])
+          t.direct[#t.direct + 1] = { ref = one, slot = slots[q], file = okF and file or nil }
+        end
         t.targets[#t.targets + 1] = one
         t.isDirect[#t.targets] = true
       end
+      t.slots[#t.targets], t.infos[#t.targets] = slots, info
     end
   end
   -- the material's own glow (ksEmissive), scaled by the Svit setting; written only when the factor changes
@@ -221,7 +285,16 @@ local function take(i)
     local ref = t.targets[k]
     local ok, v = pcall(ref.getMaterialPropertyValue, ref, 1, 'ksEmissive')
     if ok and v ~= nil and type(v) ~= 'number' then
-      t.glowBase[k] = vec3(v.x or v.r or 0, v.y or v.g or 0, v.z or v.b or 0)
+      local b = vec3(v.x or v.r or 0, v.y or v.g or 0, v.z or v.b or 0)
+      -- the page glows only with an emissive colour: a material without its own glow gets 1, so the display is not
+      -- lit like plastic (UNSURE: assumes AC's shaders multiply ksEmissive by txEmissive or, without it, by txDiffuse)
+      t.glowOwn = t.glowOwn or (b.x > 0.001 or b.y > 0.001 or b.z > 0.001)
+      -- (and AC's emissive is multiplied by txDiffuse, so a material without txEmissive glows with the page too)
+      if b.x < 0.001 and b.y < 0.001 and b.z < 0.001 then
+        b.x, b.y, b.z = 1, 1, 1
+        t.glowAdded = true
+      end
+      t.glowBase[k] = b
     end
   end
   if #t.targets == 0 then error('mesh displeje nenalezen (' .. table.concat(d.meshes, ', ') .. ')') end
@@ -233,14 +306,29 @@ local function take(i)
   for k = 1, #t.origs do t.origs[k]:setVisible(false) end
   -- the parameters of the paint call, reused (the callback reads the display being painted from `painting`)
   t.params = { textureSize = d.res, background = BLACK, region = { from = vec2(), size = vec2() }, callback = nil }
+  -- calibration: the whole texture with a grid and the region outlined
+  t.calParams = { textureSize = d.res, background = BLACK, region = { from = vec2(0, 0), size = vec2(d.res.x, d.res.y) },
+    callback = nil }
   M.applyRegion(i)
 end
 
 -- Region of display i with the user's correction (profile.display.adjust[i] = { x, y, w, h } in texture pixels).
+-- region source per display: 'uv' (the mesh's UVs, when the game gives the vertices) or 'config' (DISPLAY_POS / SIZE)
+function M.regionSource(i)
+  local t = M.taken[i]
+  local mode = cfg().regionMode
+  if mode ~= 'config' and t and t.uv then return 'uv' end
+  return 'config'
+end
+
 function M.regionOf(i)
   local d = M.displays[i]
   local a = cfg().adjust and cfg().adjust[i]
   local x, y, w, h = d.pos.x, d.pos.y, d.size.x, d.size.y
+  if M.regionSource(i) == 'uv' then
+    local u = M.taken[i].uv
+    x, y, w, h = u[1], u[2], u[3], u[4]
+  end
   if type(a) == 'table' then
     x, y = x + (tonumber(a[1]) or 0), y + (tonumber(a[2]) or 0)
     w, h = math.max(16, w + (tonumber(a[3]) or 0)), math.max(16, h + (tonumber(a[4]) or 0))
@@ -254,7 +342,27 @@ function M.applyRegion(i)
   local x, y, w, h = M.regionOf(i)
   t.params.region.from.x, t.params.region.from.y = x, y
   t.params.region.size.x, t.params.region.size.y = w, h
-  t.w, t.h = w, h
+  t.x, t.y, t.w, t.h = x, y, w, h
+  if M.calibrate then lastFp = -1 end
+end
+
+-- Rotation of the page in the texture, clockwise (profile.display.rotation: 0, 90, 180, 270). A display can lie
+-- turned in its texture (acc-lua-examples dash_display_8100: 172 x 1152 area, displayRotationAngle 90).
+M.ROTATIONS = { 0, 90, 180, 270 }
+function M.rotation()
+  local r = tonumber(cfg().rotation) or 0
+  if r == 90 or r == 180 or r == 270 then return r end
+  return 0
+end
+
+-- Calibration (tab Displej -> Oblast displeje, not saved): the whole texture gets a grid with pixel coordinates and
+-- the region outlined with numbered corners, so the part the mesh shows can be read off the car's display.
+M.calibrate = false
+function M.setCalibrate(on)
+  if M.calibrate == on then return end
+  M.calibrate = on
+  if not on then M.retake() else lastFp = -1 end   -- off: taken again, so the grid outside the region goes away
+  bump()
 end
 
 -- How display i is taken ('copy', 'direct', 'mixed' or nil) for the tab.
@@ -269,6 +377,7 @@ end
 
 function M.releaseAll()
   for i in pairs(M.taken) do release(i) end
+  M.calibrate = false                  -- (master off, car change, error: the grid does not come back on its own)
   M.taken, M.nTaken = {}, 0
   if guardWritten then config.set('displayGuard', ''); guardWritten = false end
   bump()
@@ -493,10 +602,29 @@ end
 -- ---------------------------------------------------------------- painting
 
 local painting = nil           -- the display being painted (read by the callback)
+local PIVOT = vec2()
 local function paintCallback()
   local t = M.taken[painting]
   pages.origin(0, 0, 1)
-  pages.draw(M.page, t.w, t.h, D)
+  local r = M.rotation()
+  if r == 0 then pages.draw(M.page, t.w, t.h, D); return end
+  -- drawn upright in a box of the turned size, then turned around a pivot so it lands on the region (0, 0, w, h):
+  -- ui.endPivotRotation(angle, pivot) turns by 90 - angle clockwise (dash_display_8100 passes 0 for a display
+  -- turned by 90 degrees, overtake mode passes 90 + small angle for a slight tilt)
+  local W, H = t.w, t.h
+  if r ~= 180 then W, H = t.h, t.w end
+  ui.beginRotation()
+  pages.draw(M.page, W, H, D)
+  if r == 90 then PIVOT.x, PIVOT.y = H / 2, H / 2
+  elseif r == 270 then PIVOT.x, PIVOT.y = W / 2, W / 2
+  else PIVOT.x, PIVOT.y = W / 2, H / 2 end
+  ui.endPivotRotation(90 - r, PIVOT)
+end
+local function calibCallback()
+  local t = M.taken[painting]
+  local d = M.displays[painting]
+  pages.origin(0, 0, 1)
+  pages.calibration(d.res.x, d.res.y, t.x, t.y, t.w, t.h, M.rotation())
 end
 
 -- glow factor of the display now (Svit x night)
@@ -527,12 +655,27 @@ function M.glows(i)
   return false
 end
 
+-- one line per taken display for the diagnostics: shader, slots, glow, region source
+function M.describe(i)
+  local t = M.taken[i]
+  if not t then return nil end
+  local info = t.infos[1] or { shader = '?', slots = {} }
+  local x, y, w, h = M.regionOf(i)
+  return string.format('shader %s | textury %s | kreslí do %s | emisivita %s%s | oblast %s %d,%d %d×%d',
+    info.shader, table.concat(info.slots, ','), table.concat(t.slots[1] or {}, '+'),
+    t.glowOwn and 'vlastní' or 'žádná', t.glowAdded and ' (doplněná 1)' or '', M.regionSource(i), x, y, w, h)
+end
+
 local function paint(i)
   local t = M.taken[i]
-  t.params.callback = paintCallback
+  local params = t.params
+  if M.calibrate then params = t.calParams; params.callback = calibCallback
+  else params.callback = paintCallback end
   painting = i
-  local slot = slotName()
-  for k = 1, #t.targets do t.targets[k]:setMaterialTexture(slot, t.params) end
+  for k = 1, #t.targets do
+    local slots = t.slots[k]
+    for q = 1, #slots do t.targets[k]:setMaterialTexture(slots[q], params) end
+  end
   painting = nil
   M.paints = M.paints + 1
 end
@@ -553,7 +696,6 @@ function M.init(prof, info, id, saveProfile)
   bump()
 end
 
-local timer, lastFp, t = 0, -1, 0
 
 -- true when display i should be taken now
 local function wanted(i)
@@ -591,7 +733,10 @@ function M.update(dt, ST, preset)
   timer = 0
   local f = fill(ST, preset, t)
   for i in pairs(M.taken) do pcall(applyGlow, M.taken[i]) end
-  if f == lastFp then return end       -- nothing on the page changed: no paint
+  if M.calibrate then
+    if lastFp ~= -1 then return end    -- the grid is painted once per region change
+    f = 0
+  elseif f == lastFp then return end   -- nothing on the page changed: no paint
   lastFp = f
   for i in pairs(M.taken) do
     local ok, err = pcall(paint, i)

@@ -254,11 +254,27 @@ function refmt:isTransparent(i) local o = self[i or 1]; return o ~= nil and o.tr
 function refmt:setShadows(v) for i = 1, #self do self[i].shadows = v end return self end
 function refmt:setTransparent(v) for i = 1, #self do self[i].transparent = v end return self end
 -- (M.noVertices[name] = true: the game gives no vertex data for that mesh, as getVertices may return nil)
+-- The vertex list knows only UVs (mesh opts uvs = { { u, v }, ... }, default none: size 0) as ac.VertexBuffer
+-- :size() / :get(i) -> ac.MeshVertex { uv } (acc-lua-sdk lib_scene.lua).
 M.noVertices = {}
+local vbmt = {}
+vbmt.__index = vbmt
+function vbmt:size() return self.source.uvs and #self.source.uvs or 0 end
+function vbmt:get(i)
+  local uv = self.source.uvs and self.source.uvs[i]
+  if not uv then return nil end
+  return { pos = vec3(), normal = vec3(), uv = vec2(uv[1], uv[2]) }
+end
 function refmt:getVertices()
-  if self[1] and self[1].kind == 'mesh' and not M.noVertices[self[1].name] then return { source = self[1] } end
+  if self[1] and self[1].kind == 'mesh' and not M.noVertices[self[1].name] then
+    return setmetatable({ source = self[1] }, vbmt)
+  end
   return nil
 end
+-- material description (mesh opts shader / texSlots, default ksPerPixel with txDiffuse only)
+function refmt:shaderName(i) local o = self[i or 1]; return o and (o.shader or 'ksPerPixel') or nil end
+function refmt:getTextureSlotsCount(i) local o = self[i or 1]; return o and #(o.texSlots or { 'txDiffuse' }) or 0 end
+function refmt:getTextureSlotName(i, k) local o = self[i or 1]; return o and (o.texSlots or { 'txDiffuse' })[k] or nil end
 function refmt:getTextureSlotFilename(index, slot)
   if type(index) == 'string' then index, slot = 1, index end
   local o = self[index or 1]
@@ -662,6 +678,13 @@ JSON = {
 -- ---------------------------------------------------------------- ui
 
 local U = M.ui
+local function turnPoint(cw, pivot, x, y)
+  local dx, dy = x - pivot.x, y - pivot.y
+  if cw == 90 then return pivot.x - dy, pivot.y + dx
+  elseif cw == 180 then return pivot.x - dx, pivot.y - dy
+  elseif cw == 270 then return pivot.x + dy, pivot.y - dx end
+  return x, y
+end
 local function rec(s) if U.record then U.texts[#U.texts + 1] = s end end
 ui = {
   ColorPickerFlags = { PickerHueBar = 1, NoPicker = 4, NoTooltip = 64, NoAlpha = 2, NoInputs = 32 },
@@ -706,6 +729,22 @@ ui = {
   end,
   dummy = function () end,
   getCursor = function () return vec2(0, 0) end,
+  -- rotation (acc-lua-sdk ui: beginRotation / endPivotRotation(deg, pivot), 90 = no turn): the canvas commands drawn
+  -- in between are turned by 90 - deg clockwise around the pivot (multiples of 90 only; e[15] = the text's turn)
+  beginRotation = function () if M.recording then M.recording.rotFrom = M.recording.n + 1 end end,
+  endPivotRotation = function (deg, pivot)
+    local cv = M.recording
+    if not cv or not cv.rotFrom then return end
+    local cw = ((90 - deg) % 360 + 360) % 360
+    for k = cv.rotFrom, cv.n do
+      local e = cv.cmds[k]
+      local x1, y1 = turnPoint(cw, pivot, e[2], e[3])
+      local x2, y2 = turnPoint(cw, pivot, e[4], e[5])
+      e[2], e[3], e[4], e[5] = math.min(x1, x2), math.min(y1, y2), math.max(x1, x2), math.max(y1, y2)
+      if e[1] == 'text' then e[15] = cw end
+    end
+    cv.rotFrom = nil
+  end,
   getCursorX = function () return 0 end,
   getCursorY = function () return 0 end,
   drawCircleFilled = function () end,
@@ -717,7 +756,7 @@ ui = {
       if not e then e = {}; cv.cmds[cv.n] = e end          -- reused between paints: the mock must not allocate
       e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9] = 'rect', p1.x, p1.y, p2.x, p2.y, c.r, c.g, c.b, c.mult or 1
       e[10] = rounding or 0
-      for k = 11, 14 do e[k] = nil end
+      for k = 11, 15 do e[k] = nil end
     end
   end,
   -- DirectWrite text (signatures as official CSP code calls them; widths: UNSURE, 0.52 x size per character for
@@ -735,7 +774,7 @@ ui = {
       local e = cv.cmds[cv.n]
       if not e then e = {}; cv.cmds[cv.n] = e end
       e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9] = 'text', p1.x, p1.y, p2.x, p2.y, c.r, c.g, c.b, c.mult or 1
-      e[10], e[11], e[12], e[13], e[14] = t, size, ha, va, M.textWidth(t, size)
+      e[10], e[11], e[12], e[13], e[14], e[15] = t, size, ha, va, M.textWidth(t, size), 0
     end
   end,
   drawRect = function () end,

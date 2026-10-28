@@ -69,8 +69,22 @@ local T = {
   custom = 'Vlastní stránka##dispCustom',
   customHelp = 'Co ukáže stránka Vlastní na kterém místě (rozvržení jako stránka Závod).',
   area = 'Oblast displeje##dispArea',
-  areaHelp = 'Kde v textuře displeje se kreslí. Když stránka sedí posunutá, oříznutá nebo moc malá, upravte ji tady '
-    .. '(v pixelech textury, k hodnotám z konfigurace auta).',
+  areaHelp = 'Kde v textuře displeje se kreslí. Když stránka sedí posunutá, oříznutá nebo moc malá, zapněte Kalibraci '
+    .. 'a upravte ji tady (v pixelech textury, k výchozí oblasti).',
+  source = 'Výchozí oblast',
+  sourceHelp = 'Podle meshe: část textury, kterou mesh displeje opravdu ukazuje (z jeho UV). Podle konfigurace: '
+    .. 'DISPLAY_POS / DISPLAY_SIZE z konfigurace auta. Když hra vrcholy meshe nedá, jde jen konfigurace.',
+  sourceLabels = { 'Podle meshe##dispSrc1', 'Podle konfigurace auta##dispSrc2' },
+  sourceNoUv = 'Mesh nedal vrcholy (UV), oblast je z konfigurace auta: dolaďte ji s Kalibrací.',
+  rotation = 'Otočení',
+  rotationHelp = 'Když je displej v textuře otočený (stránka je na volantu bokem nebo vzhůru nohama), otočte ji tady '
+    .. '(po směru hodinových ručiček). Při kalibraci ukazuje oranžový pruh, kam padne horní okraj stránky.',
+  rotationLabels = { '0°##dispRot1', '90°##dispRot2', '180°##dispRot3', '270°##dispRot4' },
+  calibrate = 'Kalibrace (mřížka přes celou texturu)##dispCalib',
+  calibrateHelp = 'Na displej se nakreslí mřížka přes celou texturu: v každém políčku je nahoře modře x a pod ním '
+    .. 'růžově y jeho levého horního rohu (pixely textury). Žlutý rámeček je oblast, kam se kreslí (rohy 1–4 po směru '
+    .. 'hodinových ručiček, oranžový pruh = horní okraj stránky). Podle čísel u okrajů displeje na volantu nastavte '
+    .. 'posun a velikost tak, aby rámeček seděl přesně na okraje displeje. Neukládá se.',
   areaX = 'Posun vodorovně',
   areaY = 'Posun svisle',
   areaW = 'Šířka ±',
@@ -79,8 +93,9 @@ local T = {
   areaNone = 'Oblast jde upravit, až bude displej převzatý.',
   advanced = 'Textura##dispAdvanced',
   slot = 'Textura',
-  slotHelp = 'Do které textury materiálu displeje se kreslí. Když displej po převzetí zůstane černý nebo se nemění, '
-    .. 'zkuste druhou.',
+  slotHelp = 'Do které textury materiálu displeje se kreslí. Automaticky: txDiffuse, a když ji materiál má, i '
+    .. 'txEmissive (svítí jako displej auta). Když displej po převzetí zůstane černý nebo se nemění, zkuste jinou.',
+  material = 'Materiál',
   preview = 'Náhled',
   running = 'Kreslí se %d× za sekundu',
   idle = 'Displej se teď nepřekresluje (nic se nemění)',
@@ -96,7 +111,8 @@ local THEME_LABELS = labels(pages.THEMES, 'name', 'dispTheme')
 THEME_LABELS[#THEME_LABELS + 1] = 'Vlastní##dispTheme0'
 local FONT_LABELS = labels(pages.FONTS, 'name', 'dispFont')
 local UNIT_LABELS = { 'km/h##dispUnit1', 'mph##dispUnit2' }
-local SLOT_LABELS = { 'txDiffuse##dispSlot1', 'txEmissive##dispSlot2' }
+local SLOT_LABELS = { 'Automaticky##dispSlot0', 'txDiffuse##dispSlot1', 'txEmissive##dispSlot2' }
+local SLOT_INDEX = { auto = 1, txDiffuse = 2, txEmissive = 3 }
 local GROUP_LABELS = {}
 for i = 1, #pages.OVERLAY_GROUPS do GROUP_LABELS[i] = pages.OVERLAY_GROUPS[i][2] .. '##dispGroup' .. i end
 local GROUP_KEYS = { pit = 'displayPit', flags = 'displayFlags', fuel = 'displayFuel' }
@@ -314,6 +330,26 @@ local function areaRows()
   for k = 1, #display.displays do if display.modeOf(k) then i = k; break end end
   if not i then K.dim(T.areaNone); return end
   local c = display.cfg()
+  K.label(T.source)
+  local src = K.choice(T.sourceLabels, c.regionMode == 'config' and 2 or 1)
+  if src then
+    c.regionMode = src == 2 and 'config' or nil
+    display.save()
+    display.retake()
+  end
+  K.help(T.sourceHelp)
+  if not display.taken[i] or not display.taken[i].uv then K.note(T.sourceNoUv, K.GREY) end
+  K.label(T.rotation)
+  local rot = K.choice(T.rotationLabels, display.rotation() / 90 + 1)
+  if rot then
+    c.rotation = rot > 1 and (rot - 1) * 90 or nil
+    display.save()
+    display.retake()
+  end
+  K.help(T.rotationHelp)
+  local cal = ui.checkbox(T.calibrate, display.calibrate)
+  if cal then display.setCalibrate(not display.calibrate) end
+  K.help(T.calibrateHelp)
   local a = (c.adjust and c.adjust[i]) or ZERO
   for k = 1, 4 do
     local e = AREA[k]
@@ -345,16 +381,28 @@ local function areaRows()
   end
 end
 
+local describeText, describeVersion = '', -1
 local function advanced()
   local c = display.cfg()
   K.label(T.slot)
-  local pick = K.choice(SLOT_LABELS, c.slot == 'txEmissive' and 2 or 1)
+  local pick = K.choice(SLOT_LABELS, SLOT_INDEX[display.slotMode()] or 1)
   if pick then
-    c.slot = pick == 2 and 'txEmissive' or nil
+    c.slot = pick == 2 and 'txDiffuse' or (pick == 3 and 'txEmissive' or nil)
     display.save()
     display.retake()
   end
   K.help(T.slotHelp)
+  for k = 1, #display.displays do
+    if display.modeOf(k) then
+      if describeVersion ~= display.version then
+        describeVersion = display.version
+        describeText = display.describe(k) or ''
+      end
+      K.label(T.material)
+      K.dim(describeText)
+      break
+    end
+  end
 end
 
 local size = vec2()

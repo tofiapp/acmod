@@ -89,8 +89,24 @@ local function sanitiseCar(t)
       which = {}
       for i = 1, 8 do if d.which[i] == true then which[i] = true end end
     end
+    -- region correction per display: { x, y, w, h } in texture pixels
+    local adjust = nil
+    if type(d.adjust) == 'table' then
+      for i = 1, 8 do
+        local a = d.adjust[i]
+        if type(a) == 'table' then
+          adjust = adjust or {}
+          local v = {}
+          for k = 1, 4 do v[k] = math.max(-4096, math.min(4096, math.floor(tonumber(a[k]) or 0))) end
+          adjust[i] = v
+        end
+      end
+    end
+    local rot = tonumber(d.rotation)
     out.display = { on = d.on == true, which = which, page = math.max(1, math.min(9, math.floor(tonumber(d.page) or 1))),
-      slot = (d.slot == 'txEmissive') and 'txEmissive' or nil }
+      slot = (d.slot == 'txEmissive' or d.slot == 'txDiffuse') and d.slot or nil, adjust = adjust,
+      regionMode = d.regionMode == 'config' and 'config' or nil,
+      rotation = (rot == 90 or rot == 180 or rot == 270) and rot or nil }
   end
   return out
 end

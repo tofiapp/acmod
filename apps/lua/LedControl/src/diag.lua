@@ -7,7 +7,7 @@ local safety = require('src/safety')
 local lights = require('src/lights')
 
 local S = config.S
-local M = { VERSION = '0.6.1' }
+local M = { VERSION = '0.6.2' }
 
 local function join(list)
   if type(list) ~= 'table' then return tostring(list) end
@@ -100,6 +100,8 @@ function M.text()
     for i = 1, #dsp.displays do
       add('  %s [%s] převzetí: %s, svítí sám: %s', dsp.displays[i].label, dsp.displays[i].section,
         tostring(dsp.modeOf(i) or 'ne'), tostring(dsp.glows(i)))
+      local okX, line = pcall(dsp.describe, i)
+      if okX and line then add('    %s | otočení %d°', line, dsp.rotation()) end
     end
     if dsp.lastRestore then add('  poslední návrat displeje: %s', dsp.lastRestore) end
   end

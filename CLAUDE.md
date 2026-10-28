@@ -256,12 +256,18 @@ apps/lua/LedControl/
                           { textureSize, background, region, callback }) (SDK lib_scene; CSP traffic tool); virtual
                           LED row = engine on a 12 cell layout with the car's preset; overlays from catalogue scenario
                           tests; at most S.displayHz paints, only when the fingerprint of the shown values changed;
-                          profile.display { on, which, page, slot, adjust = { [i] = { x, y, w, h } } }; a mesh whose
+                          profile.display { on, which, page, slot (nil auto = txDiffuse + txEmissive when the material
+                          has it, 'txDiffuse', 'txEmissive'), regionMode (nil = mesh UVs via getVertices():get(k).uv
+                          bounding box, 'config'), rotation (0/90/180/270 clockwise: ui.beginRotation +
+                          endPivotRotation(90 - r, pivot) as dash_display_8100), adjust = { [i] = { x, y, w, h } } };
+                          M.calibrate (not saved) paints a grid over the whole texture with the region outlined
+                          (display_pages.calibration); describe(i) = shader / slots / painted / glow / region; a mesh whose
                           getVertices is nil is painted directly (ensureUniqueMaterials, getTextureSlotFilename kept
                           and set back on release); design settings S.display* (theme / own colours, font, rounding,
                           brightness, LED row, zones of Vlastní, units) -> display_pages.setStyle via applyStyle;
                           the tab saves sliders / pickers once they rest (config.setLive / flushLive); glow = the
-                          material's own ksEmissive (read at take) x S.displayGlow x night factor, written on change;
+                          material's own ksEmissive (read at take; 0 -> 1 so the page glows, UNSURE) x S.displayGlow x
+                          night factor, written on change;
                           a region change retakes (nothing stale outside the region); direct release restores the
                           slot filename, else one empty paint with background nil
   src/display_pages.lua   pages Závod / Otáčky / Kola / Vlastní + OVERLAYS, THEMES, FONTS, FIELDS; arrangement by

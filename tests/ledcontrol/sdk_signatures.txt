@@ -79,6 +79,7 @@ ui.TreeNodeFlags.DefaultOpen | common/ac_ui_enums.lua:345 | DefaultOpen         
 ui.TreeNodeFlags.Framed | common/ac_ui_enums.lua:341 | Framed                  = 0x2,    -- Full colored frame (e.g. for CollapsingHeader)
 ui.alignTextToFramePadding | official app-csp-defaults/TimeShift/TimeShift.lua:46 | ui.alignTextToFramePadding()
 ui.availableSpaceX | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:435 | ui.setNextItemWidth(ui.availableSpaceX())
+ui.beginRotation | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:230 | ui.beginRotation()
 ui.button | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:305 | if ui.button('Back') then
 ui.checkbox | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:394 | if ui.checkbox('Snap to surfaces', settings.autosnap) then
 ui.childWindow | common/ac_ui.lua:225 | function ui.childWindow(id, size, border, flags, content)
@@ -89,6 +90,7 @@ ui.drawRect | official app-csp-defaults/RGBControl/RGBControl.lua:261 | ui.drawR
 ui.drawRectFilled | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:228 | ui.drawRectFilled(from, from + range, rgbm(0, 0, 0, 0.5))
 ui.dummy | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:217 | ui.dummy(range)
 ui.dwriteDrawTextClipped | official app-csp-defaults/SetupExchange/IconCounter.lua:11 | ui.dwriteDrawTextClipped(c > 99 and '99+' or c, c > 99 and 18 or 22, vec2(15, 6), 64, ui.Alignment.Center, ui.Alignment.Center)
+ui.endPivotRotation | official acc-lua-internal/included-apps/Mumble/src/MumbleWrapper.lua:1121 | ui.endPivotRotation(math.round(os.preciseClock() * -10) * 45, cur + overlayIconPosR)
 ui.getClipboardText | official app-csp-defaults/WebBrowser/src/Controls.lua:523 | clipboardContent = ui.getClipboardText():trim()
 ui.getCursorX | official app-csp-defaults/InternetRadio/InternetRadio.lua:238 | local cr1, cr2 = vec2(0, 0), vec2(ui.getCursorX() + ui.availableSpaceX() - 20, math.huge)
 ui.getCursorY | official app-csp-defaults/InternetRadio/InternetRadio.lua:253 | draggingPos = ui.getCursorY()
@@ -135,21 +137,31 @@ ui.unindent | official acc-lua-internal/included-cars/android_auto/system.lua:54
 :boundingSphere | lib_scene.lua:904 | boundingSphere = function (s, index, outVec)
 :byte | common/ac_struct_item.lua:96 | function ac.StructItem.byte() return {t = 1, c = counter()} end
 :control | common/ac_extras_binaryinput.lua:164 | control = function(s, size, flags, emptyLabel)
+:countMatches | lib_scene.lua:991 | countMatches = function (s, other)
 :createMesh | lib_scene.lua:318 | createMesh = function (s, name, materialName, vertices, indices, keepAlive, moveData)
+:dispose | lib_hashspace.lua:30 | function HashSpaceItem:dispose()
 :ensureUniqueMaterials | lib_scene.lua:230 | ensureUniqueMaterials = function (s) ffi.C.lj_noderef_ensureuniquematerials__scene(s) return s end,
 :find | official app-csp-defaults/SetupExchange/SetupExchange.lua:304 | if item:find('PRESSURE_[LR]F') then return 'Tyre pressure (front)' end
 :findMeshes | lib_scene.lua:264 | findMeshes = function (s, filter) return s == nil and _emptyNodeRef() or cr(ffi.C.lj_noderef_find__scene(s, nf(filter), 0x20000)) end,
+:get | lib_scene.lua:43 | function _ac_VertexBuffer:get(index) end
 :getIndices | lib_scene.lua:366 | getIndices = function (s)
+:getMaterialPropertyValue | lib_scene.lua:872 | getMaterialPropertyValue = function (s, index, property)
 :getMaterialsCount | lib_scene.lua:888 | getMaterialsCount = function (s)
 :getParent | lib_scene.lua:630 | getParent = function (s) return cr(ffi.C.lj_noderef_parent__scene(s)) end,
+:getTextureSlotFilename | lib_scene.lua:825 | getTextureSlotFilename = function (s, index, slot)
+:getTextureSlotName | lib_scene.lua:786 | getTextureSlotName = function (s, index, slotIndex)
+:getTextureSlotsCount | lib_scene.lua:771 | getTextureSlotsCount = function (s, index)
 :getTransformationRaw | lib_scene.lua:574 | getTransformationRaw = function (s)
 :getVertices | lib_scene.lua:357 | getVertices = function (s)
 :gmatch | official app-csp-defaults/ext_controls/src/controls/control_definition.lua:56 | for item in tostring(value or ""):gmatch("([^,]+)") do
 :gsub | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:345 | fileName = filename:gsub('.*[/\\\\]', '')
 :isActive | lib_scene.lua:694 | isActive = function (s, index)
+:isCastingShadows | lib_scene.lua:722 | isCastingShadows = function (s, index)
+:isTransparent | lib_scene.lua:715 | isTransparent = function (s, index)
 :isVisible | lib_scene.lua:701 | isVisible = function (s, index)
 :lower | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:346 | if fileName:lower():match('%.csv$') then
 :match | lib_binary.lua:178 | function _readMt_index:match(pattern)
+:materialName | lib_scene.lua:736 | materialName = function (s, index)
 :mul | common/ac_primitive_rgbm.d.lua:103 | function rgbm:mul(valueToMultiplyBy, out) end
 :mulSelf | common/ac_matrices.d.lua:149 | function mat4x4:mulSelf(other) end
 :name | lib_scene.lua:687 | name = function (s, index)
@@ -160,6 +172,8 @@ ui.unindent | official acc-lua-internal/included-cars/android_auto/system.lua:54
 :setShadows | lib_scene.lua:470 | setShadows = function (s, shadows) ffi.C.lj_noderef_setshadows__scene(s, shadows == true) return s end,
 :setTransparent | lib_scene.lua:482 | setTransparent = function (s, transparent) ffi.C.lj_noderef_settransparent__scene(s, transparent == true) return s end,
 :setVisible | lib_scene.lua:466 | setVisible = function (s, visible, resetMotion) ffi.C.lj_noderef_setvisible__scene(s, visible == true, resetMotion ~= false) return s end,
+:shaderName | lib_scene.lua:764 | shaderName = function (s, index)
+:size | lib_scene.lua:245 | size = function (s) return s.__size end,
 :sub | common/ac_primitive_rgbm.d.lua:98 | function rgbm:sub(valueToSubtract, out) end
 :transformPointTo | common/ac_matrices.d.lua:108 | function mat4x4:transformPointTo(destination, vec) end
 :upper | official app-csp-defaults/PocketTechnician/PocketTechnician.lua:9 | return x:upper()
