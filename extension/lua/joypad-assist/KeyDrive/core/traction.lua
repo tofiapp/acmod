@@ -71,6 +71,12 @@ M.DEFAULTS = {
   SPARE = 0.9,
   FORGET_DELAY = 0.25,  -- s
   FORGET_RATE = 1.5,    -- per second
+  -- MODE 2, from the user's v0.10 logs (Mustang): limits learned in corners at 1.2-1.7 g were applied on the
+  -- following straight; cuts in corners went down to the 0.09 floor (lift-off); the hold band froze the cap at
+  -- 0.37-0.6 of the tyre peak for 8 s in total.
+  LEARN_LAT = 0.5,      -- no learning while the lateral part of the slip is above this x target (corner limits)
+  FLOOR_LAT = 0.2,      -- floor of the cap while cornering (lateral above LEARN_LAT x target): no full lift-off
+  HOLD_RISE = 0,        -- inside the hold band the cap may still rise at HOLD_RISE x K_UP
 }
 
 local RPM_BAND = 500
@@ -299,7 +305,8 @@ local function update2(self, dt, carState, requested, target, response)
       if eC > e then e = eC end
     end
     if e > 0 and requested > 0.05 then
-      if self.overTime == 0 and useMem and out > P.LEARN_MIN and reg > target then
+      local corner = self.lateral > P.LEARN_LAT * fullTarget
+      if self.overTime == 0 and useMem and out > P.LEARN_MIN and reg > target and not corner then
         local m = (out < mem and out or mem) * P.LEARN_MARGIN
         setLevel(self, gear, band, m)
         mem = m
@@ -309,12 +316,14 @@ local function update2(self, dt, carState, requested, target, response)
       local kd = P.K_DOWN * e
       if e > 1 then kd = kd + P.K_DOWN_SEVERE * (e - 1) end
       if kd > P.FALL_MAX then kd = P.FALL_MAX end
-      if A > P.FLOOR then
+      local floor = corner and (P.FLOOR_LAT > P.FLOOR and P.FLOOR_LAT or P.FLOOR) or P.FLOOR
+      if A > floor then
         A = A - kd * response * dt
-        if A < P.FLOOR then A = P.FLOOR end
+        if A < floor then A = floor end
       end
     else
-      if useMem and self.overTime > 0 and self.crossBand >= 0 and self.crossGear == gear and out > P.LEARN_MIN * 0.5 then
+      if useMem and self.overTime > 0 and self.crossBand >= 0 and self.crossGear == gear and out > P.LEARN_MIN * 0.5
+          and self.lateral <= P.LEARN_LAT * fullTarget then
         local m = (self.crossOut + out) * 0.5
         if m < level(self, gear, self.crossBand) then setLevel(self, gear, self.crossBand, m) end
         if m < level(self, gear, band) then setLevel(self, gear, band, m) end
@@ -350,7 +359,10 @@ local function update2(self, dt, carState, requested, target, response)
       if reg < hold then
         local spare = 1 - reg / hold
         local rs = self.rampScale
-        if A < T then
+        -- quick return up to T, then K_UP. (v0.10.0 compared A < T: T creeps up every step with the memory's slow
+        -- recovery, so A was clamped to T for good and K_UP never ran: the user's 6 s "long dump", pinned at
+        -- 0.898 x memory with the tyres far below their limit.)
+        if A < T - 0.005 then
           A = A + P.K_BACK * rs * response * dt
           if A > T then A = T end
         else
@@ -359,6 +371,9 @@ local function update2(self, dt, carState, requested, target, response)
             setLevel(self, gear, band, math.min(1, mem + P.CREEP * response * dt))
           end
         end
+        if A > 1 then A = 1 end
+      elseif reg < target and P.HOLD_RISE > 0 then
+        A = A + P.K_UP * P.HOLD_RISE * self.rampScale * response * dt
         if A > 1 then A = 1 end
       end
     end

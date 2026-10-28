@@ -960,5 +960,44 @@ do
   check('traction instances keep their own parameters', a.p.K_DOWN == 2.5 and b.p.K_DOWN == 9 and a.memory ~= b.memory)
 end
 
+-- 28. Mode 2 regression (user's v0.10 logs): after a limit was learned, the cap must not stay pinned to
+-- RETURN x memory while the tyres have plenty of grip (v0.10.0 held 0.55-0.64 for 6 s on a straight), and a limit
+-- crossed in a corner (high lateral slip) must not be remembered at all.
+do
+  local Throttle = dofile(CORE .. '/core/throttle.lua')
+  local tuned = dofile(CORE .. '/core/tuned.lua')
+  local function v3(x, y, z) return { x = x, y = y, z = z } end
+  local function newCar()
+    local wheels = {}
+    for i = 0, 3 do
+      wheels[i] = { ndSlip = 0.2, load = 3000, angularSpeed = 100, tyreRadius = 0.33, slipRatio = 0.02, slipAngle = 0.5,
+        look = v3(0, 0, 1), velocity = v3(0, 0, 33) }
+    end
+    return { gear = 3, rpm = 5200, speedKmh = 120, localVelocity = v3(0, 0, 33), tractionType = 0, wheels = wheels }
+  end
+  local function setRear(c, nd, sr, sa) for i = 2, 3 do c.wheels[i].ndSlip, c.wheels[i].slipRatio, c.wheels[i].slipAngle = nd, sr, sa end end
+  -- straight: spin then grip -> limit learned; then low slip: the throttle must come back
+  local tp = {}
+  for k, v in pairs(tuned.traction) do tp[k] = v end
+  tp.FORGET_RATE = 0 -- isolate the return path from the forgetting
+  local th = Throttle.new(tuned.throttle, tp)
+  local c = newCar()
+  th:configure(c)
+  for _ = 1, 400 do setRear(c, 0.3, 0.035, 0.3); th:update(0.003, true, c, 0, 0) end
+  for _ = 1, 60 do setRear(c, 2.0, 0.25, 0.3); th:update(0.003, true, c, 0, 0) end
+  local learned = th.traction.memoryNow
+  for _ = 1, math.floor(1.5 / 0.003) do setRear(c, 0.2, 0.024, 0.3); th:update(0.003, true, c, 0, 0) end
+  check('mode 2: a limit was learned on the straight spin', learned < 0.99, learned)
+  check('mode 2: throttle back to full 1.5 s after grip returned (no pin)', th.out > 0.97, th.out)
+  -- corner: high lateral slip, the longitudinal part crosses its small target -> cut, but nothing learned
+  local th2 = Throttle.new(tuned.throttle, tuned.traction)
+  local c2 = newCar()
+  th2:configure(c2)
+  for _ = 1, 400 do setRear(c2, 0.7, 0.03, 4); th2:update(0.003, true, c2, 1.5, 0) end
+  for _ = 1, 60 do setRear(c2, 0.9, 0.08, 4); th2:update(0.003, true, c2, 1.5, 0) end
+  check('mode 2: corner crossing teaches no limit', th2.traction.memoryNow > 0.99, th2.traction.memoryNow)
+  check('mode 2: corner cut keeps at least the corner floor', th2.traction.limit >= 0.19, th2.traction.limit)
+end
+
 print(string.format('KeyDrive: %d passed, %d failed', passed, failed))
 return failed > 0
