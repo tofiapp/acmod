@@ -339,7 +339,10 @@ local function update2(self, dt, carState, requested, target, response)
       if requested > A + 0.02 and reg < hold * P.SPARE and self.slip < fullTarget * P.HOLD_BAND then
         self.spareTime = self.spareTime + dt
       else
-        self.spareTime = 0
+        -- decays instead of resetting: one noisy sample (real slip is 3-4x noisier than the sim's) must not
+        -- restart the wait
+        self.spareTime = self.spareTime - 2 * dt
+        if self.spareTime < 0 then self.spareTime = 0 end
       end
       if useMem and self.spareTime > P.FORGET_DELAY then
         local up = P.FORGET_RATE * self.rampScale * response * dt
