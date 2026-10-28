@@ -15,6 +15,7 @@ end
 make('master', '__APP_LEDCONTROL_MASTER', 'Hlavní vypínač (zapnout / vypnout vše)')
 make('nextPreset', '__APP_LEDCONTROL_NEXT_PRESET', 'Další preset')
 make('flash', '__APP_LEDCONTROL_FLASH', 'Problik dálkovými světly')
+make('displayPage', '__APP_LEDCONTROL_DISPLAY_PAGE', 'Další stránka displeje')
 
 function M.on(key, fn)
   if M[key] then M[key].handler = fn end

@@ -13,7 +13,7 @@ local ST = {
   fuel = 100, fuelWarn = 0, pitLimiter = false, inPitlane = false, inPit = false, engineLimiter = false,
   drsPresent = false, drsAvailable = false, drsActive = false, absInAction = false, tcInAction = false,
   hasAbs = false, hasTc = false, engineLife = 1000, damage = 0, flag = 0, timeToStart = -1e9, sessionStarted = true,
-  limiterKnown = false, limiterRpm = 8000, shiftStartManual = 0, rain = 0, wetness = 0, timeHours = 12, lap = 0, position = 0, steer = 0,
+  limiterKnown = false, limiterRpm = 8000, shiftStartManual = 0, rain = 0, wetness = 0, timeHours = 12, lap = 0, position = 0, steer = 0, lapTimeMs = 0, lastLapMs = 0, bestLapMs = 0, delta = 0,
   headlights = false, lowBeams = false, hazards = false, isOnline = false, replay = false, paused = false,
   standingFor = 0,       -- s below 2 km/h
   engineOff = false,
@@ -28,7 +28,8 @@ local CAR_FIELDS = {
   { 'drsAvailable', 'drsAvailable' }, { 'drsActive', 'drsActive' }, { 'absInAction', 'absInAction' },
   { 'tractionControlInAction', 'tcInAction' }, { 'engineLifeLeft', 'engineLife' }, { 'lapCount', 'lap' },
   { 'racePosition', 'position' }, { 'steer', 'steer' }, { 'headlightsActive', 'headlights' },
-  { 'lowBeams', 'lowBeams' }, { 'hazardLights', 'hazards' },
+  { 'lowBeams', 'lowBeams' }, { 'hazardLights', 'hazards' }, { 'lapTimeMs', 'lapTimeMs' },
+  { 'previousLapTimeMs', 'lastLapMs' }, { 'bestLapTimeMs', 'bestLapMs' }, { 'performanceMeter', 'delta' },
 }
 local SIM_FIELDS = {
   { 'raceFlagType', 'flag' }, { 'timeToSessionStart', 'timeToStart' }, { 'isSessionStarted', 'sessionStarted' },

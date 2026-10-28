@@ -84,6 +84,7 @@ local TABS = {
   { 'Scénáře', 'src/ui/tab_scenarios' },
   { 'Editor', 'src/ui/tab_editor' },
   { 'Světla', 'src/ui/tab_lights' },
+  { 'Displej', 'src/ui/tab_display' },
   { 'Nastavení', 'src/ui/tab_settings' },
 }
 local loaded, loadErrors, drawers = {}, {}, {}

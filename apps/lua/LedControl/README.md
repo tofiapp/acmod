@@ -27,6 +27,7 @@ auto**. Pod tím jsou karty:
 | **Scénáře** | Seznam situací presetu: zapnutí, priorita, cíl (skupina diod), vzor, barvy, rychlost blikání, Test, vlastní podmínky |
 | **Editor** | Vlastní presety a ruční animace: mřížka s tolika políčky, kolik má auto diod, snímky a jejich rychlost |
 | **Světla** | Světla, která auto má, a jejich scénáře (dešťové světlo, výstražná světla, dálková, brzdová světla, podsvícení) |
+| **Displej** | Vlastní stránka na displeji auta (Závod / Otáčky / Kola), převzetí při pit limiteru, vlajkách a málo paliva, náhled |
 | **Nastavení** | Preset a způsob převzetí pro nové auto, klávesy, ochrana barev, sdílení presetů, smazání dat, výchozí nastavení |
 
 ## Jak to funguje
@@ -56,6 +57,10 @@ AC zapisuje barvu svých diod každý snímek. Aby se aplikace s AC „nepřetah
 
 Když jeden způsob na autě nefunguje, aplikace sama přepne na další a napíše proč. Volba se pamatuje pro každé auto.
 Po pádu nebo restartu skriptu se schované diody samy vrátí.
+
+Hra může diody přepisovat i jinak (na omezovači je rozbliká, při přepnutí LOD nebo restartu session je znovu ukáže).
+Aplikace originál schová hned v tom samém snímku a 4× za sekundu kontroluje, co se opravdu vykreslilo. Když hra
+přesto vyhrává, sama přepne na **B – překreslení** (v diagnostice: „Kontrola při vykreslení … přepnutí metody“).
 
 ### Otáčky
 
@@ -140,9 +145,22 @@ Skutečná světla dostane auto vždy zpátky tak, jak je měl jezdec: po skonč
 i při vypnutí aplikace. Příkazy posílá jen při změně a nejvýš čtyřikrát za sekundu. Když světlo během scénáře
 přepnete sami, scénář ho pustí. Online se nad kartou ukáže upozornění a skutečná světla jde online vypnout.
 
+### Displej
+
+Karta **Displej** kreslí na displej auta vlastní stránku: **Závod** (řada otáček, rychlost, převod, čas kola, poslední
+kolo, palivo, pozice, delta), **Otáčky** (velká řada otáček, otáčky, převod) nebo **Kola** (časy a pozice). Řada otáček
+na displeji počítá stejný preset jako diody, takže jsou tam vidět i vaše animace (bod řazení, omezovač).
+Pit limiter, pit lane bez limiteru a vlajky převezmou celý displej, málo paliva ukáže pruh dole; každou skupinu jde
+vypnout. **Obnovování** omezuje počet překreslení za sekundu (kreslí se jen při změně).
+
+Funguje u aut, která mají displej jako „scriptable display“ CSP (sekce `[SCRIPTABLE_DISPLAY_...]` v konfiguraci auta).
+Původní displej se jen schová a po vypnutí (nebo po pádu skriptu) se vrátí. Když po převzetí zůstane displej černý,
+zkuste v sekci **Textura** druhou volbu.
+
 ### Klávesy
 
-V Nastavení lze přiřadit klávesu nebo tlačítko volantu: hlavní vypínač, další preset, problik dálkovými světly.
+V Nastavení lze přiřadit klávesu nebo tlačítko volantu: hlavní vypínač, další preset, problik dálkovými světly,
+další stránka displeje.
 Fungují i se zavřeným oknem.
 
 ## Když něco nefunguje
@@ -156,6 +174,9 @@ Uložená data jsou ve složce `Documents/Assetto Corsa/cfg/extension/state/lua/
 ## Vývoj
 
 ```bash
-pip install lupa && python tests/ledcontrol/run_tests.py   # testy LedControl (vlastní simulace CSP)
-./build.sh LedControl                                        # dist/LedControl-<verze>.zip
+pip install lupa pillow && ./run_tests LedControl            # testy LedControl (vlastní simulace CSP) + náhledy displeje
+./build.sh LedControl                                        # dist/LedControl-<verze>.zip, jen když testy projdou
 ```
+
+Náhledy stránek displeje v rozlišeních 800 × 480, 480 × 272 a 512 × 512 jsou po testech v `tests/output/display`
+(souhrn `tests/output/display_previews.png`). Písmo v náhledech je náhradní (DejaVu), ve hře je Bahnschrift.

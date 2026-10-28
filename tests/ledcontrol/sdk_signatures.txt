@@ -42,6 +42,9 @@ render.on | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:119 | re
 render.setBlendMode | official app-csp-defaults/DynamicReturn/DynamicReturn.lua:179 | render.setBlendMode(render.BlendMode.AlphaBlend)
 render.setCullMode | official app-csp-defaults/DynamicReturn/DynamicReturn.lua:180 | render.setCullMode(render.CullMode.None)
 render.setDepthMode | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:124 | render.setDepthMode(render.DepthMode.Off)
+ui.Alignment.Center | common/ac_ui_enums.lua:93 | Center = 0,
+ui.Alignment.End | common/ac_ui_enums.lua:94 | End = 1
+ui.Alignment.Start | common/ac_ui_enums.lua:92 | Start = -1,
 ui.ButtonFlags | common/ac_ui_enums.lua:208 | ui.ButtonFlags = __enum({ cpp = 'ImGuiButtonFlags' }, {
 ui.ButtonFlags.Disabled | common/ac_ui_enums.lua:218 | Disabled                  = 0x100,     -- Disable interactions
 ui.ButtonFlags.None | common/ac_game_enums.lua:2 | None = 0,
@@ -83,6 +86,7 @@ ui.drawCircleFilled | official app-csp-defaults/InternetRadio/InternetRadio.lua:
 ui.drawRect | official app-csp-defaults/RGBControl/RGBControl.lua:261 | ui.drawRect(p1, p2, rgbm.colors.gray)
 ui.drawRectFilled | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:228 | ui.drawRectFilled(from, from + range, rgbm(0, 0, 0, 0.5))
 ui.dummy | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:217 | ui.dummy(range)
+ui.dwriteDrawTextClipped | official app-csp-defaults/SetupExchange/IconCounter.lua:11 | ui.dwriteDrawTextClipped(c > 99 and '99+' or c, c > 99 and 18 or 22, vec2(15, 6), 64, ui.Alignment.Center, ui.Alignment.Center)
 ui.getClipboardText | official app-csp-defaults/WebBrowser/src/Controls.lua:523 | clipboardContent = ui.getClipboardText():trim()
 ui.getCursorX | official app-csp-defaults/InternetRadio/InternetRadio.lua:238 | local cr1, cr2 = vec2(0, 0), vec2(ui.getCursorX() + ui.availableSpaceX() - 20, math.huge)
 ui.getCursorY | official app-csp-defaults/InternetRadio/InternetRadio.lua:253 | draggingPos = ui.getCursorY()
@@ -96,12 +100,15 @@ ui.itemClicked | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:344
 ui.itemDeactivatedAfterEdit | official acc-lua-internal/included-cars/android_auto/apps/messenger/app.lua:114 | if changed or ui.itemDeactivatedAfterEdit() then
 ui.itemHovered | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:342 | if ui.itemHovered() then
 ui.itemRect | common/ac_ui.lua:1984 | function ui.itemRect()
+ui.measureDWriteText | official acc-lua-internal/included-cars/android_auto/touchscreen.lua:165 | if char[1] then char.t1 = char.p1 + vec2((w - 10) / 2 - ui.measureDWriteText(char[1], 24).x / 2, 5) end
 ui.measureText | official app-csp-defaults/RGBControl/RGBControl.lua:250 | local w = ui.measureText(zoneName).x
 ui.mouseDown | official app-csp-defaults/WebBrowser/WebBrowser.lua:459 | resizingActive = resizingActive and ui.mouseDown() or ui.itemHovered() and ui.mouseClicked()
 ui.offsetCursorY | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:215 | ui.offsetCursorY(4)
+ui.popDWriteFont | official app-csp-defaults/SetupExchange/IconCounter.lua:12 | ui.popDWriteFont()
 ui.popFont | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:309 | ui.popFont()
 ui.popID | official app-csp-defaults/WebBrowser/WebBrowser.lua:440 | ui.popID()
 ui.popStyleColor | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:910 | ui.popStyleColor()
+ui.pushDWriteFont | official app-csp-defaults/SetupExchange/IconCounter.lua:10 | ui.pushDWriteFont('@System;Weight=Bold')
 ui.pushFont | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:301 | ui.pushFont(ui.Font.Small)
 ui.pushID | common/ac_ui.lua:68 | function ui.pushID(value)
 ui.pushStyleColor | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:908 | ui.pushStyleColor(ui.StyleColor.PlotHistogram, rgbm(0, 0.4, 0, 1))
@@ -129,11 +136,13 @@ ui.unindent | official acc-lua-internal/included-cars/android_auto/system.lua:54
 :createMesh | lib_scene.lua:318 | createMesh = function (s, name, materialName, vertices, indices, keepAlive, moveData)
 :ensureUniqueMaterials | lib_scene.lua:230 | ensureUniqueMaterials = function (s) ffi.C.lj_noderef_ensureuniquematerials__scene(s) return s end,
 :find | official app-csp-defaults/SetupExchange/SetupExchange.lua:304 | if item:find('PRESSURE_[LR]F') then return 'Tyre pressure (front)' end
+:findMeshes | lib_scene.lua:264 | findMeshes = function (s, filter) return s == nil and _emptyNodeRef() or cr(ffi.C.lj_noderef_find__scene(s, nf(filter), 0x20000)) end,
 :getIndices | lib_scene.lua:366 | getIndices = function (s)
 :getMaterialsCount | lib_scene.lua:888 | getMaterialsCount = function (s)
 :getParent | lib_scene.lua:630 | getParent = function (s) return cr(ffi.C.lj_noderef_parent__scene(s)) end,
 :getTransformationRaw | lib_scene.lua:574 | getTransformationRaw = function (s)
 :getVertices | lib_scene.lua:357 | getVertices = function (s)
+:gmatch | official app-csp-defaults/ext_controls/src/controls/control_definition.lua:56 | for item in tostring(value or ""):gmatch("([^,]+)") do
 :gsub | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:345 | fileName = filename:gsub('.*[/\\\\]', '')
 :isActive | lib_scene.lua:694 | isActive = function (s, index)
 :isVisible | lib_scene.lua:701 | isVisible = function (s, index)
@@ -145,6 +154,7 @@ ui.unindent | official acc-lua-internal/included-cars/android_auto/system.lua:54
 :pressed | car_scriptable_display/car_scriptable_display_utils.lua:142 | pressed = function(texStart, texSize, inCarPos, inCarRadius, inCarLocalPos)
 :set | lib_scene.lua:47 | function _ac_VertexBuffer:set(index, vertex) end
 :setMaterialProperty | lib_scene.lua:154 | setMaterialProperty = function (s, property, value)
+:setMaterialTexture | lib_scene.lua:201 | setMaterialTexture = function (s, texture, value)
 :setShadows | lib_scene.lua:470 | setShadows = function (s, shadows) ffi.C.lj_noderef_setshadows__scene(s, shadows == true) return s end,
 :setTransparent | lib_scene.lua:482 | setTransparent = function (s, transparent) ffi.C.lj_noderef_settransparent__scene(s, transparent == true) return s end,
 :setVisible | lib_scene.lua:466 | setVisible = function (s, visible, resetMotion) ffi.C.lj_noderef_setvisible__scene(s, visible == true, resetMotion ~= false) return s end,

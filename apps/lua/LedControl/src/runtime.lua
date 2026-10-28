@@ -16,6 +16,7 @@ local color = require('src/color')
 local presets = require('src/presets')
 local engine = require('src/engine')
 local lights = require('src/lights')
+local display = require('src/display')
 local rpm = require('src/rpm')
 
 local S = config.S
@@ -182,9 +183,19 @@ local function attach()
   M.state = takeover.method ~= 0 and 'run' or 'failed'
 end
 
+-- meshes of the car's model at the last detection (0 = not loaded yet)
+local function modelMeshes()
+  local root = ac.findNodes('carRoot:0')
+  if not root or #root == 0 then return 0 end
+  local ok, all = pcall(root.findMeshes, root, '?')
+  return ok and all and #all or 0
+end
+M.modelMeshes = 0
 local function detectCar(car, id)
   M.carId = id
   M.healed = M.healed + takeover.heal(id)
+  local okH, healedDisplays = pcall(display.heal, id)
+  if okH then M.healed = M.healed + healedDisplays end
   M.info = carInfo.read()
   M.profile = store.loadCar(id)
   carState.setCarInfo(M.info)
@@ -201,6 +212,8 @@ local function detectCar(car, id)
   M.presetId = presets.choose(M.profile.preset, S.defaultPreset, M.layout, ST.drsPresent)
   M.compiledVersion = -1
   lights.init(id, M.profile, M.layout, M.info)
+  display.init(M.profile, M.info, id, saveProfile)
+  M.modelMeshes = n > 0 and 1 or modelMeshes()
   if n == 0 then M.state = 'noleds'
   elseif not S.master then M.state = 'off'
   else attach() end
@@ -251,13 +264,15 @@ end
 local carCheck = 0
 local waitTimer = 0
 local lightsOn = false
--- no LEDs found: the model may still be loading (slow tracks load the cockpit LOD late), so the search runs again,
--- every 2 s for the first 30 s, then every 10 s; only a search that finds LEDs restarts the takeover
+-- no LEDs found while the car's model had no meshes yet (slow tracks load it late): the search runs again every 2 s
+-- for 60 s; only a search that finds LEDs restarts the takeover. A loaded model without LEDs is not searched again.
 local noLedsFor, noLedsTimer = 0, 0
 local function retryNoLeds(dt)
+  if M.modelMeshes > 0 or noLedsFor > 60 then return end
   noLedsFor, noLedsTimer = noLedsFor + dt, noLedsTimer + dt
-  if noLedsTimer < (noLedsFor < 30 and 2 or 10) then return end
+  if noLedsTimer < 2 then return end
   noLedsTimer = 0
+  M.modelMeshes = modelMeshes()
   local car = ac.getCar(0)
   if not car or not M.info then return end
   local ok, layout = pcall(detect.run, car, M.info, M.profile and M.profile.map)
@@ -275,6 +290,7 @@ function M.update(dt)
   M.clock = M.clock + dt
   if M.restartReason then
     takeover.dispose()
+    display.releaseAll()
     if not KEEP_LIGHTS[M.restartReason] then stopLights() end
     M.lastRestart = M.restartReason
     M.restartReason = nil
@@ -302,8 +318,10 @@ function M.update(dt)
   if S.master then
     lights.update(dt, ST)
     lightsOn = true
+    display.update(dt, ST, M.preset())
   else
     stopLights()
+    if display.nTaken > 0 then display.releaseAll() end
   end
   if M.state == 'off' then
     if S.master then attach(); bump() end
@@ -337,6 +355,7 @@ function M.halt()
   pcall(rpm.flush)
   pcall(takeover.dispose)
   pcall(lights.release)
+  pcall(display.releaseAll)
   lightsOn = false
   M.state = 'wait'
 end

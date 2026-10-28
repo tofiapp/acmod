@@ -66,6 +66,9 @@ def main():
                 print(f"ERROR in {test.name}: {e}")
                 failed += 1
     print(f"LedControl: {len(files)} files, {passed} checks passed, {failed} failed, {bad} syntax / API name errors")
+    # PNG previews of the display pages recorded by test_display.lua
+    import subprocess
+    subprocess.run([sys.executable, "-I", str(HERE / "tools" / "render_display.py")], check=False)
     sys.exit(1 if (bad or failed) else 0)
 
 

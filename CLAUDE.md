@@ -250,6 +250,15 @@ apps/lua/LedControl/
                           commanded while paused, replay parks; scenario settings global (ac.storage 'lcl_', saves
                           deferred 0.5 s), rain mode / meshes / cabin light per car in profile.lights
   src/light_meshes.lua    shadow copies of light meshes (same approach as takeover), marker lcl_meshGuard
+  src/display.lua         display takeover (tab Displej): [SCRIPTABLE_DISPLAY_*] from the CSP car config (MESHES,
+                          RESOLUTION, DISPLAY_POS, DISPLAY_SIZE), shadow copy of the display meshes, original hidden
+                          (marker displayGuard, cleared only by the run that wrote it), copy:setMaterialTexture(slot,
+                          { textureSize, background, region, callback }) (SDK lib_scene; CSP traffic tool); virtual
+                          LED row = engine on a 12 cell layout with the car's preset; overlays from catalogue scenario
+                          tests; at most S.displayHz paints, only when the fingerprint of the shown values changed;
+                          profile.display { on, which, page, slot }
+  src/display_pages.lua   pages Závod / Otáčky / Kola + OVERLAYS, relative layout, text fitted with measureDWriteText
+                          (width per string cached), ui.dwriteDrawTextClipped / drawRectFilled; also the tab preview
   src/online.lua          online state, banner and the optional block of real controls online
   src/hotkeys.lua         ac.ControlButton master / next preset / flash, polled in script.update
   src/diag.lua            "Kopírovat diagnostiku" text
@@ -260,7 +269,7 @@ apps/lua/LedControl/
   src/ui/tab_leds.lua     Diody: preview, brightness (Noc / Den / Slunce, Auto), test patterns; collapsed sections
                           Pořadí a skupiny (led_map.lua), Způsob převzetí, Diagnostika; tab_rpm.lua (Otáčky: live bar,
                           Auto / manual start, shift, limiter, learned limiter, RPM per LED), tab_scenarios.lua,
-                          tab_editor.lua, tab_lights.lua, tab_settings.lua
+                          tab_editor.lua, tab_lights.lua, tab_display.lua (Displej), tab_settings.lua
 tests/ledcontrol/         mock_csp.lua (scene graph, shared materials, AC LED writer, write log per material / mesh
                           with writer + frame, redundant app writes counted, JSON, ui), jammer.lua (the game fighting the
                           app: every frame, after N, limiter blink by visibility, by material name before the picture,
@@ -269,7 +278,9 @@ tests/ledcontrol/         mock_csp.lua (scene graph, shared materials, AC LED wr
                           empty, display texture, two displays; seenLed / ledMatches), test_*.lua each in its own
                           LuaJIT runtime; test_timeline (a drive: pits with / without limiter, flags, limiter, fuel,
                           ABS / TC, reset to pits, session restart, LOD switch, init orders; winner per group, colours,
-                          takeover vs jammer, restore), test_perf (writes / allocation per frame), test_storage
+                          takeover vs jammer, restore), test_perf (writes / allocation per frame), test_storage,
+                          test_display (fake canvas: every page / overlay at 800x480, 480x272, 512x512 inside the
+                          screen, dumped to tests/output/display, PNGs by tools/render_display.py from run_tests.py)
 ```
 
 Adapter: `src/csp.lua` is the only LedControl file that reads the CSP globals (ac, ui, render, io, os, JSON, stringify,

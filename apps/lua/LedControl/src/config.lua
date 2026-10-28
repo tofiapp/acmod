@@ -15,6 +15,11 @@ local defaults = {
   defaultPreset = 'auto', -- preset for cars without their own choice ('auto': F1 styl for long rows / DRS, else GT3)
   showDiag = false,    -- Diody tab: show the diagnostics block
   hiddenGuard = '',    -- self-heal marker: "carId|mesh|mesh|..." of original meshes hidden by the shadow method
+  displayHz = 20,      -- display takeover: at most this many paints per second (only when something changed)
+  displayPit = true,   -- the display shows the pit limiter / pit lane full screen
+  displayFlags = true, -- ... flags
+  displayFuel = true,  -- ... a low fuel banner
+  displayGuard = '',   -- self-heal marker of display meshes hidden by the display takeover
 }
 
 local stored = ac.storage(defaults, 'lc_')

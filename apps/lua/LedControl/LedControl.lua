@@ -28,6 +28,7 @@ end)
 hotkeys.on('master', function () config.set('master', not S.master) end)
 hotkeys.on('nextPreset', function () runtime.cyclePreset() end)
 hotkeys.on('flash', function () lights.flash() end)
+hotkeys.on('displayPage', function () require('src/display').nextPage() end)
 
 local function draw3D()
   takeover.draw3D()

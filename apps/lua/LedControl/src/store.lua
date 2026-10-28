@@ -82,6 +82,16 @@ local function sanitiseCar(t)
   out.map = sanitiseMap(t.map)
   if type(t.lights) == 'table' then out.lights = M.plain(t.lights) end
   out.rpm = require('src/rpm').sanitise(t.rpm)
+  if type(t.display) == 'table' then
+    local d = t.display
+    local which = nil
+    if type(d.which) == 'table' then
+      which = {}
+      for i = 1, 8 do if d.which[i] == true then which[i] = true end end
+    end
+    out.display = { on = d.on == true, which = which, page = math.max(1, math.min(9, math.floor(tonumber(d.page) or 1))),
+      slot = (d.slot == 'txEmissive') and 'txEmissive' or nil }
+  end
   return out
 end
 M.sanitiseCar = sanitiseCar

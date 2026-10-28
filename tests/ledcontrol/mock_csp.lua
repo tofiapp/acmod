@@ -305,6 +305,56 @@ function refmt:setMaterialProperty(prop, value)
   M.materialWrites = (M.materialWrites or 0) + 1
   return self
 end
+-- Dynamic texture (setMaterialTexture with a table, acc-lua-sdk lib_scene.lua): the callback runs at once with the
+-- draw calls recorded into a canvas on each mesh of the reference (fake canvas: commands, size, region).
+M.paints = 0
+-- width of a text in the mock font metric (0.52 x size per UTF-8 character), counted without allocating
+function M.textWidth(t, size)
+  local n = 0
+  for i = 1, #t do
+    local b = t:byte(i)
+    if b < 0x80 or b >= 0xC0 then n = n + 1 end
+  end
+  return n * size * 0.52
+end
+function refmt:setMaterialTexture(slot, value)
+  if type(value) == 'table' then
+    if not value.callback then error('Callback is missing', 2) end
+    -- one canvas per mesh and slot, reused by every paint (its command tables too)
+    local owner = self[1]
+    owner.canvases = owner.canvases or {}
+    local cv = owner.canvases[slot]
+    if not cv then cv = { n = 0, cmds = {} }; owner.canvases[slot] = cv end
+    cv.n, cv.slot, cv.size, cv.region, cv.frame, cv.background = 0, slot, value.textureSize, value.region, M.frameNo,
+      value.background
+    M.recording = cv
+    local ok, err = pcall(value.callback, 1 / 60)
+    M.recording = nil
+    if not ok then error(err, 2) end
+    -- content hash: a repaint with exactly the same picture counts as a redundant write
+    local h = 0
+    for k = 1, cv.n do
+      local c = cv.cmds[k]
+      for j = 2, #c do
+        local v = c[j]
+        if type(v) == 'number' then h = (h * 31 + math.floor(v * 1000)) % 2147483647
+        elseif type(v) == 'string' then for q = 1, #v do h = (h * 31 + v:byte(q)) % 2147483647 end end
+      end
+    end
+    cv.hash = h
+    for i = 1, #self do
+      local m = self[i]
+      if not m.textures then m.textures = {} end
+      m.textures[slot] = cv
+      logWrite(m, 'texture', 'app', h, 0, 0)
+    end
+    M.paints = M.paints + 1
+    M.lastCanvas = cv
+  else
+    for i = 1, #self do self[i].textures = self[i].textures or {}; self[i].textures[slot] = value end
+  end
+  return self
+end
 function refmt:getMaterialPropertyValue(index, prop)
   if type(index) == 'string' then index, prop = 1, index end
   local o = self[index or 1]
@@ -643,7 +693,34 @@ ui = {
   getCursorX = function () return 0 end,
   getCursorY = function () return 0 end,
   drawCircleFilled = function () end,
-  drawRectFilled = function () end,
+  drawRectFilled = function (p1, p2, c)
+    local cv = M.recording
+    if cv then
+      cv.n = cv.n + 1
+      local e = cv.cmds[cv.n]
+      if not e then e = {}; cv.cmds[cv.n] = e end          -- reused between paints: the mock must not allocate
+      e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9] = 'rect', p1.x, p1.y, p2.x, p2.y, c.r, c.g, c.b, c.mult or 1
+      for k = 10, 14 do e[k] = nil end
+    end
+  end,
+  -- DirectWrite text (signatures as official CSP code calls them; widths: UNSURE, 0.52 x size per character for
+  -- Bahnschrift SemiCondensed, the real font is narrower or wider per glyph)
+  Alignment = { Start = -1, Center = 0, End = 1 },          -- values as in acc-lua-sdk common/ac_ui_enums.lua
+  pushDWriteFont = function (f) M.fontStack = M.fontStack or {}; M.fontStack[#M.fontStack + 1] = f end,
+  popDWriteFont = function () if M.fontStack then M.fontStack[#M.fontStack] = nil end end,
+  measureDWriteText = function (t, size)
+    return vec2(M.textWidth(t, size), size * 1.2)
+  end,
+  dwriteDrawTextClipped = function (t, size, p1, p2, ha, va, wrap, c)
+    local cv = M.recording
+    if cv then
+      cv.n = cv.n + 1
+      local e = cv.cmds[cv.n]
+      if not e then e = {}; cv.cmds[cv.n] = e end
+      e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9] = 'text', p1.x, p1.y, p2.x, p2.y, c.r, c.g, c.b, c.mult or 1
+      e[10], e[11], e[12], e[13], e[14] = t, size, ha, va, M.textWidth(t, size)
+    end
+  end,
   drawRect = function () end,
   progressBar = function () end,
   itemClicked = function () return false end,

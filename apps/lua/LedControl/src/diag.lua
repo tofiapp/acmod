@@ -7,7 +7,7 @@ local safety = require('src/safety')
 local lights = require('src/lights')
 
 local S = config.S
-local M = { VERSION = '0.4.3' }
+local M = { VERSION = '0.5.0' }
 
 local function join(list)
   if type(list) ~= 'table' then return tostring(list) end
@@ -92,6 +92,13 @@ function M.text()
     st.renderLost or 0, st.switched or 0, tostring(require('src/csp').jitVersion))
   add('Materiály (C): před %d, po %d, rozděleno %s | chyby kreslení (B) %d | uzdraveno meshů %d', st.materialsBefore,
     st.materialsAfter, tostring(st.split), st.drawErrors, runtime.healed)
+  local okD, dsp = pcall(require, 'src/display')
+  if okD and dsp then
+    local c = dsp.cfg()
+    add('Displej: nalezeno %d, převzato %d, zapnuto %s, stránka %d, %d Hz, překreslení %d%s', #dsp.displays, dsp.nTaken,
+      tostring(c.on == true), dsp.page, S.displayHz or 0, dsp.paints, dsp.error and (' | chyba: ' .. dsp.error) or '')
+    for i = 1, #dsp.displays do add('  %s [%s]', dsp.displays[i].label, dsp.displays[i].section) end
+  end
   local okL, lines = pcall(lights.diagLines)
   if okL and type(lines) == 'table' then
     for i = 1, #lines do add('%s', tostring(lines[i])) end
