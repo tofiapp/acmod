@@ -13,7 +13,7 @@ local Traction = require('core/traction')
 
 -- name, group, lo, hi, log scale
 local SPACE = {
-  { 'TARGET_SLIP', 'throttle', 0.7, 1.0 },
+  { 'TARGET_SLIP', 'throttle', 0.7, 1.0 }, -- the core caps it at 1 (tyre peak)
   { 'ASSIST_FALL', 'throttle', 0.5, 5 },
   { 'ASSIST_FALL_SEVERE', 'throttle', 1, 5 },
   { 'SLIP_TAU', 'traction', 0.005, 0.08, true },
@@ -42,6 +42,8 @@ if MODE == 2 then
     { 'LEARN_LAT', 'traction', 0.2, 1.0 },
     { 'FLOOR_LAT', 'traction', 0.05, 0.4 },
     { 'HOLD_RISE', 'traction', 0, 0.6 },
+    { 'ELLIPSE', 'traction', 0.75, 1.2 },
+    { 'GUARD_LEVEL', 'traction', 0.75, 1.3 },
   }) do SPACE[#SPACE + 1] = p end
 else
   for _, p in ipairs({

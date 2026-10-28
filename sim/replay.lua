@@ -7,7 +7,8 @@
 local Throttle = require('core/throttle')
 
 local M = {}
-M.LOW = 0.6          -- drive slip (combined ndSlip of the driven wheels) under which a cut counts as needless
+M.LOW = 0.75         -- drive slip (combined ndSlip of the driven wheels) under which a cut counts as needless
+                     -- (0.6 missed the corner cuts at 0.6-0.75 the user felt as caution)
 M.CUT = 0.03         -- request - output above this counts as a cut
 
 local cache = {}

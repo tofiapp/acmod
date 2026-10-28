@@ -77,6 +77,12 @@ M.DEFAULTS = {
   LEARN_LAT = 0.5,      -- no learning while the lateral part of the slip is above this x target (corner limits)
   FLOOR_LAT = 0.2,      -- floor of the cap while cornering (lateral above LEARN_LAT x target): no full lift-off
   HOLD_RISE = 0,        -- inside the hold band the cap may still rise at HOLD_RISE x K_UP
+  ELLIPSE = 0,          -- LAT_SPLIT: friction-ellipse size the lateral slip is measured against (absolute, 1 = tyre
+                        -- peak); the longitudinal target is TARGET x sqrt(1 - (lateral / ELLIPSE)^2). 0 = TARGET (as
+                        -- 0.10): with the conservative 0.78 target a 0.75 lateral slip left only 0.34 for the throttle
+  GUARD_LEVEL = 0,      -- guard threshold on the combined ndSlip (absolute, 1 = tyre peak); 0 = the throttle target
+                        -- (v0.10.1 logs, Mustang: with the 0.78 target the guard cut in ordinary fast corners at
+                        -- 1.3-2.1 g where the combined slip sits at 0.8-0.97, below the tyre's peak)
 }
 
 local RPM_BAND = 500
@@ -281,9 +287,12 @@ local function update2(self, dt, carState, requested, target, response)
         local s2, x2 = self.slip * self.slip, self.sx * self.sx
         local lat = s2 > x2 and math.sqrt(s2 - x2) or 0
         self.lateral = lat
-        local rest = target * target - lat * lat
+        local E = P.ELLIPSE > 0 and P.ELLIPSE or target
+        local q = lat / E
+        local rest = 1 - q * q
         local minT = 0.2 * target
-        tgt = rest > minT * minT and math.sqrt(rest) or minT
+        tgt = rest > 0 and target * math.sqrt(rest) or 0
+        if tgt < minT then tgt = minT end
         reg = self.sx
       end
     end
@@ -301,7 +310,8 @@ local function update2(self, dt, carState, requested, target, response)
     -- guard: the tyres past their combined peak (e.g. the rear sliding sideways with little wheelspin) always take
     -- throttle away, whatever the longitudinal part says (v0.9 log: a long slide with the throttle left on)
     if P.GUARD ~= 0 then
-      local eC = self.slip / fullTarget - 1
+      local gl = P.GUARD_LEVEL > 0 and P.GUARD_LEVEL or fullTarget
+      local eC = self.slip / gl - 1
       if eC > e then e = eC end
     end
     if e > 0 and requested > 0.05 then

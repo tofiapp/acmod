@@ -8,4 +8,7 @@ return {
   '2026-10-28c1-mustang.csv',
   '2026-10-28c2-supra.csv',
   '2026-10-28c3-mustang.csv',
+  '2026-10-28d1-mustang.csv',
+  '2026-10-28d2-mustang.csv',
+  '2026-10-28d3-mustang.csv',
 }
