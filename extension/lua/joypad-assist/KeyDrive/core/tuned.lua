@@ -1,9 +1,9 @@
 -- Throttle parameters found by the simulator's optimizer (sim/optimize.lua, tuning set only, nominal and +-20 %
 -- grip/power), checked on the hidden set. Used by the game when TRACTION_MODE = 2. Pure data.
--- Candidate s12 (round 2), measured with the MODE 2 code of commit 4ba34be: tuning set 100/210 runs pass at 333 Hz
--- (v0.9.3 defaults: 71/210), hidden set 61/135 (v0.9.3: 33/135); runs with slip over 1.5x the tyre peak: 35 (was 131)
--- tuning, 20 (was 95) hidden. Since then: guard, exact filters, severe fall >= normal fall, ramp scaling (re-measure
--- with sim/compare.py after the next optimizer round).
+-- Candidate s12 (optimizer round 2) with TRACK off. Measured with the shipped code (sim/compare.py, all +-20 %
+-- grip/power shifts): tuning set 97/210 runs pass at 333 Hz and 99/210 at 50-165 fps (v0.9.3 defaults: 71 / 56),
+-- hidden set 61/135 and 62/135 (v0.9.3: 33 / 32). Runs with slip over 1.5x the tyre peak: tuning 36 (v0.9.3: 131),
+-- hidden 19 (95). Round 3 (TRACK searched) ended at the same level: TRACK ~ 0 is best; the simulator has plateaued.
 return {
   throttle = { ASSIST_FALL = 3.32804, ASSIST_FALL_SEVERE = 2.94788, TARGET_SLIP = 0.778157 },
   traction = {
