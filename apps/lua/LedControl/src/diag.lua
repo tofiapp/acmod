@@ -7,7 +7,7 @@ local safety = require('src/safety')
 local lights = require('src/lights')
 
 local S = config.S
-local M = { VERSION = '0.6.2' }
+local M = { VERSION = '0.6.3' }
 
 local function join(list)
   if type(list) ~= 'table' then return tostring(list) end

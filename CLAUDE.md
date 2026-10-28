@@ -259,7 +259,10 @@ apps/lua/LedControl/
                           profile.display { on, which, page, slot (nil auto = txDiffuse + txEmissive when the material
                           has it, 'txDiffuse', 'txEmissive'), regionMode (nil = mesh UVs via getVertices():get(k).uv
                           bounding box, 'config'), rotation (0/90/180/270 clockwise: ui.beginRotation +
-                          endPivotRotation(90 - r, pivot) as dash_display_8100), adjust = { [i] = { x, y, w, h } } };
+                          endPivotRotation(90 - r, pivot) as dash_display_8100), aspect (width / height as seen; nil =
+                          from getLocalAABB: x / sqrt(dy^2 + dz^2)) -> pageBox(i): laid out in W x W / aspect and
+                          stretched by ui.beginScale + endPivotScale(vec2(1, sy), 0) onto the region (a square
+                          texture on a wide screen), adjust = { [i] = { x, y, w, h } } };
                           M.calibrate (not saved) paints a grid over the whole texture with the region outlined
                           (display_pages.calibration); describe(i) = shader / slots / painted / glow / region; a mesh whose
                           getVertices is nil is painted directly (ensureUniqueMaterials, getTextureSlotFilename kept

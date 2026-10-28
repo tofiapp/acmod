@@ -358,9 +358,13 @@ local function num(n)
   if not s then s = tostring(n); numbers[n] = s end
   return s
 end
+local CAL_SCALE, CAL_PIVOT = vec2(1, 1), vec2()
 local CORNER_COLOURS = { 0xFF3030, 0x30FF30, 0x3080FF, 0xFFFFFF }
-local regionText, regionFor = '', ''
-function M.calibration(TW, TH, rx, ry, rw, rh, rot)
+local regionText, regionFor, aspectText, aspectFor = '', '', '', -1
+-- p: how much taller than wide a box has to be in the texture to look square on the display (1 = square pixels);
+-- aspect: the display's width / height used for the page (nil = unknown)
+function M.calibration(TW, TH, rx, ry, rw, rh, rot, p, aspect)
+  p = p or 1
   pageH = TH
   ui.pushDWriteFont(style.font)
   rect(0, 0, TW, TH, 0x000000)
@@ -388,20 +392,36 @@ function M.calibration(TW, TH, rx, ry, rw, rh, rot)
   local o = math.max(2, math.min(rw, rh) * 0.02)
   rect(rx, ry, rw, o, 0xFFD200); rect(rx, ry + rh - o, rw, o, 0xFFD200)
   rect(rx, ry, o, rh, 0xFFD200); rect(rx + rw - o, ry, o, rh, 0xFFD200)
-  -- corners 1..4 clockwise
-  local c = math.min(rw, rh) * 0.22
+  -- corners 1..4 clockwise, boxes that look square on the display when the aspect is right
+  local c = math.min(rw, rh / p) * 0.22
+  local ch = c * p
   local m = o + e
-  rect(rx + m, ry + m, c, c, CORNER_COLOURS[1]); text('1', rx + m, ry + m, c, c, c, 0.5, 0x000000)
-  rect(rx + rw - m - c, ry + m, c, c, CORNER_COLOURS[2]); text('2', rx + rw - m - c, ry + m, c, c, c, 0.5, 0x000000)
-  rect(rx + rw - m - c, ry + rh - m - c, c, c, CORNER_COLOURS[3])
-  text('3', rx + rw - m - c, ry + rh - m - c, c, c, c, 0.5, 0x000000)
-  rect(rx + m, ry + rh - m - c, c, c, CORNER_COLOURS[4]); text('4', rx + m, ry + rh - m - c, c, c, c, 0.5, 0x000000)
+  local tsz = math.min(c, ch)
+  rect(rx + m, ry + m, c, ch, CORNER_COLOURS[1]); text('1', rx + m, ry + m, c, ch, tsz, 0.5, 0x000000)
+  rect(rx + rw - m - c, ry + m, c, ch, CORNER_COLOURS[2]); text('2', rx + rw - m - c, ry + m, c, ch, tsz, 0.5, 0x000000)
+  rect(rx + rw - m - c, ry + rh - m - ch, c, ch, CORNER_COLOURS[3])
+  text('3', rx + rw - m - c, ry + rh - m - ch, c, ch, tsz, 0.5, 0x000000)
+  rect(rx + m, ry + rh - m - ch, c, ch, CORNER_COLOURS[4]); text('4', rx + m, ry + rh - m - ch, c, ch, tsz, 0.5, 0x000000)
   local key = rx * 1e12 + ry * 1e8 + rw * 1e4 + rh
   if key ~= regionFor then
     regionFor = key
     regionText = string.format('%d, %d  %d×%d', rx, ry, rw, rh)
   end
-  text(regionText, rx + rw * 0.1, ry + rh * 0.35, rw * 0.8, rh * 0.3, rh * 0.3, 0.5, 0xFFD200)
+  local a100 = aspect and math.floor(aspect * 100 + 0.5) or 0
+  if a100 ~= aspectFor then
+    aspectFor = a100
+    aspectText = aspect and string.format('poměr %.2f : 1', aspect) or 'poměr neznámý'
+  end
+  -- the numbers in the middle, stretched like the page so they read normally on the display
+  local cy = ry + rh / 2
+  if p ~= 1 then ui.beginScale() end
+  text(regionText, rx + rw * 0.25, cy - rh * 0.2 / p, rw * 0.5, rh * 0.18 / p, rh * 0.18 / p, 0.5, 0xFFD200)
+  text(aspectText, rx + rw * 0.25, cy + rh * 0.04 / p, rw * 0.5, rh * 0.12 / p, rh * 0.12 / p, 0.5, 0xFFFFFF)
+  if p ~= 1 then
+    CAL_SCALE.x, CAL_SCALE.y = 1, p
+    CAL_PIVOT.x, CAL_PIVOT.y = ox + (rx + rw / 2) * sc, oy + cy * sc
+    ui.endPivotScale(CAL_SCALE, CAL_PIVOT)
+  end
   ui.popDWriteFont()
 end
 

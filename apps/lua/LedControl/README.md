@@ -162,7 +162,11 @@ Nastavení vzhledu (sbalené sekce):
 - **Vlastní stránka**: co je na kterém místě.
 - **Oblast displeje**: kam v textuře se kreslí. **Výchozí oblast** je *Podle meshe* (část textury, kterou mesh displeje
   opravdu ukazuje, z jeho UV) nebo *Podle konfigurace auta* (`DISPLAY_POS` / `DISPLAY_SIZE`); když hra vrcholy meshe
-  nevydá, jde jen konfigurace. **Otočení** 0 / 90 / 180 / 270° pro displej, který leží v textuře bokem.
+  nevydá, jde jen konfigurace. **Poměr stran**: jak široký je displej oproti výšce, jak ho vidíte v autě (podle
+  rozměrů meshe, nebo ručně). Textura bývá jinak široká než displej (třeba čtverec 1024 × 1024 na displeji 1,6 : 1);
+  stránka se pak složí pro skutečný tvar displeje a do textury se roztáhne, takže na displeji není roztažená.
+  Správně je, když čtverce 1–4 v Kalibraci vypadají jako čtverce.
+  **Otočení** 0 / 90 / 180 / 270° pro displej, který leží v textuře bokem.
   **Kalibrace** nakreslí přes celou texturu mřížku: v každém políčku je modře x a pod ním růžově y (pixely textury),
   žlutý rámeček je oblast, kam se kreslí, rohy 1–4 jdou po směru hodinových ručiček a oranžový pruh je horní okraj
   stránky. Podle čísel u okrajů displeje nastavte posun a velikost, aby rámeček seděl na okraje. Po úpravě se displej

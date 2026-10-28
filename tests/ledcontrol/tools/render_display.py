@@ -52,6 +52,8 @@ def render(path):
             parts = head.split()
             x1, y1, x2, y2, r, g, b, a, size, ha, va = parts[1:12]
             rot = int(parts[12]) if len(parts) > 12 else 0
+            sx = float(parts[13]) if len(parts) > 13 else 1.0
+            sy = float(parts[14]) if len(parts) > 14 else 1.0
             x1, y1, x2, y2, size = float(x1), float(y1), float(x2), float(y2), float(size)
             # the box as drawn before a turn (ui.beginRotation / endPivotRotation), text laid out in it, then turned
             bw, bh = (y2 - y1, x2 - x1) if rot in (90, 270) else (x2 - x1, y2 - y1)
@@ -64,8 +66,8 @@ def render(path):
             layer = Image.new("RGBA", (max(1, tw), max(1, th)), (0, 0, 0, 0))
             ImageDraw.Draw(layer).text((-box[0], -box[1]), text, font=font, fill=colour(r, g, b, a))
             if tw > 0 and target > 0:
-                layer = layer.resize((max(1, int(target)), max(1, th)))
-                tw = layer.size[0]
+                layer = layer.resize((max(1, int(target * sx)), max(1, int(th * sy))))
+                tw, th = layer.size
             ha, va = int(ha), int(va)
             x = 0 if ha < 0 else (bw - tw if ha > 0 else (bw - tw) / 2)
             y = 0 if va < 0 else (bh - th if va > 0 else (bh - th) / 2)

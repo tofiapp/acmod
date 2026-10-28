@@ -53,7 +53,7 @@ local function bounds(cv, W, H, what)
       problems[#problems + 1] = string.format('%s outside the screen (%.0f,%.0f – %.0f,%.0f)', c[1], x1, y1, x2, y2)
     end
     if c[1] == 'text' then
-      local w, size = c[14], c[11]
+      local w, size = c[14] * (c[16] or 1), c[11] * (c[17] or 1)
       local bw, bh = x2 - x1, y2 - y1
       if c[15] == 90 or c[15] == 270 then bw, bh = bh, bw end   -- a turned text runs along the box's height
       if w > bw + 0.5 then
@@ -76,8 +76,8 @@ local function dump(cv, W, H, name)
       f:write(string.format('rect %.2f %.2f %.2f %.2f %.4f %.4f %.4f %.4f %.2f\n', c[2], c[3], c[4], c[5], c[6], c[7], c[8],
         c[9], c[10] or 0))
     else
-      f:write(string.format('text %.2f %.2f %.2f %.2f %.4f %.4f %.4f %.4f %.2f %d %d %d|%s\n', c[2], c[3], c[4], c[5], c[6],
-        c[7], c[8], c[9], c[11], c[12], c[13], c[15] or 0, c[10]))
+      f:write(string.format('text %.2f %.2f %.2f %.2f %.4f %.4f %.4f %.4f %.2f %d %d %d %.4f %.4f|%s\n', c[2], c[3], c[4],
+        c[5], c[6], c[7], c[8], c[9], c[11], c[12], c[13], c[15] or 0, c[16] or 1, c[17] or 1, c[10]))
     end
   end
   f:close()
@@ -523,6 +523,67 @@ check(kept.slot == 'txDiffuse' and kept.regionMode == 'config' and kept.rotation
 local bad = store.sanitiseCar({ display = { slot = 'txNormal', rotation = 45, regionMode = 'x' } }).display
 check(bad.slot == nil and bad.rotation == nil and bad.regionMode == nil, 'bad values dropped')
 env.displayMesh.uvs, env.displayMesh.texSlots, env.displayMesh.shader = nil, nil, nil
+
+-- ---------------------------------------------------------------- aspect: a square texture on a wide display
+
+-- the user's wheel: the whole 1024 x 1024 texture is shown on a screen about 1.6 times wider than high, so a page laid
+-- out square came out stretched; laid out in 1024 x 640 and stretched by 1.6 into the texture it looks right
+H.displayCar(1)
+env.storage = {}
+env.cspConfig.SCRIPTABLE_DISPLAY_0.DISPLAY_POS = { '0', '0' }
+env.cspConfig.SCRIPTABLE_DISPLAY_0.DISPLAY_SIZE = { '1024', '1024' }
+env.displayMesh.aabb = { { -0.08, -0.04, -0.03 }, { 0.08, 0.04, 0.03 } }   -- 16 cm wide, 10 cm high (tilted back)
+env.noVertices = { DISPLAY_SCREEN = true }
+app = H.loadApp()
+frame(3)
+display = require('src/display')
+display.cfg().on = true
+env.car.speedKmh, env.car.rpm, env.car.gear = 81, 9000, 4
+frame(10)
+local sq = env.displayMesh.textures and env.displayMesh.textures.txDiffuse
+local a, how = display.aspectOf(1)
+local bw, bh, bs = display.pageBox(1)
+check(how == 'mesh' and math.abs(a - 1.6) < 0.01 and bw == 1024 and bh == 640 and math.abs(bs - 1.6) < 0.001,
+  string.format('aspect from the mesh box: %.2f, page laid out in %d x %d, stretched %.2f', a or 0, bw, bh, bs))
+bounds(sq, 1024, 1024, 'stretched page inside the 1024 x 1024 region')
+local stretched, covers = true, false
+for i = 1, sq.n do
+  local e = sq.cmds[i]
+  if e[1] == 'text' and math.abs(e[17] - 1.6) > 0.001 then stretched = false end
+  if e[1] == 'rect' and e[2] < 0.5 and e[3] < 0.5 and e[4] > 1023.5 and e[5] > 1023.5 then covers = true end
+end
+check(stretched and covers, 'every text stretched 1.6 x vertically, the background covers the whole region')
+dump(sq, 1024, 1024, 'aspect_race_1024x1024')
+display.cfg().aspect = 1
+display.invalidate()
+frame(5)
+bw, bh, bs = display.pageBox(1)
+check(select(2, display.aspectOf(1)) == 'manual' and bw == 1024 and bh == 1024 and bs == 1, 'manual aspect 1 : 1: no stretch')
+display.cfg().aspect = nil
+display.cfg().rotation = 90
+display.retake()
+frame(5)
+sq = env.displayMesh.textures.txDiffuse
+bounds(sq, 1024, 1024, 'turned and stretched page inside the region')
+display.cfg().rotation = nil
+display.retake()
+frame(3)
+display.setCalibrate(true)
+frame(5)
+sq = env.displayMesh.textures.txDiffuse
+local box1
+for i = 1, sq.n do
+  local e = sq.cmds[i]
+  if e[1] == 'rect' and math.abs(e[6] - 1) < 0.01 and e[7] < 0.2 and e[8] < 0.2 then box1 = e; break end
+end
+check(box1 and math.abs((box1[5] - box1[3]) / (box1[4] - box1[2]) - 1.6) < 0.01,
+  'calibration: corner squares 1.6 x taller in the texture, so they look square on the display')
+dump(sq, 1024, 1024, 'aspect_calibration_1024x1024')
+display.setCalibrate(false)
+check(store.sanitiseCar({ display = { aspect = 1.55 } }).display.aspect == 1.55
+  and store.sanitiseCar({ display = { aspect = 'x' } }).display.aspect == nil
+  and store.sanitiseCar({ display = { aspect = 20 } }).display.aspect == nil, 'aspect saved per car, sanitised')
+env.noVertices = {}
 
 -- ---------------------------------------------------------------- the tab: drawn, no UI error, no allocation
 

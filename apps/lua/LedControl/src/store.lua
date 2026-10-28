@@ -102,11 +102,12 @@ local function sanitiseCar(t)
         end
       end
     end
-    local rot = tonumber(d.rotation)
+    local rot, asp = tonumber(d.rotation), tonumber(d.aspect)
     out.display = { on = d.on == true, which = which, page = math.max(1, math.min(9, math.floor(tonumber(d.page) or 1))),
       slot = (d.slot == 'txEmissive' or d.slot == 'txDiffuse') and d.slot or nil, adjust = adjust,
       regionMode = d.regionMode == 'config' and 'config' or nil,
-      rotation = (rot == 90 or rot == 180 or rot == 270) and rot or nil }
+      rotation = (rot == 90 or rot == 180 or rot == 270) and rot or nil,
+      aspect = (asp and asp >= 0.2 and asp <= 8) and asp or nil }
   end
   return out
 end

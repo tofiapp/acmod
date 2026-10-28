@@ -80,6 +80,7 @@ ui.TreeNodeFlags.Framed | common/ac_ui_enums.lua:341 | Framed                  =
 ui.alignTextToFramePadding | official app-csp-defaults/TimeShift/TimeShift.lua:46 | ui.alignTextToFramePadding()
 ui.availableSpaceX | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:435 | ui.setNextItemWidth(ui.availableSpaceX())
 ui.beginRotation | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:230 | ui.beginRotation()
+ui.beginScale | official app-csp-defaults/RallyCopilot/src/EditorUI.lua:661 | ui.beginScale()
 ui.button | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:305 | if ui.button('Back') then
 ui.checkbox | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:394 | if ui.checkbox('Snap to surfaces', settings.autosnap) then
 ui.childWindow | common/ac_ui.lua:225 | function ui.childWindow(id, size, border, flags, content)
@@ -91,6 +92,7 @@ ui.drawRectFilled | official app-csp-defaults/ControllerTweaks/ControllerTweaks.
 ui.dummy | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:217 | ui.dummy(range)
 ui.dwriteDrawTextClipped | official app-csp-defaults/SetupExchange/IconCounter.lua:11 | ui.dwriteDrawTextClipped(c > 99 and '99+' or c, c > 99 and 18 or 22, vec2(15, 6), 64, ui.Alignment.Center, ui.Alignment.Center)
 ui.endPivotRotation | official acc-lua-internal/included-apps/Mumble/src/MumbleWrapper.lua:1121 | ui.endPivotRotation(math.round(os.preciseClock() * -10) * 45, cur + overlayIconPosR)
+ui.endPivotScale | official acc-lua-internal/included-cars/android_auto/apps/youtube/app.lua:379 | ui.endPivotScale(vec2(0.65, 1), p)
 ui.getClipboardText | official app-csp-defaults/WebBrowser/src/Controls.lua:523 | clipboardContent = ui.getClipboardText():trim()
 ui.getCursorX | official app-csp-defaults/InternetRadio/InternetRadio.lua:238 | local cr1, cr2 = vec2(0, 0), vec2(ui.getCursorX() + ui.availableSpaceX() - 20, math.huge)
 ui.getCursorY | official app-csp-defaults/InternetRadio/InternetRadio.lua:253 | draggingPos = ui.getCursorY()
@@ -145,6 +147,7 @@ ui.unindent | official acc-lua-internal/included-cars/android_auto/system.lua:54
 :findMeshes | lib_scene.lua:264 | findMeshes = function (s, filter) return s == nil and _emptyNodeRef() or cr(ffi.C.lj_noderef_find__scene(s, nf(filter), 0x20000)) end,
 :get | lib_scene.lua:43 | function _ac_VertexBuffer:get(index) end
 :getIndices | lib_scene.lua:366 | getIndices = function (s)
+:getLocalAABB | lib_scene.lua:612 | getLocalAABB = function (s, transform)
 :getMaterialPropertyValue | lib_scene.lua:872 | getMaterialPropertyValue = function (s, index, property)
 :getMaterialsCount | lib_scene.lua:888 | getMaterialsCount = function (s)
 :getParent | lib_scene.lua:630 | getParent = function (s) return cr(ffi.C.lj_noderef_parent__scene(s)) end,

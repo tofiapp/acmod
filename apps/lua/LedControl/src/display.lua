@@ -241,6 +241,20 @@ local function uvBox(v, res)
     math.floor((v2 - v1) * res.y + 0.5) }
 end
 
+-- Width / height of the display as the driver sees it, from the mesh's local bounding box (acc-lua-sdk lib_scene
+-- getLocalAABB): x across the car, the height is the diagonal of y and z (a panel tilted back). nil when unusable.
+-- UNSURE: assumes the mesh's local x runs across the display (true for a wheel or dash at rest in most cars).
+local function aabbAspect(ref)
+  local ok, mn, mx = pcall(ref.getLocalAABB, ref)
+  if not ok or not mn or not mx then return nil end
+  local dx, dy, dz = math.abs(mx.x - mn.x), math.abs(mx.y - mn.y), math.abs(mx.z - mn.z)
+  local h = math.sqrt(dy * dy + dz * dz)
+  if dx < 0.005 or h < 0.005 or dx > 3 or h > 3 then return nil end
+  local a = dx / h
+  if a < 0.2 or a > 8 then return nil end
+  return a
+end
+
 local function take(i)
   local d = M.displays[i]
   local root = ac.findNodes('carRoot:0')
@@ -254,6 +268,7 @@ local function take(i)
       local okI, ix = pcall(one.getIndices, one)
       local copy = nil
       if okV and v and not t.uv then t.uv = uvBox(v, d.res) end
+      if not t.meshAspect then t.meshAspect = aabbAspect(one) end
       if okV and okI and v and ix then
         local okC, c = pcall(one:getParent().createMesh, one:getParent(),
           string.format('__ledcontrol_disp_%d_%d', i, #t.copies + 1), nil, v, ix, false, true)
@@ -353,6 +368,32 @@ function M.rotation()
   local r = tonumber(cfg().rotation) or 0
   if r == 90 or r == 180 or r == 270 then return r end
   return 0
+end
+
+-- Aspect of display i as seen (width / height): manual (profile.display.aspect) or from the mesh, nil = unknown
+-- (the page then uses the region's own proportions, as if texture pixels were square on the display).
+function M.aspectOf(i)
+  local a = tonumber(cfg().aspect)
+  if a and a >= 0.2 and a <= 8 then return a, 'manual' end
+  local t = M.taken[i]
+  if t and t.meshAspect then return t.meshAspect, 'mesh' end
+  return nil, nil
+end
+
+-- The box the page is laid out in for display i: W x H (before the turn) and the vertical stretch sy that maps it
+-- onto the region, so the page keeps its proportions on a display whose texture is squeezed (a square 1024 x 1024
+-- texture on a 1.6 : 1 screen: laid out in 1024 x 640, stretched by 1.6 into the texture, squeezed back by the mesh).
+function M.pageBox(i)
+  local t = M.taken[i]
+  local W, H = t.w, t.h
+  local r = M.rotation()
+  if r == 90 or r == 270 then W, H = t.h, t.w end
+  local a = M.aspectOf(i)
+  if not a then return W, H, 1 end
+  local hv = math.floor(W / a + 0.5)
+  local sy = H / hv
+  if math.abs(sy - 1) < 0.01 then return W, H, 1 end
+  return W, hv, sy
 end
 
 -- Calibration (tab Displej -> Oblast displeje, not saved): the whole texture gets a grid with pixel coordinates and
@@ -602,19 +643,28 @@ end
 -- ---------------------------------------------------------------- painting
 
 local painting = nil           -- the display being painted (read by the callback)
-local PIVOT = vec2()
+local PIVOT, ORIGIN, STRETCH = vec2(), vec2(0, 0), vec2(1, 1)
+-- the page in its box, stretched vertically by sy (ui.beginScale / endPivotScale(vec2, pivot) as the YouTube app of
+-- CSP's Android Auto and dash_display_8100 scale one axis)
+local function drawStretched(W, H, sy)
+  if sy == 1 then pages.draw(M.page, W, H, D); return end
+  ui.beginScale()
+  pages.draw(M.page, W, H, D)
+  STRETCH.x, STRETCH.y = 1, sy
+  ui.endPivotScale(STRETCH, ORIGIN)
+end
 local function paintCallback()
   local t = M.taken[painting]
   pages.origin(0, 0, 1)
   local r = M.rotation()
-  if r == 0 then pages.draw(M.page, t.w, t.h, D); return end
+  local W, H, sy = M.pageBox(painting)
+  if r == 0 then drawStretched(W, H, sy); return end
   -- drawn upright in a box of the turned size, then turned around a pivot so it lands on the region (0, 0, w, h):
   -- ui.endPivotRotation(angle, pivot) turns by 90 - angle clockwise (dash_display_8100 passes 0 for a display
   -- turned by 90 degrees, overtake mode passes 90 + small angle for a slight tilt)
-  local W, H = t.w, t.h
-  if r ~= 180 then W, H = t.h, t.w end
   ui.beginRotation()
-  pages.draw(M.page, W, H, D)
+  drawStretched(W, H, sy)
+  H = H * sy
   if r == 90 then PIVOT.x, PIVOT.y = H / 2, H / 2
   elseif r == 270 then PIVOT.x, PIVOT.y = W / 2, W / 2
   else PIVOT.x, PIVOT.y = W / 2, H / 2 end
@@ -624,7 +674,11 @@ local function calibCallback()
   local t = M.taken[painting]
   local d = M.displays[painting]
   pages.origin(0, 0, 1)
-  pages.calibration(d.res.x, d.res.y, t.x, t.y, t.w, t.h, M.rotation())
+  -- how much taller a texture pixel has to be to look square on the display (corner squares drawn with it)
+  local r = M.rotation()
+  local a = M.aspectOf(painting) or (t.w / t.h)
+  local seen = (r == 90 or r == 270) and 1 / a or a
+  pages.calibration(d.res.x, d.res.y, t.x, t.y, t.w, t.h, r, seen * t.h / t.w, M.aspectOf(painting))
 end
 
 -- glow factor of the display now (Svit x night)

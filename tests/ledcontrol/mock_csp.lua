@@ -271,6 +271,13 @@ function refmt:getVertices()
   end
   return nil
 end
+-- local bounding box (mesh field aabb = { { x, y, z }, { x, y, z } }; none: zeroes and count 0, as the SDK returns)
+function refmt:getLocalAABB()
+  local o = self[1]
+  local b = o and o.aabb
+  if not b then return vec3(), vec3(), 0 end
+  return vec3(b[1][1], b[1][2], b[1][3]), vec3(b[2][1], b[2][2], b[2][3]), 1
+end
 -- material description (mesh opts shader / texSlots, default ksPerPixel with txDiffuse only)
 function refmt:shaderName(i) local o = self[i or 1]; return o and (o.shader or 'ksPerPixel') or nil end
 function refmt:getTextureSlotsCount(i) local o = self[i or 1]; return o and #(o.texSlots or { 'txDiffuse' }) or 0 end
@@ -732,6 +739,22 @@ ui = {
   -- rotation (acc-lua-sdk ui: beginRotation / endPivotRotation(deg, pivot), 90 = no turn): the canvas commands drawn
   -- in between are turned by 90 - deg clockwise around the pivot (multiples of 90 only; e[15] = the text's turn)
   beginRotation = function () if M.recording then M.recording.rotFrom = M.recording.n + 1 end end,
+  -- scale (ui.beginScale / endPivotScale(vec2 | number, pivot)): commands since beginScale scaled around the pivot;
+  -- a text keeps its stretch in e[16], e[17] (x, y)
+  beginScale = function () if M.recording then M.recording.scaleFrom = M.recording.n + 1 end end,
+  endPivotScale = function (sc, pivot)
+    local cv = M.recording
+    if not cv or not cv.scaleFrom then return end
+    local sx = type(sc) == 'number' and sc or sc.x
+    local sy = type(sc) == 'number' and sc or sc.y
+    for k = cv.scaleFrom, cv.n do
+      local e = cv.cmds[k]
+      e[2], e[4] = pivot.x + (e[2] - pivot.x) * sx, pivot.x + (e[4] - pivot.x) * sx
+      e[3], e[5] = pivot.y + (e[3] - pivot.y) * sy, pivot.y + (e[5] - pivot.y) * sy
+      if e[1] == 'text' then e[16], e[17] = e[16] * sx, e[17] * sy end
+    end
+    cv.scaleFrom = nil
+  end,
   endPivotRotation = function (deg, pivot)
     local cv = M.recording
     if not cv or not cv.rotFrom then return end
@@ -756,7 +779,7 @@ ui = {
       if not e then e = {}; cv.cmds[cv.n] = e end          -- reused between paints: the mock must not allocate
       e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9] = 'rect', p1.x, p1.y, p2.x, p2.y, c.r, c.g, c.b, c.mult or 1
       e[10] = rounding or 0
-      for k = 11, 15 do e[k] = nil end
+      for k = 11, 17 do e[k] = nil end
     end
   end,
   -- DirectWrite text (signatures as official CSP code calls them; widths: UNSURE, 0.52 x size per character for
@@ -774,7 +797,7 @@ ui = {
       local e = cv.cmds[cv.n]
       if not e then e = {}; cv.cmds[cv.n] = e end
       e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9] = 'text', p1.x, p1.y, p2.x, p2.y, c.r, c.g, c.b, c.mult or 1
-      e[10], e[11], e[12], e[13], e[14], e[15] = t, size, ha, va, M.textWidth(t, size), 0
+      e[10], e[11], e[12], e[13], e[14], e[15], e[16], e[17] = t, size, ha, va, M.textWidth(t, size), 0, 1, 1
     end
   end,
   drawRect = function () end,

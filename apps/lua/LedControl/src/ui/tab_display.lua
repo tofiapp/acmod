@@ -76,6 +76,13 @@ local T = {
     .. 'DISPLAY_POS / DISPLAY_SIZE z konfigurace auta. Když hra vrcholy meshe nedá, jde jen konfigurace.',
   sourceLabels = { 'Podle meshe##dispSrc1', 'Podle konfigurace auta##dispSrc2' },
   sourceNoUv = 'Mesh nedal vrcholy (UV), oblast je z konfigurace auta: dolaďte ji s Kalibrací.',
+  aspect = 'Poměr stran',
+  aspectAuto = 'Podle meshe##dispAspectAuto',
+  aspectHelp = 'Jak široký je displej oproti výšce, jak ho vidíte v autě. Textura bývá jinak široká než displej '
+    .. '(třeba čtverec na širokém displeji); stránka se pak podle poměru složí, aby nebyla roztažená. Správně je, '
+    .. 'když čtverce 1–4 v Kalibraci vypadají na displeji jako čtverce.',
+  aspectMesh = 'Z rozměrů meshe: %.2f : 1',
+  aspectNone = 'Rozměry meshe nejdou zjistit: nastavte poměr ručně (čtverce 1–4 v Kalibraci mají vypadat jako čtverce).',
   rotation = 'Otočení',
   rotationHelp = 'Když je displej v textuře otočený (stránka je na volantu bokem nebo vzhůru nohama), otočte ji tady '
     .. '(po směru hodinových ručiček). Při kalibraci ukazuje oranžový pruh, kam padne horní okraj stránky.',
@@ -325,6 +332,7 @@ local AREA = { { T.areaX, '##dispAreaX', -400, 400 }, { T.areaY, '##dispAreaY', 
   { T.areaW, '##dispAreaW', -600, 600 }, { T.areaH, '##dispAreaH', -600, 600 } }
 local areaText, areaFor = '', { -1, -1, -1, -1 }
 local ZERO = { 0, 0, 0, 0 }
+local aspectNote, aspectFor = '', -2
 local function areaRows()
   local i = nil
   for k = 1, #display.displays do if display.modeOf(k) then i = k; break end end
@@ -347,6 +355,32 @@ local function areaRows()
     display.retake()
   end
   K.help(T.rotationHelp)
+  K.label(T.aspect)
+  local a, how = display.aspectOf(i)
+  if ui.checkbox(T.aspectAuto, how ~= 'manual') then
+    if how == 'manual' then c.aspect = nil
+    else c.aspect = math.floor((a or display.taken[i].w / display.taken[i].h) * 100 + 0.5) / 100 end
+    display.invalidate()
+    profileDirty, editedAt = true, runtime.clock
+  end
+  K.help(T.aspectHelp)
+  if how == 'manual' then
+    K.label('')
+    ui.setNextItemWidth(K.CONTROL_W)
+    local v, changed = ui.slider('##dispAspect', a, 0.3, 4, '%.2f : 1')
+    if changed then
+      c.aspect = math.floor(v * 100 + 0.5) / 100
+      display.invalidate()
+      profileDirty, editedAt = true, runtime.clock
+    end
+  else
+    local m = display.taken[i].meshAspect or -1
+    if m ~= aspectFor then
+      aspectFor = m
+      aspectNote = m > 0 and string.format(T.aspectMesh, m) or T.aspectNone
+    end
+    K.note(aspectNote, K.GREY)
+  end
   local cal = ui.checkbox(T.calibrate, display.calibrate)
   if cal then display.setCalibrate(not display.calibrate) end
   K.help(T.calibrateHelp)
@@ -408,14 +442,15 @@ end
 local size = vec2()
 local function preview()
   local W, H = 800, 480
+  local taken = false
   for k = 1, #display.displays do
     if display.modeOf(k) then
-      local _, _, w, h = display.regionOf(k)
-      W, H = w, h
+      W, H = display.pageBox(k)          -- as the page looks on the display (aspect and rotation applied)
+      taken = true
       break
     end
   end
-  if W == 800 and display.displays[1] then W, H = display.displays[1].size.x, display.displays[1].size.y end
+  if not taken and display.displays[1] then W, H = display.displays[1].size.x, display.displays[1].size.y end
   local avail = ui.availableSpaceX()
   local scale = math.min(1, (avail - 4) / W)
   local x, y = ui.getCursorX(), ui.getCursorY()
