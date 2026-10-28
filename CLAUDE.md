@@ -240,3 +240,15 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
   regulator must slow down BEFORE the peak; in corners the combined ndSlip is high without throttle (LAT_SPLIT).
 - v0.10.0: TRACTION_MODE 2 (tuned regulator) default. Sim: tuning 100/210 runs pass (v0.9.3: 71), hidden 61/135
   (v0.9.3: 33); runs over 1.5x peak slip 35 vs 131 (tuning), 20 vs 95 (hidden). TRACTION_MODE 1 = old foot.
+- v0.10.0 user: much better than before, steering good, throttle clearly improved, but sometimes needlessly cautious,
+  after a kerb it refused to accelerate on straight asphalt; other cars: "the dump is much longer"; one spin. Logs
+  (Mustang + Supra, analysed by agents, cross-checked): the cap was PINNED to RETURN x memory (A < T clamp while T
+  creeps with the memory recovery; K_UP never ran): 17-31 s of needless cut per session; limits learned in corners
+  applied on straights; corner cuts to the 0.09 floor; hold band froze the cap at 0.47 of the peak where real
+  full-throttle slip sits (sx 0.45-0.5). The spin: throttle rising too fast under 0.7-2 g, then brake + 2->1 downshift
+  locked the rears (brake limiter: longitudinal only). kb-test.csv: test never switched on.
+- v0.10.1 (interim, same tuned parameters): pin fix, forgetting (SPARE/FORGET_*), LEARN_LAT, FLOOR_LAT, recovery
+  scaled by the key ramp, settings TRACTION_RECOVERY / TRACTION_MEMORY, recorder meta line. Sim: Mustang profile,
+  Supra refit, per-axle lateral grip, real slip noise (5 Hz band, 3-4x before), new scenarios kerb_straight,
+  corner_then_straight; sim/replay.lua = open-loop replay of the real logs (sim/data/real) as a CAUTION measure
+  (needless cut share) added to the optimizer cost. Replay of the Supra log: needless cut 55 s (0.10.0) -> 35 s.
