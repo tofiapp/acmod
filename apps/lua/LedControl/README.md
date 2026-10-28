@@ -148,14 +148,25 @@ přepnete sami, scénář ho pustí. Online se nad kartou ukáže upozornění a
 ### Displej
 
 Karta **Displej** kreslí na displej auta vlastní stránku: **Závod** (řada otáček, rychlost, převod, čas kola, poslední
-kolo, palivo, pozice, delta), **Otáčky** (velká řada otáček, otáčky, převod) nebo **Kola** (časy a pozice). Řada otáček
+kolo, palivo, pozice, delta), **Otáčky** (velká řada otáček, otáčky, převod), **Kola** (časy a pozice) nebo
+**Vlastní** (rozvržení jako Závod, na každé ze 7 míst si vyberete, co se ukáže). Řada otáček
 na displeji počítá stejný preset jako diody, takže jsou tam vidět i vaše animace (bod řazení, omezovač).
 Pit limiter, pit lane bez limiteru a vlajky převezmou celý displej, málo paliva ukáže pruh dole; každou skupinu jde
 vypnout. **Obnovování** omezuje počet překreslení za sekundu (kreslí se jen při změně).
 
+Nastavení vzhledu (sbalené sekce):
+
+- **Vzhled**: motiv (Tmavý, Světlý, Závodní, Modrý) nebo vlastní barvy pozadí, textu, popisků, zvýraznění, zhasnuté
+  diody a pruhů; písmo (Bahnschrift, Segoe UI, Arial, Consolas); zaoblení; jas; rychlost v km/h nebo mph.
+- **Řada diod**: zobrazit / skrýt, počet políček (4–24), výška, mezera.
+- **Vlastní stránka**: co je na kterém místě.
+- **Oblast displeje**: posun a velikost oblasti v textuře, když stránka sedí posunutá nebo oříznutá.
+
 Funguje u aut, která mají displej jako „scriptable display“ CSP (sekce `[SCRIPTABLE_DISPLAY_...]` v konfiguraci auta).
-Původní displej se jen schová a po vypnutí (nebo po pádu skriptu) se vrátí. Když po převzetí zůstane displej černý,
-zkuste v sekci **Textura** druhou volbu.
+Normálně se kreslí do kopie displeje a původní se schová. Když hra z meshe displeje kopii udělat nedovolí (nevydá jeho
+vrcholy, třeba `motec_data_display`), kreslí se přímo do displeje a po vypnutí se vrátí jeho původní textura; karta to
+napíše. Po vypnutí (nebo po pádu skriptu) je displej zpátky. Když po převzetí zůstane displej černý, zkuste v sekci
+**Textura** druhou volbu.
 
 ### Klávesy
 

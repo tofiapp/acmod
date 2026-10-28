@@ -96,7 +96,7 @@ frame(10)
 st = runSelftest(app)
 local pagesOk = 0
 for _, l in ipairs(st.lines) do if l:find('^OK') and l:find('Displej:', 1, true) then pagesOk = pagesOk + 1 end end
-check(st.done and st.fail == 0 and pagesOk == 11, 'display: 3 pages + 8 takeover screens painted (' .. pagesOk .. ')')
+check(st.done and st.fail == 0 and pagesOk == 12, 'display: 4 pages + 8 takeover screens painted (' .. pagesOk .. ')')
 check(st.text():find('zkontrolujte okem', 1, true), 'display: the protocol asks to check the picture by eye')
 check(display.page == 1 and display.forced == nil, 'display back to its page after the self-test')
 

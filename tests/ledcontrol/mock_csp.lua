@@ -253,7 +253,20 @@ function refmt:isCastingShadows(i) local o = self[i or 1]; return o ~= nil and o
 function refmt:isTransparent(i) local o = self[i or 1]; return o ~= nil and o.transparent end
 function refmt:setShadows(v) for i = 1, #self do self[i].shadows = v end return self end
 function refmt:setTransparent(v) for i = 1, #self do self[i].transparent = v end return self end
-function refmt:getVertices() if self[1] and self[1].kind == 'mesh' then return { source = self[1] } end return nil end
+-- (M.noVertices[name] = true: the game gives no vertex data for that mesh, as getVertices may return nil)
+M.noVertices = {}
+function refmt:getVertices()
+  if self[1] and self[1].kind == 'mesh' and not M.noVertices[self[1].name] then return { source = self[1] } end
+  return nil
+end
+function refmt:getTextureSlotFilename(index, slot)
+  if type(index) == 'string' then index, slot = 1, index end
+  local o = self[index or 1]
+  if not o then return nil end
+  local t = o.textures and o.textures[slot]
+  if type(t) == 'string' then return t end
+  return o.texFile or ('tex_' .. o.name .. '_' .. tostring(slot) .. '.dds')
+end
 function refmt:getIndices() if self[1] and self[1].kind == 'mesh' then return { source = self[1] } end return nil end
 function refmt:createMesh(name, materialName, v, ix, keepAlive, moveData)
   if M.createMeshFails then return nil end
@@ -695,14 +708,15 @@ ui = {
   getCursorX = function () return 0 end,
   getCursorY = function () return 0 end,
   drawCircleFilled = function () end,
-  drawRectFilled = function (p1, p2, c)
+  drawRectFilled = function (p1, p2, c, rounding)
     local cv = M.recording
     if cv then
       cv.n = cv.n + 1
       local e = cv.cmds[cv.n]
       if not e then e = {}; cv.cmds[cv.n] = e end          -- reused between paints: the mock must not allocate
       e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9] = 'rect', p1.x, p1.y, p2.x, p2.y, c.r, c.g, c.b, c.mult or 1
-      for k = 10, 14 do e[k] = nil end
+      e[10] = rounding or 0
+      for k = 11, 14 do e[k] = nil end
     end
   end,
   -- DirectWrite text (signatures as official CSP code calls them; widths: UNSURE, 0.52 x size per character for

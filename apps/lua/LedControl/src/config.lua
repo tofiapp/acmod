@@ -20,6 +20,17 @@ local defaults = {
   displayFlags = true, -- ... flags
   displayFuel = true,  -- ... a low fuel banner
   displayGuard = '',   -- self-heal marker of display meshes hidden by the display takeover
+  displayTheme = 1,    -- display design: 1..4 = display_pages.THEMES, 0 = own colours (displayColours)
+  displayColours = '', -- own colours "#bg,#text,#label,#accent,#cellOff,#strip"
+  displayFont = 1,     -- display_pages.FONTS
+  displayRounding = 0, -- 0..100 % rounding of the LED cells and strips
+  displayBrightness = 100, -- 20..100 %
+  displayCellsOn = true,   -- the LED row on the pages
+  displayCells = 12,   -- cells of the LED row (4..24)
+  displayCellH = 100,  -- height of the LED row, % of the page's own
+  displayCellGap = 8,  -- gap between cells, per mille of the width
+  displayUnits = 1,    -- 1 km/h, 2 mph
+  displayZones = 'speed,gear,lap,last,fuel,pos,delta', -- page Vlastní: field per zone
 }
 
 local stored = ac.storage(defaults, 'lc_')
@@ -37,5 +48,19 @@ end
 function M.reset(key)
   M.set(key, defaults[key])
 end
+
+-- Live edits (a slider or colour picker being dragged): the value takes effect at once, ac.storage is written only by
+-- flushLive (the tab calls it once the control rests, and when it is hidden).
+local dirty, dirtyAny = {}, false
+function M.setLive(key, value)
+  S[key] = value
+  dirty[key], dirtyAny = true, true
+end
+function M.flushLive()
+  if not dirtyAny then return end
+  for k in pairs(dirty) do stored[k] = S[k]; dirty[k] = nil end
+  dirtyAny = false
+end
+function M.hasLive() return dirtyAny end
 
 return M

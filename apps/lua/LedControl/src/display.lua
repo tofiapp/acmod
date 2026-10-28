@@ -142,42 +142,101 @@ end
 
 local BLACK = rgbm(0, 0, 0, 1)
 
+-- Two ways per mesh: a shadow copy (the original hidden) when the game gives the mesh's vertices, else painting the
+-- original itself ("direct": its material is made its own with ensureUniqueMaterials, the texture filename of the
+-- slot is kept and set back on release; getVertices returns nil for meshes without CPU data, as the SDK says).
+-- UNSURE: whether a scriptable display's own texture comes back from its filename (a dynamic one may start with '$').
 local function release(i)
   local t = M.taken[i]
   if not t then return end
   for k = 1, #t.copies do pcall(t.copies[k].dispose, t.copies[k]) end
   for k = 1, #t.origs do pcall(t.origs[k].setVisible, t.origs[k], true) end
+  for k = 1, #t.direct do
+    local e = t.direct[k]
+    if e.file and e.file ~= '' then pcall(e.ref.setMaterialTexture, e.ref, e.slot, e.file) end
+  end
   M.taken[i] = nil
   M.nTaken = M.nTaken - 1
+end
+
+local function slotName()
+  local s = cfg().slot
+  for i = 1, #SLOTS do if SLOTS[i] == s then return s end end
+  return SLOTS[1]
 end
 
 local function take(i)
   local d = M.displays[i]
   local root = ac.findNodes('carRoot:0')
-  local t = { copies = {}, origs = {}, params = nil }
+  local slot = slotName()
+  local t = { copies = {}, origs = {}, direct = {}, targets = {}, params = nil, mode = '' }
   for _, name in ipairs(d.meshes) do
     local ref = root:findMeshes(name)
     for k = 1, #ref do
       local one = ref:at(k)
-      local v, ix = one:getVertices(), one:getIndices()
-      if not v or not ix then error('getVertices/getIndices nevrátily data (' .. name .. ')') end
-      local copy = one:getParent():createMesh(string.format('__ledcontrol_disp_%d_%d', i, #t.copies + 1), nil, v, ix,
-        false, true)
-      if not copy or #copy == 0 then error('createMesh nevytvořil kopii displeje (' .. name .. ')') end
-      t.copies[#t.copies + 1] = copy
-      copy:assignMaterialFrom(one)
-      copy:ensureUniqueMaterials()
-      t.origs[#t.origs + 1] = one
+      local okV, v = pcall(one.getVertices, one)
+      local okI, ix = pcall(one.getIndices, one)
+      local copy = nil
+      if okV and okI and v and ix then
+        local okC, c = pcall(one:getParent().createMesh, one:getParent(),
+          string.format('__ledcontrol_disp_%d_%d', i, #t.copies + 1), nil, v, ix, false, true)
+        if okC and c and #c > 0 then copy = c end
+      end
+      if copy then
+        t.copies[#t.copies + 1] = copy
+        copy:assignMaterialFrom(one)
+        copy:ensureUniqueMaterials()
+        t.origs[#t.origs + 1] = one
+        t.targets[#t.targets + 1] = copy
+      else
+        local okF, file = pcall(one.getTextureSlotFilename, one, 1, slot)
+        one:ensureUniqueMaterials()
+        t.direct[#t.direct + 1] = { ref = one, slot = slot, file = okF and file or nil }
+        t.targets[#t.targets + 1] = one
+      end
     end
   end
-  if #t.copies == 0 then error('mesh displeje nenalezen (' .. table.concat(d.meshes, ', ') .. ')') end
+  if #t.targets == 0 then error('mesh displeje nenalezen (' .. table.concat(d.meshes, ', ') .. ')') end
+  t.mode = #t.direct == 0 and 'copy' or (#t.copies == 0 and 'direct' or 'mixed')
   -- hidden only once every copy exists; the marker is written before hiding
   M.taken[i] = t
   M.nTaken = M.nTaken + 1
-  writeGuard()
+  if #t.origs > 0 then writeGuard() end
   for k = 1, #t.origs do t.origs[k]:setVisible(false) end
   -- the parameters of the paint call, reused (the callback reads the display being painted from `painting`)
-  t.params = { textureSize = d.res, background = BLACK, region = { from = d.pos, size = d.size }, callback = nil }
+  t.params = { textureSize = d.res, background = BLACK, region = { from = vec2(), size = vec2() }, callback = nil }
+  M.applyRegion(i)
+end
+
+-- Region of display i with the user's correction (profile.display.adjust[i] = { x, y, w, h } in texture pixels).
+function M.regionOf(i)
+  local d = M.displays[i]
+  local a = cfg().adjust and cfg().adjust[i]
+  local x, y, w, h = d.pos.x, d.pos.y, d.size.x, d.size.y
+  if type(a) == 'table' then
+    x, y = x + (tonumber(a[1]) or 0), y + (tonumber(a[2]) or 0)
+    w, h = math.max(16, w + (tonumber(a[3]) or 0)), math.max(16, h + (tonumber(a[4]) or 0))
+  end
+  return x, y, w, h
+end
+
+function M.applyRegion(i)
+  local t = M.taken[i]
+  if not t then return end
+  local x, y, w, h = M.regionOf(i)
+  t.params.region.from.x, t.params.region.from.y = x, y
+  t.params.region.size.x, t.params.region.size.y = w, h
+  t.w, t.h = w, h
+end
+
+-- How display i is taken ('copy', 'direct', 'mixed' or nil) for the tab.
+function M.modeOf(i) return M.taken[i] and M.taken[i].mode or nil end
+
+-- Settings that change how a display is taken (texture slot): give it back and take it again.
+function M.retake()
+  for i in pairs(M.taken) do release(i) end
+  M.invalidate()
+  bump()
 end
 
 function M.releaseAll()
@@ -190,15 +249,20 @@ end
 -- ---------------------------------------------------------------- the values on the page
 
 -- virtual LED row: one main group of 12 cells, compiled from the car's preset like the real LEDs
-local VLAYOUT = { leds = {}, groups = { { name = 'Displej', role = 'main', leds = {} } }, signature = 'display12' }
-for k = 1, VIRTUAL_N do
-  VLAYOUT.leds[k] = { name = 'display_' .. k, group = 1, inst = {} }
-  VLAYOUT.groups[1].leds[k] = k
+local VLAYOUT = nil
+local function buildLayout(n)
+  VIRTUAL_N = n
+  VLAYOUT = { leds = {}, groups = { { name = 'Displej', role = 'main', leds = {} } }, signature = 'display' .. n }
+  for k = 1, n do
+    VLAYOUT.leds[k] = { name = 'display_' .. k, group = 1, inst = {} }
+    VLAYOUT.groups[1].leds[k] = k
+  end
 end
+buildLayout(VIRTUAL_N)
 local compiled, compiledFor, compiledVersion, compiledRpm = nil, nil, -1, -1
 
 local D = { gear = '', speed = '', rpm = '', lap = '', last = '', best = '', fuel = '', pos = '', laps = '', delta = '',
-  deltaSign = 0, cells = {}, nCells = VIRTUAL_N, overlay = nil, overlaySub = '', blink = true }
+  deltaSign = 0, cells = {}, nCells = VIRTUAL_N, overlay = nil, overlaySub = '', blink = true, speedUnit = 'km/h' }
 M.data = D
 
 -- strings per field and value: made once per value seen (RPM steps of 10, speeds, tenths of a lap time come back),
@@ -265,6 +329,59 @@ local function currentOverlay(ST, preset)
 end
 
 -- Fills D from the car state and returns its fingerprint.
+-- ---------------------------------------------------------------- style (tab Displej settings, global)
+
+local function packed(hex, default)
+  local h = type(hex) == 'string' and hex:match('^#?(%x%x%x%x%x%x)$')
+  return h and tonumber(h, 16) or default
+end
+
+local styleVersion = 0
+-- Reads the design settings from S into display_pages (theme or own colours, font, rounding, brightness, LED row,
+-- zones of the page Vlastní, units) and makes the next paint happen.
+function M.applyStyle()
+  local st = {}
+  local th = pages.THEMES[tonumber(S.displayTheme) or 1]
+  local own = {}
+  for part in tostring(S.displayColours or ''):gmatch('[^,]+') do own[#own + 1] = part end
+  for k, key in ipairs(pages.COLOUR_KEYS) do
+    local base = (th or pages.THEMES[1])[key]
+    st[key] = th and base or packed(own[k], base)
+  end
+  local f = pages.FONTS[tonumber(S.displayFont) or 1] or pages.FONTS[1]
+  if f.font ~= pages.style.font then pages.clearWidths() end
+  st.font = f.font
+  st.rounding = math.max(0, math.min(1, (tonumber(S.displayRounding) or 0) / 100))
+  st.brightness = math.max(0.2, math.min(1, (tonumber(S.displayBrightness) or 100) / 100))
+  st.cells = S.displayCellsOn ~= false
+  st.cellH = math.max(0.4, math.min(2, (tonumber(S.displayCellH) or 100) / 100))
+  st.cellGap = math.max(0, math.min(0.05, (tonumber(S.displayCellGap) or 8) / 1000))
+  local zones = {}
+  for part in tostring(S.displayZones or ''):gmatch('[^,]+') do
+    if pages.FIELD_BY_ID[part] then zones[#zones + 1] = part end
+  end
+  for k = #zones + 1, #pages.DEFAULT_ZONES do zones[k] = pages.DEFAULT_ZONES[k] end
+  st.zones = zones
+  pages.setStyle(st)
+  local n = math.max(4, math.min(24, math.floor(tonumber(S.displayCells) or 12)))
+  if n ~= VIRTUAL_N then
+    buildLayout(n)
+    for k = n + 1, #D.cells do D.cells[k] = nil end
+    compiledFor = nil
+  end
+  D.nCells = VIRTUAL_N
+  D.speedUnit = (tonumber(S.displayUnits) or 1) == 2 and 'mph' or 'km/h'
+  styleVersion = styleVersion + 1
+  M.invalidate()
+end
+
+-- A design setting changed in the tab: saved and applied.
+function M.setSetting(key, value)
+  config.set(key, value)
+  M.applyStyle()
+  bump()
+end
+
 local function fill(ST, preset, t)
   -- LED row
   if compiledFor ~= preset or compiledVersion ~= presets.version or compiledRpm ~= rpm.version then
@@ -275,7 +392,7 @@ local function fill(ST, preset, t)
   fp = 0
   for k = 1, VIRTUAL_N do mix(D.cells[k] + 3) end
   local gear = math.floor(ST.gear or 0)
-  local speed = math.floor((ST.speed or 0) + 0.5)
+  local speed = math.floor((ST.speed or 0) * ((tonumber(S.displayUnits) or 1) == 2 and 0.621371 or 1) + 0.5)
   local rpm = math.floor((ST.rpm or 0) / 10 + 0.5) * 10
   local lapT = math.floor((ST.lapTimeMs or 0) / 100)
   local lastT = math.floor((ST.lastLapMs or 0) / 100)
@@ -307,7 +424,11 @@ local function fill(ST, preset, t)
     local id = (pages.PAGES[M.page] or pages.PAGES[1]).id
     if id == 'race' then mix(gear + 2); mix(speed); mix(lapT); mix(lastT); mix(fuel); mix(pos); mix(delta + 100000)
     elseif id == 'revs' then mix(rpm); mix(gear + 2)
-    else mix(lapT); mix(lastT); mix(bestT); mix(pos); mix(lap) end
+    elseif id == 'laps' then mix(lapT); mix(lastT); mix(bestT); mix(pos); mix(lap)
+    else                                      -- Vlastní: any field may be on it
+      mix(gear + 2); mix(speed); mix(rpm); mix(lapT); mix(lastT); mix(bestT); mix(fuel); mix(pos); mix(lap)
+      mix(delta + 100000)
+    end
     if o then mix(fuel) end                   -- the fuel banner
   end
   D.overlaySub = ''
@@ -320,6 +441,7 @@ local function fill(ST, preset, t)
     D.blink = true
   end
   mix(M.page)
+  mix(styleVersion)
   return fp
 end
 
@@ -327,15 +449,9 @@ end
 
 local painting = nil           -- the display being painted (read by the callback)
 local function paintCallback()
-  local d = M.displays[painting]
+  local t = M.taken[painting]
   pages.origin(0, 0, 1)
-  pages.draw(M.page, d.size.x, d.size.y, D)
-end
-
-local function slotName()
-  local s = cfg().slot
-  for i = 1, #SLOTS do if SLOTS[i] == s then return s end end
-  return SLOTS[1]
+  pages.draw(M.page, t.w, t.h, D)
 end
 
 local function paint(i)
@@ -343,7 +459,7 @@ local function paint(i)
   t.params.callback = paintCallback
   painting = i
   local slot = slotName()
-  for k = 1, #t.copies do t.copies[k]:setMaterialTexture(slot, t.params) end
+  for k = 1, #t.targets do t.targets[k]:setMaterialTexture(slot, t.params) end
   painting = nil
   M.paints = M.paints + 1
 end
@@ -360,6 +476,7 @@ function M.init(prof, info, id, saveProfile)
   local c = cfg()
   M.page = math.max(1, math.min(#pages.PAGES, math.floor(tonumber(c.page) or 1)))
   compiledFor = nil
+  M.applyStyle()
   bump()
 end
 

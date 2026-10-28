@@ -256,8 +256,13 @@ apps/lua/LedControl/
                           { textureSize, background, region, callback }) (SDK lib_scene; CSP traffic tool); virtual
                           LED row = engine on a 12 cell layout with the car's preset; overlays from catalogue scenario
                           tests; at most S.displayHz paints, only when the fingerprint of the shown values changed;
-                          profile.display { on, which, page, slot }
-  src/display_pages.lua   pages Závod / Otáčky / Kola + OVERLAYS, relative layout, text fitted with measureDWriteText
+                          profile.display { on, which, page, slot, adjust = { [i] = { x, y, w, h } } }; a mesh whose
+                          getVertices is nil is painted directly (ensureUniqueMaterials, getTextureSlotFilename kept
+                          and set back on release); design settings S.display* (theme / own colours, font, rounding,
+                          brightness, LED row, zones of Vlastní, units) -> display_pages.setStyle via applyStyle;
+                          the tab saves sliders / pickers once they rest (config.setLive / flushLive)
+  src/display_pages.lua   pages Závod / Otáčky / Kola / Vlastní + OVERLAYS, THEMES, FONTS, FIELDS; relative layout,
+                          text fitted with measureDWriteText
                           (width per string cached), ui.dwriteDrawTextClipped / drawRectFilled; also the tab preview
   src/online.lua          online state, banner and the optional block of real controls online
   src/hotkeys.lua         ac.ControlButton master / next preset / flash, polled in script.update

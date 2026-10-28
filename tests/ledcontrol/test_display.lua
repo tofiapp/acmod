@@ -27,7 +27,7 @@ local pages = require('src/display_pages')
 
 local SIZES = { { 800, 480 }, { 480, 272 }, { 512, 512 } }
 -- long, realistic values (the widest each field gets)
-local DATA = { gear = 'N', speed = '312', rpm = '18450', lap = '12:59.9', last = '1:23.4', best = '1:22.9', fuel = '105.3 l',
+local DATA = { gear = 'N', speed = '312', speedUnit = 'km/h', rpm = '18450', lap = '12:59.9', last = '1:23.4', best = '1:22.9', fuel = '105.3 l',
   pos = 'P12', laps = 'Kolo 123', delta = '+12.34', deltaSign = 1, cells = {}, nCells = 12, overlay = nil, overlaySub = '',
   blink = true }
 local SHIFT = { 0x00FF00, 0x00FF00, 0x00FF00, 0x00FF00, 0xFF0000, 0xFF0000, 0xFF0000, 0xFF0000, 0x0000FF, 0x0000FF, -2, -2 }
@@ -70,7 +70,8 @@ local function dump(cv, W, H, name)
   for i = 1, cv.n do
     local c = cv.cmds[i]
     if c[1] == 'rect' then
-      f:write(string.format('rect %.2f %.2f %.2f %.2f %.4f %.4f %.4f %.4f\n', c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9]))
+      f:write(string.format('rect %.2f %.2f %.2f %.2f %.4f %.4f %.4f %.4f %.2f\n', c[2], c[3], c[4], c[5], c[6], c[7], c[8],
+        c[9], c[10] or 0))
     else
       f:write(string.format('text %.2f %.2f %.2f %.2f %.4f %.4f %.4f %.4f %.2f %d %d|%s\n', c[2], c[3], c[4], c[5], c[6],
         c[7], c[8], c[9], c[11], c[12], c[13], c[10]))
@@ -246,6 +247,126 @@ check(app.runtime.state == 'run', 'the LEDs of the same car still run')
 display.cfg().which = { true, false }
 frame(3)
 check(env.displayMesh2.visible and not env.displayMesh.visible, 'second display given back when unticked')
+
+-- ---------------------------------------------------------------- design settings on the fake canvas
+
+H.displayCar(1)
+env.storage = {}
+app = H.loadApp()
+frame(3)
+display = require('src/display')
+pages = require('src/display_pages')
+local cfgS = app.config.S
+local function setAll(t)
+  for k, v in pairs(t) do app.config.set(k, v) end
+  display.applyStyle()
+end
+-- every theme, LED row extremes, rounding, no row: every page at every size inside the screen
+local STYLES = {
+  { name = 'theme2', set = { displayTheme = 2 } },
+  { name = 'theme3', set = { displayTheme = 3, displayRounding = 100 } },
+  { name = 'theme4', set = { displayTheme = 4, displayCells = 24, displayCellH = 200, displayCellGap = 50 } },
+  { name = 'own', set = { displayTheme = 0, displayColours = '#202020,#00FF80,#808080,#FF00FF,#300000,#303030',
+    displayCells = 4, displayCellH = 40, displayCellGap = 0, displayFont = 3 } },
+  { name = 'norow', set = { displayTheme = 1, displayCellsOn = false, displayRounding = 0, displayCells = 12,
+    displayCellH = 100, displayCellGap = 8, displayFont = 1 } },
+}
+for _, st in ipairs(STYLES) do
+  setAll(st.set)
+  for _, sz in ipairs(SIZES) do
+    for p = 1, #pages.PAGES do
+      local cv = render(p, sz[1], sz[2], nil)
+      local name = string.format('%s_%s_%dx%d', st.name, pages.PAGES[p].id, sz[1], sz[2])
+      bounds(cv, sz[1], sz[2], 'style ' .. name)
+      if sz[1] == 800 then dump(cv, sz[1], sz[2], 'style_' .. name) end
+    end
+  end
+end
+check(pages.style.cells == false and pages.style.bg == 0x000000, 'style: settings reach the pages (row off, theme 1)')
+setAll({ displayTheme = 0, displayColours = '#123456,#FFFFFF,#999999,#C080FF,#1E1E1E,#101010' })
+check(pages.style.bg == 0x123456, 'own colours: background from the stored string')
+setAll({ displayTheme = 1, displayCellsOn = true })
+-- the page Vlastní: every field in every zone fits
+for f = 1, #pages.FIELDS do
+  local id = pages.FIELDS[f].id
+  local z = {}
+  for k = 1, #pages.ZONE_NAMES do z[k] = id end
+  app.config.set('displayZones', table.concat(z, ','))
+  display.applyStyle()
+  for _, sz in ipairs(SIZES) do
+    local cv = render(4, sz[1], sz[2], nil)
+    bounds(cv, sz[1], sz[2], string.format('Vlastní with "%s" everywhere %dx%d', id, sz[1], sz[2]))
+  end
+end
+app.config.set('displayZones', 'rpm,gear,best,delta,laps,fuel,speed')
+display.applyStyle()
+for _, sz in ipairs(SIZES) do
+  dump(render(4, sz[1], sz[2], nil), sz[1], sz[2], string.format('custom_mix_%dx%d', sz[1], sz[2]))
+end
+-- the virtual LED row follows the number of cells
+app.config.set('displayCells', 20)
+display.applyStyle()
+check(display.data.nCells == 20, 'LED row: 20 cells')
+display.cfg().on = true
+env.car.speedKmh, env.car.rpm = 100, 9000
+frame(10)
+local lit = 0
+for k = 1, 20 do if display.data.cells[k] ~= nil then lit = lit + 1 end end
+check(lit == 20, 'the engine fills all 20 cells of the display row (' .. lit .. ')')
+-- units
+app.config.set('displayUnits', 2)
+display.applyStyle()
+frame(10)
+check(display.data.speedUnit == 'mph' and display.data.speed == '62', 'mph: 100 km/h shown as 62 mph ('
+  .. tostring(display.data.speed) .. ')')
+app.config.set('displayUnits', 1)
+display.applyStyle()
+-- region correction
+display.cfg().adjust = { { 10, 20, -100, -50 } }
+display.applyRegion(1)
+display.invalidate()
+env.car.rpm = 9100
+frame(5)
+local cp
+for _, c in ipairs(env.displayMesh.parent.children) do if c.created and not c.disposed then cp = c end end
+local cvx = cp and cp.textures and cp.textures.txDiffuse
+check(cvx and cvx.region.from.x == 122 and cvx.region.from.y == 292 and cvx.region.size.x == 700
+  and cvx.region.size.y == 430, 'region correction: painted at 122, 292 – 700 x 430')
+local inside = true
+for i = 1, cvx.n do if cvx.cmds[i][4] > 700.5 or cvx.cmds[i][5] > 430.5 then inside = false end end
+check(inside, 'the page is laid out for the corrected size')
+display.cfg().adjust = nil
+display.applyRegion(1)
+-- live edits are saved once they rest, not while dragging
+app.config.setLive('displayRounding', 55)
+check(env.storage['lc_displayRounding'] ~= 55 and cfgS.displayRounding == 55, 'live edit: in effect, not stored yet')
+app.config.flushLive()
+check(env.storage['lc_displayRounding'] == 55, 'live edit: stored after flush')
+
+-- ---------------------------------------------------------------- no vertex data: painted directly
+
+H.displayCar(1)
+env.storage = {}
+env.noVertices = { DISPLAY_SCREEN = true }
+env.displayMesh.texFile = 'motec_screen.dds'
+app = H.loadApp()
+frame(3)
+display = require('src/display')
+display.cfg().on = true
+env.car.speedKmh, env.car.rpm = 100, 9000
+frame(10)
+orig = env.displayMesh
+local anyCopy = false
+for _, c in ipairs(orig.parent.children) do if c.created and not c.disposed then anyCopy = true end end
+check(display.error == nil and display.modeOf(1) == 'direct' and orig.visible and not anyCopy,
+  'no vertex data: taken directly, no copy, original stays visible (' .. tostring(display.error) .. ')')
+local tex = orig.textures and orig.textures.txDiffuse
+check(type(tex) == 'table' and tex.n > 10, 'painted into the original display\'s texture')
+check(app.config.S.displayGuard == '', 'direct: nothing hidden, no self-heal marker')
+app.config.set('master', false)
+frame(3)
+check(orig.textures.txDiffuse == 'motec_screen.dds', 'master off: the original texture set back by its filename')
+env.noVertices = {}
 
 -- ---------------------------------------------------------------- the tab: drawn, no UI error, no allocation
 

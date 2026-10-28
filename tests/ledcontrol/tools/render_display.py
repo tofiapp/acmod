@@ -39,8 +39,14 @@ def render(path):
     draw = ImageDraw.Draw(img)
     for row in lines[1:]:
         if row.startswith("rect "):
-            x1, y1, x2, y2, r, g, b, a = row.split()[1:9]
-            draw.rectangle([float(x1), float(y1), float(x2) - 1, float(y2) - 1], fill=colour(r, g, b, a))
+            parts = row.split()
+            x1, y1, x2, y2, r, g, b, a = parts[1:9]
+            rounding = float(parts[9]) if len(parts) > 9 else 0
+            box = [float(x1), float(y1), max(float(x1), float(x2) - 1), max(float(y1), float(y2) - 1)]
+            if rounding > 0.5:
+                draw.rounded_rectangle(box, radius=rounding, fill=colour(r, g, b, a))
+            else:
+                draw.rectangle(box, fill=colour(r, g, b, a))
         elif row.startswith("text "):
             head, _, text = row.partition("|")
             x1, y1, x2, y2, r, g, b, a, size, ha, va = head.split()[1:12]
