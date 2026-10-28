@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Runs the test suites without the game (LuaJIT 2.1 via the Python package "lupa": pip install lupa).
+#   ./run_tests               both apps
+#   ./run_tests LedControl    one app (MirrorDelta or LedControl)
+# Exit code 0 only when every suite passed; build.sh calls this before it makes a ZIP.
+set -u
+cd "$(dirname "$0")"
+[ $# -eq 0 ] && set -- MirrorDelta LedControl
+status=0
+summary=""
+for name in "$@"; do
+  case "$name" in
+    MirrorDelta) runner=tests/run_tests.py ;;
+    LedControl) runner=tests/ledcontrol/run_tests.py ;;
+    *) echo "Unknown app: $name" >&2; exit 2 ;;
+  esac
+  echo "== $name"
+  if python3 "$runner"; then summary="$summary\n  $name: OK"; else summary="$summary\n  $name: FAILED"; status=1; fi
+done
+printf "== Summary%b\n" "$summary"
+exit $status

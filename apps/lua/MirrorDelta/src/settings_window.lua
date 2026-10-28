@@ -2,7 +2,15 @@
 
 local config = require('src/config')
 local tracker = require('src/tracker')
+local notify = require('src/notify')
 local tyres = require('src/tyres_window')
+local damage = require('src/damage_window')
+local layout = require('src/layout')
+local originals = require('src/originals')
+local setupLine = require('src/setup_line')
+local pitLights = require('src/pit_lights')
+local mirror = require('src/mirror_window')
+local carData = require('src/car_data')
 local D = require('src/draw')
 local S = config.S
 
@@ -80,14 +88,37 @@ local function tabDelta()
   slider('lineGap', 'Mezera mezi čarami', 0, 30, '%.1f px', 0.5)
   slider('numberSize', 'Velikost čísla', 9, 60, '%.0f px', 1)
   slider('opacity', 'Průhlednost', 0.1, 1, '%.2f')
-  checkbox('deltaLimiterFlash', 'Na omezovači blikat modře (jako okno s převodem)')
+  combo('deltaLineMode', 'Čára delty', {
+    'Rozdělená uprostřed: doprava zelená = teď rychleji, doleva červená = teď pomaleji',
+    'Celá čára barvou podle celkové delty',
+  })
+  if S.deltaLineMode == 1 then slider('splitFull', 'Plná délka čáry při rozdílu', 0.03, 0.5, '%.2f s za 3 s') end
+  checkbox('deltaPanel', 'Matné průhledné pozadí')
+  checkbox('deltaLimiterFlash', 'Na omezovači blikat modře: čára delty i mini sektory')
+  checkbox('pitBlink', 'V boxech světla na čáře delty a mini sektorech')
+  if S.pitBlink then
+    combo('pitStyle', 'Světla v boxech', pitLights.STYLES)
+    combo('pitColor', 'Barva světel v boxech (i BOX v časech)', pitLights.NAMES)
+    if S.pitStyle == 4 then
+      combo('pitSectorPattern', 'Mini sektory v boxech', { 'Střídavě jednotlivé', 'Po polovinách s čárou' })
+    end
+  end
   checkbox('intensityByDelta', 'Intenzita barvy podle velikosti delty')
   if S.intensityByDelta then
     slider('intensityFullAt', 'Plná barva od', 0.1, 2, '±%.2f s')
   end
   gap()
   ui.header('Reference')
-  combo('referenceMode', 'Porovnávat s', { 'Nejlepší kolo této session', 'Nejlepší kolo vůbec (uložené)' })
+  combo('deltaSource', 'Zdroj delty', {
+    'Vlastní měření, jinak delta z AC',
+    'Jen vlastní měření',
+    'Jen delta z AC',
+  })
+  combo('referenceKind', 'Porovnávat s', { 'Nejlepší kolo této session', 'Nejlepší kolo vůbec (uložené)', 'Předchozí kolo' })
+  if S.referenceKind == 3 then
+    ui.textWrapped('Porovnává se jen s kolem těsně před tím. První kolo (out lap) nemá s čím, druhé se porovná '
+      .. 's out lapem od místa výjezdu z boxů.')
+  end
   ui.text('Session: ' .. D.formatLap(tracker.sessionRefMs, 3) .. '    Vůbec: ' .. D.formatLap(tracker.allTimeRefMs, 3))
   ui.textWrapped('Data pro toto auto a trať: ' .. tracker.dataFile())
   if os.preciseClock() < confirmClearUntil then
@@ -105,16 +136,28 @@ local function tabTiming()
   checkbox('showPosition', 'Pozice')
   checkbox('showLaps', 'Počet kol')
   checkbox('showCurrent', 'Aktuální čas')
+  checkbox('showLast', 'Poslední kolo (smazané červeně)')
   checkbox('showBest', 'Nejrychlejší čas')
+  gap()
+  ui.header('Pořadí dole (okno MirrorDelta Standings)')
+  slider('standingsCount', 'Počet aut', 3, 11, '%.0f', 1)
+  combo('standingsGapMode', 'Odstup v závodě', { 'Průběžně', 'Po každém sektoru', 'Po projetí cílem' })
+  if S.standingsGapMode == 2 then slider('standingsSectors', 'Sektorů na kolo', 2, 12, '%.0f', 1) end
+  combo('standingsGapTo', 'Odstup k', { 'Mně', 'Autu před ním' })
+  combo('standingsNames', 'Jména', { 'Zkratka (3 písmena)', 'Příjmení', 'Bez jmen' })
+  checkbox('standingsGapColors', 'Barevné odstupy (před mnou červeně, za mnou zeleně)')
+  ui.textWrapped('Nahrazuje původní pořadí AC (F9). Po sektoru / cíli se odstup měří jako na časomíře: z časů, kdy obě '
+    .. 'auta projela stejný bod trati. Mimo závod rozdíl nejlepších kol.')
   gap()
   combo('timingLayout', 'Uspořádání', { 'Pod sebou', 'Vedle sebe' })
   gap()
   checkbox('bestHighlight', 'Zvýraznit nejlepší kolo (fialový rámeček)')
   checkbox('lapFlash', 'Po projetí cíle obarvit čas kola')
+  checkbox('pitBox', 'V boxech místo aktuálního času svítí BOX')
   if S.lapFlash then
     slider('lapFlashTime', 'Jak dlouho', 1, 10, '%.0f s', 1)
   end
-  checkbox('timingPlate', 'Tmavý podklad')
+  checkbox('timingPanel', 'Matné průhledné pozadí')
 end
 
 local function tabTyres()
@@ -126,10 +169,14 @@ local function tabTyres()
   gap()
   checkbox('tyreNumbers', 'Teplota jádra (velké číslo)')
   checkbox('tyreZones', 'Zóny pláště (vnitřní / střed / vnější)')
-  checkbox('tyresPlate', 'Tmavý podklad')
+  checkbox('tyresPanel', 'Matné průhledné pozadí')
   gap()
   ui.header('Optimální teplota')
-  checkbox('tyreOptimumAuto', 'Podle auta (pokud ji CSP poskytuje)')
+  checkbox('tyreOptimumAuto', 'Podle auta (křivka přilnavosti pneumatik z dat auta, jinak hodnota z CSP)')
+  if S.tyreOptimumAuto and carData.tyreFromCurve then
+    ui.textWrapped(string.format('Optimální okno podle aktuální směsi: vpředu %d–%d °C, vzadu %d–%d °C.',
+      carData.tyreLo[1], carData.tyreHi[1], carData.tyreLo[2], carData.tyreHi[2]))
+  end
   slider('tyreOptimum', S.tyreOptimumAuto and 'Záložní hodnota' or 'Optimum', 50, 120, '%.0f °C', 1)
   gap()
   local available = tyres.available()
@@ -163,14 +210,21 @@ local function tabGear()
   end)
   gap()
   ui.header('Otáčky (rozsah podle omezovače auta)')
-  slider('gearRpmStart', 'První dílky od', 0.3, 0.9, '%.2f × omezovač')
-  checkbox('gearShiftFlash', 'Na omezovači blikat modře (čára, převod i rychlost)')
+  combo('gearRpmSource', 'Kdy řadit (plný ukazatel, modré blikání)', { 'Podle auta: optimální řazení (jako kontrolky v autě)', 'Omezovač otáček' })
+  slider('gearShiftAdjust', 'Doladit bod řazení', -10, 5, '%+.1f %%', 0.5)
+  local me = ac.getCar(0)
+  if me then ui.textWrapped('Řadí se při: ' .. carData.shiftSourceText(me)) end
+  slider('gearRpmStart', 'První dílky od', 0.3, 0.9, '%.2f × bod řazení')
+  checkbox('gearShiftFlash', 'V bodě řazení blikat modře (čára, převod i rychlost)')
 end
 
 local function tabDamage()
   ui.header('Zobrazit')
-  checkbox('damageAutoHide', 'Ukázat jen při poškození')
-  checkbox('damagePlate', 'Tmavý podklad')
+  combo('damageShow', 'Kdy ukázat', { 'Vždy', 'Dokud je něco poškozené', 'Jen po nárazu (jako v AC)' })
+  if S.damageShow == 3 then slider('damageShowTime', 'Po nárazu zůstane', 3, 20, '%.0f s', 1) end
+  ui.textWrapped('Při najetí myší je okno vidět vždy, ať ho jde přesunout.')
+  checkbox('damagePanel', 'Matné průhledné pozadí')
+  checkbox('damageHideOriginal', 'Skrýt původní ukazatel poškození z AC, když je toto okno otevřené')
   gap()
   ui.header('Citlivost')
   slider('damageFull', 'Plně červená od hodnoty', 1, 300, '%.0f', 1)
@@ -180,23 +234,119 @@ local function tabDamage()
       car.damage[0], car.damage[1], car.damage[2], car.damage[3], car.engineLifeLeft))
     ui.textWrapped('Po nárazu podle těchto čísel nastavte, od kolika má být strana plně červená.')
   end
+  ui.textWrapped('Kola ukazují pneumatiky: opotřebení (od žluté po červenou) a defekt (červená).'
+    .. (damage.tyreFieldsOk() == false and ' Tato verze CSP stav pneumatik neposkytuje.' or ''))
+  ui.textWrapped('Zavěšení (čtverečky vedle pneumatik): '
+    .. (damage.suspensionFieldOk() == false and 'tato verze CSP poškození zavěšení neposkytuje, zůstává šedé.' or 'podle poškození zavěšení z AC.'))
+end
+
+local function tabMirror()
+  ui.textWrapped('Okno MirrorDelta Mirror ukazuje zpětný pohled AC v posuvném rámečku.')
+  gap()
+  checkbox('mirrorMarkers', 'Označovat auta za mnou')
+  if S.mirrorMarkers then
+    slider('mirrorTargets', 'Kolik nejbližších aut', 1, 6, '%.0f', 1)
+    combo('mirrorMarkerStyle', 'Značka', { 'Rohový rámeček', 'Celý rámeček', 'Šipka nad autem' })
+    combo('mirrorPalette', 'Barvy (nedotahuje / dotahuje / blízko)',
+      { 'Zelená / oranžová / červená', 'Bílá / žlutá / červená', 'Modrá / žlutá / červená' })
+    slider('mirrorLineWidth', 'Tloušťka čar', 1, 6, '%.0f px', 1)
+    checkbox('mirrorFill', 'Průhledná výplň uvnitř značky')
+    checkbox('mirrorGapLabel', 'Odstup v sekundách u nejbližšího auta')
+    checkbox('mirrorHideOverlap', 'Když se značky překrývají, ukázat jen tu bližšího auta')
+  end
+  checkbox('mirrorSideArrows', 'Červený pruh na straně, když je auto vedle mě')
+  slider('mirrorFov', 'Šířka záběru', 20, 90, '%.0f°', 1)
+  ui.textWrapped('Šířku záběru nastavte tak, aby rámečky seděly přesně na autech v zrcátku.')
+  slider('mirrorOffsetX', 'Posun značek do strany (jen obraz 1–4)', -60, 60, '%.0f px', 1)
+  slider('mirrorOffsetY', 'Posun značek nahoru/dolů', -40, 40, '%.0f px', 1)
+  ui.textWrapped('Pozice kamery zrcátka: ' .. (mirror.camSource or 'zatím nezjištěna')
+    .. '. Rámeček obepíná skutečný obrys auta (jeho rozměry a natočení).')
+  slider('mirrorRange', 'Hlídat do vzdálenosti', 20, 150, '%.0f m', 5)
+  slider('mirrorZoom', 'Přiblížení', 1, 2.5, '%.2f×', 0.05)
+  slider('mirrorBrightness', 'Jas obrazu', 0.3, 3, '%.2f×', 0.05)
+  combo('mirrorMode', 'Způsob vykreslení', { 'Gamma (výchozí)', 'YEBIS jako OBS', 'Tonemapping UI', 'Bez úprav',
+    'Vlastní kamera (značky přesně na autech)', 'Vlastní kamera, automatický jas' })
+  if S.mirrorMode >= 5 then
+    combo('mirrorCamQuality', 'Kvalita vlastní kamery', { 'Rychlá (bez stínů a úprav obrazu)',
+      'Jako hra (stíny, úprava obrazu jako hra)', 'Nejlepší (vlastní stíny a tráva, náročné)' })
+    combo('mirrorCamPos', 'Kamera', { 'Na zadním nárazníku', 'Na místě řidiče (jako zrcátko AC)' })
+    slider('mirrorCamHeight', 'Výška kamery', -0.8, 0.8, '%+.2f m', 0.05)
+    slider('mirrorCamPitch', 'Sklon kamery dolů', -5, 15, '%.1f°', 0.5)
+  end
+  ui.textWrapped('Způsob vykreslení jde přepínat i kliknutím do okna se zrcátkem. Vlastní kamera (5, 6) vykreslí pohled'
+    .. ' dozadu sama ze stejného místa a se stejnou šířkou záběru, ze kterých se počítají značky, takže sedí přesně.'
+    .. ' Šířka záběru, výška a sklon kamery pak mění i obraz; obraz 5 má úpravu obrazu jako hra, u 6 se jas nastavuje sám'
+    .. ' podle scény (posuvník Jas ho doladí). Stojí to podobně výkonu jako druhé zrcátko.')
+  ui.textWrapped('Obraz se nikdy nedeformuje: okno ukáže výřez zrcátka ve svém vlastním poměru stran.')
+  gap()
+  checkbox('hideOriginalMirror', 'Skrýt okna, která vypadají jako zpětné zrcátko (jiné aplikace / AC)')
+  checkbox('hideOriginalFlags', 'Skrýt okna, která vypadají jako vlajky (jiné aplikace / AC)')
+  ui.textWrapped('Skryto: ' .. originals.hiddenWindows)
+end
+
+local function tabNotify()
+  combo('notifyLook', 'Vzhled', { 'Zaoblená pilulka', 'Šikmý pruh', 'Tenká linka', 'Pravý horní roh (u vlajky)' })
+  slider('notifyTime', 'Jak dlouho', 2, 10, '%.1f s', 0.5)
+  slider('notifyCount', 'Najednou nejvýš', 1, 3, '%.0f', 1)
+  if ui.button('Ukázat ukázku') then notify.demo() end
+  ui.textWrapped('Ukázka se zobrazí v okně MirrorDelta Notifications, podle ní okno umístěte.')
+  gap()
+  ui.header('Co oznamovat')
+  checkbox('notifyFastest', 'Nejrychlejší kolo session (kdokoli)')
+  checkbox('notifyPositions', 'Moje pozice: předjetí a ztráta')
+  checkbox('notifyPits', 'Ostatní auta v boxech a z boxů')
+  checkbox('notifySystem', 'Systémové zprávy AC (ABS, TC, penalizace, připojení…)')
+  checkbox('notifyFlags', 'Vlajky i jako notifikace (okno MirrorDelta Flags je ukazuje vždy)')
+  checkbox('notifyInvalid', 'Moje neplatné kolo (řezání trati)')
+  checkbox('notifyConnections', 'Odpojení jezdce (online)')
+  checkbox('notifyRaceOnly', 'Pozice a boxy jen v závodě')
+  gap()
+  ui.header('Nastavení auta (jeden řádek nahoře)')
+  checkbox('setupLine', 'Změny TC, ABS, brzd, brzdění motorem, mapy paliva… v okně MirrorDelta Setup')
+  if S.setupLine then
+    slider('setupTime', 'Jak dlouho', 1, 6, '%.1f s', 0.5)
+    if ui.button('Ukázat ukázku##setup') then setupLine.demo() end
+    local n, total = setupLine.available()
+    ui.textWrapped(string.format('Hlídaná nastavení dostupná v této verzi CSP: %d z %d. Do řádku jdou i systémové '
+      .. 'zprávy AC (kromě penalizací, ty jsou v notifikacích).', n, total))
+  end
+  gap()
+  ui.header('Původní ukazatele AC')
+  checkbox('hideOverlayLeaderboard', 'Vypnout původní pořadí AC (F9)')
+  ui.text('Stav: ' .. originals.leaderboard)
+  checkbox('hideSystemMessages', 'Skrýt původní systémové zprávy AC')
+  ui.text('Stav: ' .. originals.messages)
+  ui.textWrapped('Kdyby se původní zprávy dál zobrazovaly: Content Manager > Nastavení > Custom Shaders Patch > GUI > '
+    .. 'zapnout „Hide system messages“. Zprávy pak ukáže okno MirrorDelta Setup (a penalizace MirrorDelta Notifications).')
 end
 
 local function yesNo(v) return v and 'ano' or 'ne' end
+local REF_KINDS = { 'žádná', 'nejlepší kolo session', 'nejlepší kolo vůbec', 'dočasné kolo (out lap / neplatné)',
+  'nejlepší čas z AC (odhad)', 'předchozí kolo' }
 
 local function tabDiagnostics()
   local d = tracker.diag
+  ui.text('MirrorDelta ' .. config.VERSION)
   if d.error then
     ui.header('Chyba skriptu')
     ui.textWrapped(d.error)
     gap()
   end
   ui.header('Měření kola')
-  ui.text('Kolo se měří: ' .. yesNo(tracker.flying) .. '    platné zatím: ' .. yesNo(tracker.clean))
+  ui.text('Kolo se měří: ' .. yesNo(tracker.flying) .. '    out lap od výjezdu: ' .. yesNo(tracker.partial) .. '    platné zatím: ' .. yesNo(tracker.clean))
   ui.text('Delta k dispozici: ' .. yesNo(tracker.hasDelta) .. '    reference: ' .. D.formatLap(tracker.refMs, 3))
+  ui.text('Reference: ' .. REF_KINDS[tracker.refKind + 1] .. '    dočasné kolo: ' .. D.formatLap(tracker.provisionalMs, 3))
+  ui.text('Předchozí kolo: ' .. D.formatLap(tracker.prevLapMs, 3) .. (tracker.prevLapPartial and ' (out lap od výjezdu)' or '')
+    .. '    poslední kolo: ' .. D.formatLap(tracker.lastLapMs, 3) .. (tracker.lastLapState == 2 and ' (smazané)' or ''))
+  ui.text('Delta z AC (performanceMeter): ' .. (d.acDelta == nil and 'zatím nezjištěno' or yesNo(d.acDelta))
+    .. '    právě použitá: ' .. yesNo(tracker.deltaFromAC))
+  if tracker.status then ui.textWrapped('Stav: ' .. tracker.status) end
   ui.text(string.format('Průjezdů cílem: %d    změřených kol: %d    nových referencí: %d', d.lapEvents, d.timedLaps, d.references))
   ui.textWrapped('Poslední zahození kola: ' .. d.lastReset)
   ui.textWrapped('Poslední nezapočítané kolo: ' .. d.lastReject)
+  ui.textWrapped('Smazané kolo: ' .. d.lastDeleted)
+  ui.textWrapped(string.format('Hlášení AC po kole (%d): %s', d.callbacks, d.lastCallback))
+  ui.text('Nejlepší čas podle AC: ' .. D.formatLap(tracker.acBestMs or 0, 3) .. '    aplikace ukazuje: ' .. D.formatLap(tracker.bestMs, 3))
   ui.text(string.format('Teleporty/resety: %d    nové session: %d', d.jumps, d.sessionStarts))
   gap()
   ui.header('Hodnoty z AC')
@@ -208,6 +358,12 @@ local function tabDiagnostics()
     ui.text('isLapValid ' .. yesNo(car.isLapValid) .. '    isInPitlane ' .. yesNo(car.isInPitlane) .. '    isInPit ' .. yesNo(car.isInPit))
   end
   gap()
+  ui.header('Notifikace')
+  ui.text(string.format('Zobrazeno zpráv: %d', notify.count))
+  ui.textWrapped('Poslední: ' .. notify.lastLine)
+  local sim = ac.getSim()
+  ui.text(string.format('Vlajka z AC: %d    online: %s', sim.raceFlagType or -1, yesNo(sim.isOnlineRace)))
+  gap()
   ui.textWrapped('Když delta nefunguje: odjeďte dvě až tři celá kola bez řezání a pošlete screenshot této záložky.')
 end
 
@@ -215,6 +371,8 @@ local function tabColors()
   for i = 1, #COLOR_KEYS do
     colorPicker(COLOR_KEYS[i][1], COLOR_KEYS[i][2])
   end
+  gap()
+  slider('panelOpacity', 'Matné pozadí: sytost', 0, 0.9, '%.2f')
   gap()
   if ui.button('Obnovit výchozí barvy') then
     for i = 1, #COLOR_KEYS do config.reset(COLOR_KEYS[i][1]) end
@@ -224,12 +382,21 @@ end
 local M = {}
 
 function M.draw()
+  ui.text('MirrorDelta ' .. config.VERSION)
+  ui.sameLine()
+  if ui.button('Zobrazit všechna okna uprostřed obrazovky') then
+    local ok, err = pcall(layout.arrange)
+    if not ok then layout.lastResult = 'chyba: ' .. tostring(err) end
+  end
+  if layout.lastResult ~= '-' then ui.text(layout.lastResult) end
   ui.tabBar('mirrorDeltaSettings', function ()
     ui.tabItem('Delta', tabDelta)
     ui.tabItem('Časy', tabTiming)
     ui.tabItem('Pneumatiky', tabTyres)
     ui.tabItem('Převody', tabGear)
     ui.tabItem('Poškození', tabDamage)
+    ui.tabItem('Zrcátko', tabMirror)
+    ui.tabItem('Notifikace', tabNotify)
     ui.tabItem('Barvy', tabColors)
     ui.tabItem('Diagnostika', tabDiagnostics)
   end)
