@@ -562,6 +562,22 @@ for i = 1, sq.n do
 end
 check(stretched and covers, 'every text stretched 1.6 x vertically, the background covers the whole region')
 dump(sq, 1024, 1024, 'aspect_race_1024x1024')
+-- the game zoomed a page stretched as a whole with ui.endPivotScale around another point and cut it off (0.6.3/0.6.4):
+-- the y coordinates are now stretched by the app itself, only each text is stretched in place
+display.setPage(1)
+frame(5)
+sq = env.displayMesh.textures.txDiffuse
+local seenT, topRow, bottomStrip = {}, false, false
+for i = 1, sq.n do
+  local e = sq.cmds[i]
+  if e[1] == 'text' then seenT[e[10]] = (e[3] + e[5]) / 2 end
+  if e[1] == 'rect' and e[3] < 60 and e[5] - e[3] > 80 and e[4] - e[2] < 120 then topRow = true end
+  if e[1] == 'rect' and e[5] > 1023.5 and e[3] > 800 and e[4] - e[2] > 1000 then bottomStrip = true end
+end
+check(seenT['Palivo'] and seenT['Pozice'] and seenT['Delta'] and seenT['Pozice'] > 800 and topRow and bottomStrip,
+  'race page stretched: LED row at the top, fuel and the bottom strip (position, delta) inside the texture')
+bounds(sq, 1024, 1024, 'stretched race page inside the region')
+dump(sq, 1024, 1024, 'aspect_race_page1_1024x1024')
 display.cfg().aspect = 1
 display.invalidate()
 frame(5)

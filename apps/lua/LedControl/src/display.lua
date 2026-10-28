@@ -382,7 +382,8 @@ end
 
 -- The box the page is laid out in for display i: W x H (before the turn) and the vertical stretch sy that maps it
 -- onto the region, so the page keeps its proportions on a display whose texture is squeezed (a square 1024 x 1024
--- texture on a 1.6 : 1 screen: laid out in 1024 x 640, stretched by 1.6 into the texture, squeezed back by the mesh).
+-- texture on a 1.6 : 1 screen: laid out in 1024 x 640, every y multiplied by 1.6 in display_pages, squeezed back by
+-- the mesh). Not ui.endPivotScale over the whole page: in the game that zoomed around another point and cut it off.
 function M.pageBox(i)
   local t = M.taken[i]
   local W, H = t.w, t.h
@@ -643,27 +644,19 @@ end
 -- ---------------------------------------------------------------- painting
 
 local painting = nil           -- the display being painted (read by the callback)
-local PIVOT, ORIGIN, STRETCH = vec2(), vec2(0, 0), vec2(1, 1)
--- the page in its box, stretched vertically by sy (ui.beginScale / endPivotScale(vec2, pivot) as the YouTube app of
--- CSP's Android Auto and dash_display_8100 scale one axis)
-local function drawStretched(W, H, sy)
-  if sy == 1 then pages.draw(M.page, W, H, D); return end
-  ui.beginScale()
-  pages.draw(M.page, W, H, D)
-  STRETCH.x, STRETCH.y = 1, sy
-  ui.endPivotScale(STRETCH, ORIGIN)
-end
+local PIVOT = vec2()
 local function paintCallback()
-  local t = M.taken[painting]
-  pages.origin(0, 0, 1)
   local r = M.rotation()
   local W, H, sy = M.pageBox(painting)
-  if r == 0 then drawStretched(W, H, sy); return end
+  -- the page in its box W x H, every y stretched by sy into the texture (display_pages.origin)
+  pages.origin(0, 0, 1, sy)
+  pages.setTextStretch(cfg().textStretch ~= false)
+  if r == 0 then pages.draw(M.page, W, H, D); return end
   -- drawn upright in a box of the turned size, then turned around a pivot so it lands on the region (0, 0, w, h):
   -- ui.endPivotRotation(angle, pivot) turns by 90 - angle clockwise (dash_display_8100 passes 0 for a display
   -- turned by 90 degrees, overtake mode passes 90 + small angle for a slight tilt)
   ui.beginRotation()
-  drawStretched(W, H, sy)
+  pages.draw(M.page, W, H, D)
   H = H * sy
   if r == 90 then PIVOT.x, PIVOT.y = H / 2, H / 2
   elseif r == 270 then PIVOT.x, PIVOT.y = W / 2, W / 2
@@ -673,7 +666,7 @@ end
 local function calibCallback()
   local t = M.taken[painting]
   local d = M.displays[painting]
-  pages.origin(0, 0, 1)
+  pages.origin(0, 0, 1, 1)
   -- how much taller a texture pixel has to be to look square on the display (corner squares drawn with it)
   local r = M.rotation()
   local a = M.aspectOf(painting) or (t.w / t.h)

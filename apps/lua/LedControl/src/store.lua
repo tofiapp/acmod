@@ -107,7 +107,7 @@ local function sanitiseCar(t)
       slot = (d.slot == 'txEmissive' or d.slot == 'txDiffuse') and d.slot or nil, adjust = adjust,
       regionMode = d.regionMode == 'config' and 'config' or nil,
       rotation = (rot == 90 or rot == 180 or rot == 270) and rot or nil,
-      aspect = (asp and asp >= 0.2 and asp <= 8) and asp or nil }
+      aspect = (asp and asp >= 0.2 and asp <= 8) and asp or nil, textStretch = d.textStretch == false and false or nil }
   end
   return out
 end

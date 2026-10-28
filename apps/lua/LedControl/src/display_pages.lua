@@ -113,28 +113,41 @@ function M.fit(s, size, w, h)
   return size
 end
 
--- Sets where the next page goes (origin and scale: 1 in the texture, < 1 in the window preview).
-function M.origin(x, y, scale) ox, oy, sc = x, y, scale end
+-- Sets where the next page goes: origin, scale (1 in the texture, < 1 in the window preview) and a vertical stretch
+-- (a display whose texture is squeezed on the screen: every y is multiplied by it, here and not by a ui scale call,
+-- because ui.endPivotScale over the whole page zoomed it around another point in the game and cut it off).
+local sy, textStretch = 1, true
+local TEXT_STRETCH = vec2(1, 1)
+function M.origin(x, y, scale, stretch) ox, oy, sc, sy = x, y, scale, stretch or 1 end
+-- false: texts are not stretched with the page (they then look lower on the display, but nothing is scaled)
+function M.setTextStretch(on) textStretch = on ~= false end
 
 -- rectangle; r = rounding in pixels of the page (0 = square corners)
 local function rect(x, y, w, h, p, r)
-  P1.x, P1.y = ox + x * sc, oy + y * sc
-  P2.x, P2.y = ox + (x + w) * sc, oy + (y + h) * sc
+  P1.x, P1.y = ox + x * sc, oy + y * sc * sy
+  P2.x, P2.y = ox + (x + w) * sc, oy + (y + h) * sc * sy
   ui.drawRectFilled(P1, P2, col(p), (r or 0) * sc)
 end
 M.rect = rect
 
 -- text fitted into the box x, y, w, h; align 0 start, 0.5 centre, 1 end. Placed by its measured size and drawn
--- without a clip rect (ui.dwriteDrawText, as CSP's Android Auto touchscreen and VHS filter draw): the page may be
--- scaled or turned afterwards (ui.endPivotScale / endPivotRotation move the vertices, not the clip rects, so a clipped
--- text would be cut away in the texture). The fitting keeps it inside its box.
+-- without a clip rect (ui.dwriteDrawText, as CSP's Android Auto touchscreen and VHS filter draw; a clip rect would
+-- not follow a turn or a stretch). The fitting keeps it inside its box. With a vertical stretch the text alone is
+-- stretched around its own centre: ui.beginScale + ui.endScale(vec2(1, sy)) (CSP's RallyCopilot stretches circles
+-- into ellipses in place this way).
 local function text(s, x, y, w, h, size, align, p)
   if not s or s == '' then return end
   local fs = M.fit(s, size, w, h)
   local tw, th = width100(s) * fs / 100, height100(s) * fs / 100
   P1.x = ox + (x + (w - tw) * (align or 0.5)) * sc
-  P1.y = oy + (y + (h - th) / 2) * sc
+  P1.y = oy + (y + h / 2) * sc * sy - th * sc / 2
+  local k = textStretch and sy or 1
+  if k ~= 1 then ui.beginScale() end
   ui.dwriteDrawText(s, fs * sc, P1, col(p))
+  if k ~= 1 then
+    TEXT_STRETCH.y = k
+    ui.endScale(TEXT_STRETCH)
+  end
 end
 M.text = text
 
@@ -364,7 +377,6 @@ local function num(n)
   if not s then s = tostring(n); numbers[n] = s end
   return s
 end
-local CAL_SCALE, CAL_PIVOT = vec2(1, 1), vec2()
 local CORNER_COLOURS = { 0xFF3030, 0x30FF30, 0x3080FF, 0xFFFFFF }
 local regionText, regionFor, aspectText, aspectFor = '', '', '', -1
 -- p: how much taller than wide a box has to be in the texture to look square on the display (1 = square pixels);
@@ -403,11 +415,17 @@ function M.calibration(TW, TH, rx, ry, rw, rh, rot, p, aspect)
   local ch = c * p
   local m = o + e
   local tsz = math.min(c, ch)
-  rect(rx + m, ry + m, c, ch, CORNER_COLOURS[1]); text('1', rx + m, ry + m, c, ch, tsz, 0.5, 0x000000)
-  rect(rx + rw - m - c, ry + m, c, ch, CORNER_COLOURS[2]); text('2', rx + rw - m - c, ry + m, c, ch, tsz, 0.5, 0x000000)
+  rect(rx + m, ry + m, c, ch, CORNER_COLOURS[1])
+  rect(rx + rw - m - c, ry + m, c, ch, CORNER_COLOURS[2])
   rect(rx + rw - m - c, ry + rh - m - ch, c, ch, CORNER_COLOURS[3])
-  text('3', rx + rw - m - c, ry + rh - m - ch, c, ch, tsz, 0.5, 0x000000)
-  rect(rx + m, ry + rh - m - ch, c, ch, CORNER_COLOURS[4]); text('4', rx + m, ry + rh - m - ch, c, ch, tsz, 0.5, 0x000000)
+  rect(rx + m, ry + rh - m - ch, c, ch, CORNER_COLOURS[4])
+  -- texts stretched like the page (drawn in y / p with the stretch p), so they read normally on the display
+  sy = p
+  text('1', rx + m, (ry + m) / p, c, c, c, 0.5, 0x000000)
+  text('2', rx + rw - m - c, (ry + m) / p, c, c, c, 0.5, 0x000000)
+  text('3', rx + rw - m - c, (ry + rh - m - ch) / p, c, c, c, 0.5, 0x000000)
+  text('4', rx + m, (ry + rh - m - ch) / p, c, c, c, 0.5, 0x000000)
+  sy = 1
   local key = rx * 1e12 + ry * 1e8 + rw * 1e4 + rh
   if key ~= regionFor then
     regionFor = key
@@ -418,16 +436,12 @@ function M.calibration(TW, TH, rx, ry, rw, rh, rot, p, aspect)
     aspectFor = a100
     aspectText = aspect and string.format('poměr %.2f : 1', aspect) or 'poměr neznámý'
   end
-  -- the numbers in the middle, stretched like the page so they read normally on the display
+  -- the numbers in the middle, stretched the same way
   local cy = ry + rh / 2
-  if p ~= 1 then ui.beginScale() end
-  text(regionText, rx + rw * 0.25, cy - rh * 0.2 / p, rw * 0.5, rh * 0.18 / p, rh * 0.18 / p, 0.5, 0xFFD200)
-  text(aspectText, rx + rw * 0.25, cy + rh * 0.04 / p, rw * 0.5, rh * 0.12 / p, rh * 0.12 / p, 0.5, 0xFFFFFF)
-  if p ~= 1 then
-    CAL_SCALE.x, CAL_SCALE.y = 1, p
-    CAL_PIVOT.x, CAL_PIVOT.y = ox + (rx + rw / 2) * sc, oy + cy * sc
-    ui.endPivotScale(CAL_SCALE, CAL_PIVOT)
-  end
+  sy = p
+  text(regionText, rx + rw * 0.25, (cy - rh * 0.2) / p, rw * 0.5, rh * 0.18 / p, rh * 0.18 / p, 0.5, 0xFFD200)
+  text(aspectText, rx + rw * 0.25, (cy + rh * 0.04) / p, rw * 0.5, rh * 0.12 / p, rh * 0.12 / p, 0.5, 0xFFFFFF)
+  sy = 1
   ui.popDWriteFont()
 end
 

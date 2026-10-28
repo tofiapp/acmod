@@ -83,6 +83,9 @@ local T = {
     .. 'když čtverce 1–4 v Kalibraci vypadají na displeji jako čtverce.',
   aspectMesh = 'Z rozměrů meshe: %.2f : 1',
   aspectNone = 'Rozměry meshe nejdou zjistit: nastavte poměr ručně (čtverce 1–4 v Kalibraci mají vypadat jako čtverce).',
+  textStretch = 'Roztáhnout písmo podle poměru##dispTextStretch',
+  textStretchHelp = 'Písmo se roztáhne stejně jako stránka, aby na displeji nebylo široké. Kdyby byly texty '
+    .. 'posunuté nebo useknuté, vypněte to: písmo pak bude jen trochu nižší.',
   rotation = 'Otočení',
   rotationHelp = 'Když je displej v textuře otočený (stránka je na volantu bokem nebo vzhůru nohama), otočte ji tady '
     .. '(po směru hodinových ručiček). Při kalibraci ukazuje oranžový pruh, kam padne horní okraj stránky.',
@@ -381,6 +384,12 @@ local function areaRows()
     end
     K.note(aspectNote, K.GREY)
   end
+  if ui.checkbox(T.textStretch, c.textStretch ~= false) then
+    c.textStretch = c.textStretch == false and nil or false
+    display.invalidate()
+    profileDirty, editedAt = true, runtime.clock
+  end
+  K.help(T.textStretchHelp)
   local cal = ui.checkbox(T.calibrate, display.calibrate)
   if cal then display.setCalibrate(not display.calibrate) end
   K.help(T.calibrateHelp)

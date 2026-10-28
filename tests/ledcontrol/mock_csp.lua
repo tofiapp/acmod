@@ -685,6 +685,7 @@ JSON = {
 -- ---------------------------------------------------------------- ui
 
 local U = M.ui
+local PIVOT_TMP = { x = 0, y = 0 }
 local function turnPoint(cw, pivot, x, y)
   local dx, dy = x - pivot.x, y - pivot.y
   if cw == 90 then return pivot.x - dy, pivot.y + dx
@@ -742,6 +743,19 @@ ui = {
   -- scale (ui.beginScale / endPivotScale(vec2 | number, pivot)): commands since beginScale scaled around the pivot;
   -- a text keeps its stretch in e[16], e[17] (x, y)
   beginScale = function () if M.recording then M.recording.scaleFrom = M.recording.n + 1 end end,
+  -- endScale(vec2 | number): around the centre of what was drawn since beginScale (UNSURE: inferred from CSP's
+  -- RallyCopilot, which stretches a circle into an ellipse in place this way)
+  endScale = function (sc)
+    local cv = M.recording
+    if not cv or not cv.scaleFrom then return end
+    local x1, y1, x2, y2 = math.huge, math.huge, -math.huge, -math.huge
+    for k = cv.scaleFrom, cv.n do
+      local e = cv.cmds[k]
+      x1, y1, x2, y2 = math.min(x1, e[2]), math.min(y1, e[3]), math.max(x2, e[4]), math.max(y2, e[5])
+    end
+    PIVOT_TMP.x, PIVOT_TMP.y = (x1 + x2) / 2, (y1 + y2) / 2
+    ui.endPivotScale(sc, PIVOT_TMP)
+  end,
   endPivotScale = function (sc, pivot)
     local cv = M.recording
     if not cv or not cv.scaleFrom then return end

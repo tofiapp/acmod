@@ -89,7 +89,7 @@ ui.drawRectFilled | official app-csp-defaults/ControllerTweaks/ControllerTweaks.
 ui.dummy | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:217 | ui.dummy(range)
 ui.dwriteDrawText | official acc-lua-internal/included-pp-filters/vhs/filter.lua:107 | ui.dwriteDrawText(paused and 'PAUSE' or 'PLAY',
 ui.endPivotRotation | official acc-lua-internal/included-apps/Mumble/src/MumbleWrapper.lua:1121 | ui.endPivotRotation(math.round(os.preciseClock() * -10) * 45, cur + overlayIconPosR)
-ui.endPivotScale | official acc-lua-internal/included-cars/android_auto/apps/youtube/app.lua:379 | ui.endPivotScale(vec2(0.65, 1), p)
+ui.endScale | official app-csp-defaults/RallyCopilot/src/EditorUI.lua:664 | ui.endScale(vec2(2, 1))
 ui.getClipboardText | official app-csp-defaults/WebBrowser/src/Controls.lua:523 | clipboardContent = ui.getClipboardText():trim()
 ui.getCursorX | official app-csp-defaults/InternetRadio/InternetRadio.lua:238 | local cr1, cr2 = vec2(0, 0), vec2(ui.getCursorX() + ui.availableSpaceX() - 20, math.huge)
 ui.getCursorY | official app-csp-defaults/InternetRadio/InternetRadio.lua:253 | draggingPos = ui.getCursorY()

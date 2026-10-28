@@ -260,9 +260,11 @@ apps/lua/LedControl/
                           has it, 'txDiffuse', 'txEmissive'), regionMode (nil = mesh UVs via getVertices():get(k).uv
                           bounding box, 'config'), rotation (0/90/180/270 clockwise: ui.beginRotation +
                           endPivotRotation(90 - r, pivot) as dash_display_8100), aspect (width / height as seen; nil =
-                          from getLocalAABB: x / sqrt(dy^2 + dz^2)) -> pageBox(i): laid out in W x W / aspect and
-                          stretched by ui.beginScale + endPivotScale(vec2(1, sy), 0) onto the region (a square
-                          texture on a wide screen), adjust = { [i] = { x, y, w, h } } };
+                          from getLocalAABB: x / sqrt(dy^2 + dz^2)) -> pageBox(i): laid out in W x W / aspect, every
+                          y multiplied by sy in display_pages.origin(x, y, scale, sy) (NOT ui.endPivotScale over the
+                          page: in game it zoomed around another point and cut the page off), each text stretched in
+                          place by beginScale + endScale(vec2(1, sy)) unless textStretch = false;
+                          adjust = { [i] = { x, y, w, h } } };
                           M.calibrate (not saved) paints a grid over the whole texture with the region outlined
                           (display_pages.calibration); describe(i) = shader / slots / painted / glow / region; a mesh whose
                           getVertices is nil is painted directly (ensureUniqueMaterials, getTextureSlotFilename kept
