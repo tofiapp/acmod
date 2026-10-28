@@ -4,13 +4,18 @@
 --   "torque at the wheels / overall ratio" (drivetrain losses included): ~580 Nm at 5000-5500 rpm, 512 at 7000;
 --   rev limit 7600 (max logged 7627); front slip angle peak 7.2 deg, peak slip ratio 0.13 (ndSlip = |ratio| / 0.13);
 --   grip: with the rear at ndSlip ~1 in 1st/2nd gear the logs show 0.67-0.72 g and 75-95 % throttle, so the
---   longitudinal friction is ~1.2 while lateral g reaches 1.57 (p99): mu 1.2, muLat 1.5;
+--   longitudinal friction is ~1.2 while lateral g reaches 1.57 (p99): mu 1.2, muLat 1.5 (see the lateral balance);
 --   behaviour to reproduce: 1st gear takes ~70-75 % throttle, 2nd spins near the torque peak (5000-5600 rpm).
+--   lateral balance (added with the Mustang profile): the Supra logs showed a front-limited car too (front ndSlip ~1.0
+--   at 1.2-1.4 g, rear 0.5-0.6 at 1.4 g), while one muLat 1.5 for both axles gave front 0.45-0.51 and rear 0.54-0.62
+--   at 1.4 g. muLat 1.4 (front) x muLatRear 1.07 keeps the rear's absolute grip (1.5) and the rear ndSlip at 1.4 g
+--   (0.54-0.62) and moves the front to 0.53-0.63 (0.82-0.86 with throttle); scenarios scale their lateral load by the
+--   weaker axle (now the front, 1.4).
 -- Below 5000 rpm the curve is a typical NA V8 shape (no clean full-throttle data there).
 return {
   name = 'rwd_supra', drive = 'RWD',
   mass = 1400, wheelbase = 2.75, cgHeight = 0.45, frontWeight = 0.52, track = 1.6,
-  tyreRadius = 0.33, mu = 1.2, muLat = 1.5, kappaPeak = 0.13, alphaPeakDeg = 7.2,
+  tyreRadius = 0.33, mu = 1.2, muLat = 1.4, muLatRear = 1.07, kappaPeak = 0.13, alphaPeakDeg = 7.2,
   wheelInertia = 1.4, engineInertia = 0.22,
   idleRpm = 1000, launchRpm = 6300, revLimit = 7600, shiftRpm = 7300,
   -- auto-clutch slip rpm by throttle (logs: 1st gear, engine > 1.15 x wheel rpm; slips up to 50-60 km/h)

@@ -14,7 +14,7 @@ local metrics = require('metrics')
 local controllers = require('controllers')
 local json = require('json')
 
-local CARS = { 'rwd_supra', 'fwd_hothatch', 'awd_gt' }
+local CARS = { 'rwd_supra', 'rwd_mustang', 'fwd_hothatch', 'awd_gt' }
 
 local scale = { grip = 1, power = 1 }
 if SCALE and SCALE ~= '' then

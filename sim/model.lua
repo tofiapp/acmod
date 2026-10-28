@@ -4,7 +4,9 @@
 --   - body: mass, rolling resistance, aero drag and downforce, longitudinal and lateral weight transfer;
 --   - lateral load: not simulated as yaw dynamics, the scenario prescribes the lateral acceleration ay(t); each axle
 --     must deliver its share of m * ay, which uses up part of the friction ellipse (combined slip, tyre.lua);
---     an axle that cannot deliver it is "sliding" (for the RWD rear: the start of a spin);
+--     an axle that cannot deliver it is "sliding" (for the RWD rear: the start of a spin); lateral friction per axle
+--     (muLat front, muLatRear x muLat rear: the user's Supra and Mustang logs show front-limited cars);
+--   - kerb bumps: optional per-wheel load multipliers from the scenario (env.loadWheel);
 --   - tyres: normalised Pacejka, peak at kappaPeak slip ratio, grip mu per wheel (scenario multipliers: wet, cold,
 --     kerbs, grass);
 --   - drivetrain: engine torque curve x throttle (engine braking when off), rev limiter, gear ratios, auto-clutch at
@@ -24,7 +26,7 @@ local M = {}
 local G = 9.81
 local RHO = 1.2
 local VMIN = 2          -- m/s, slip ratio denominator floor (stiffness at standstill)
-local SUBSTEPS = 12
+M.SUBSTEPS = 12      -- substeps per physics step (a module field so the robustness check can double it)
 local TAU_SYNC = 0.03   -- s, engine speed mismatch after a shift released over this time
 
 local function parseCurve(text)
@@ -51,7 +53,11 @@ function M.prepare(profile, scale)
   for k, v in pairs(profile) do c[k] = v end
   scale = scale or {}
   c.mu = profile.mu * (scale.grip or 1)                         -- longitudinal peak friction
-  c.muLat = (profile.muLat or profile.mu) * (scale.grip or 1)   -- lateral peak friction
+  c.muLat = (profile.muLat or profile.mu) * (scale.grip or 1)   -- lateral peak friction (front axle)
+  -- rear axle lateral friction as a multiple of muLat (default 1). The Mustang logs show a front-limited car: at the
+  -- top 5 % of lateral g the fronts sit at ndSlip ~0.82 and the rears at ~0.44 (sim/cars/rwd_mustang.lua).
+  c.muLatF = c.muLat
+  c.muLatR = c.muLat * (profile.muLatRear or 1)
   c.torqueCurve = parseCurve(profile.torque)
   c.clutchCurve = profile.clutchSlipRpm and parseCurve(profile.clutchSlipRpm) or nil
   tyre.setTail(profile.tyreTail or 1)
@@ -187,12 +193,12 @@ end
 
 -- One axle. In a corner the inside wheel travels a shorter path (yaw rate ay / v): with a locked axle it slips more
 -- and spins first, as in the user's logs (rear max/min ndSlip ~1.2-1.3 in corners). Forces go to s.fx[i].
-local function axleForces(car, s, env, i0, v, fzL, fzR, ay, axleShare)
+local function axleForces(car, s, env, i0, v, fzL, fzR, ay, axleShare, muLat)
   local kL, kR = env.muScale * env.muWheel[i0], env.muScale * env.muWheel[i0 + 1]
   -- lateral share this axle must carry, split by load x grip (lateral friction may be higher than longitudinal,
   -- as in AC's tyres)
   local fyNeed = car.mass * math.abs(ay) * G * axleShare
-  local cap = car.muLat * (kL * fzL + kR * fzR)
+  local cap = muLat * (kL * fzL + kR * fzR)
   local u = cap > 1 and fyNeed / cap or 0
   local yaw = ay * G / math.max(math.abs(v), 3)       -- ay > 0: left turn, left wheels inside
   local dv = yaw * car.track * 0.5
@@ -202,9 +208,11 @@ local function axleForces(car, s, env, i0, v, fzL, fzR, ay, axleShare)
   return fxL + fxR, okL and okR, u
 end
 
--- Advances the car by dt. `throttle` 0..1 (what the controller sent); env: { muScale, muWheel[0..3], ay (g) }.
+-- Advances the car by dt. `throttle` 0..1 (what the controller sent); env: { muScale, muWheel[0..3], ay (g),
+-- loadWheel[0..3] (optional load multipliers: kerb bumps, the wheel is thrown up and pressed down) }.
 function M.step(car, s, env, throttle, dt)
-  local h = dt / SUBSTEPS
+  local nsub = M.SUBSTEPS
+  local h = dt / nsub
   local r = car.tyreRadius
   local m = car.mass
   local L = car.wheelbase
@@ -214,7 +222,7 @@ function M.step(car, s, env, throttle, dt)
   local Jw = car.wheelInertia          -- per wheel
   local Je = car.engineInertia
   local ay = env.ay or 0
-  for _ = 1, SUBSTEPS do
+  for _ = 1, nsub do
     local v = s.v
     -- loads: static + aero + longitudinal transfer (last acceleration) + lateral transfer
     local down = 0.5 * RHO * car.cla * v * v
@@ -227,14 +235,18 @@ function M.step(car, s, env, throttle, dt)
     local sg = ay >= 0 and 1 or -1 -- ay > 0: the left wheels are on the inside (each loses dF, the outside gains dF)
     local fzFL, fzFR = fzF * 0.5 - dF * sg, fzF * 0.5 + dF * sg
     local fzRL, fzRR = fzR * 0.5 - dR * sg, fzR * 0.5 + dR * sg
+    local lw = env.loadWheel
+    if lw then
+      fzFL, fzFR, fzRL, fzRR = fzFL * lw[0], fzFR * lw[1], fzRL * lw[2], fzRR * lw[3]
+    end
     if fzFL < 50 then fzFL = 50 end
     if fzFR < 50 then fzFR = 50 end
     if fzRL < 50 then fzRL = 50 end
     if fzRR < 50 then fzRR = 50 end
     s.fz[0], s.fz[1], s.fz[2], s.fz[3] = fzFL, fzFR, fzRL, fzRR
 
-    local fxF, okF, uF = axleForces(car, s, env, 0, v, fzFL, fzFR, ay, car.frontWeight)
-    local fxR, okR, uR = axleForces(car, s, env, 2, v, fzRL, fzRR, ay, 1 - car.frontWeight)
+    local fxF, okF, uF = axleForces(car, s, env, 0, v, fzFL, fzFR, ay, car.frontWeight, car.muLatF)
+    local fxR, okR, uR = axleForces(car, s, env, 2, v, fzRL, fzRR, ay, 1 - car.frontWeight, car.muLatR)
     s.slideF, s.slideR, s.uF, s.uR = not okF, not okR, uF, uR
 
     -- drivetrain

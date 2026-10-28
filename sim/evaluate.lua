@@ -8,7 +8,8 @@ local controllers = require('controllers')
 
 local M = {}
 
-M.CARS = { 'rwd_supra', 'fwd_hothatch', 'awd_gt' }
+M.REAL_WEIGHT = 30 -- cost per unit share of needless cut time on the real logs (0.17 now -> +5)
+M.CARS = { 'rwd_supra', 'rwd_mustang', 'fwd_hothatch', 'awd_gt' }
 -- robustness: nominal plus +-20 % grip and power (the user's spec)
 M.SCALES = { { 1, 1 }, { 0.8, 1 }, { 1.2, 1 }, { 1, 0.8 }, { 1, 1.2 } }
 
@@ -121,7 +122,15 @@ function M.evaluate(root, set, params, opts)
       end
     end
   end
-  return total / runs, passed, runs, fails
+  local cost = total / runs
+  -- real driving (open-loop replay of the user's logs): share of key-held time with a needless cut. The sim judges
+  -- safety, this judges caution (user v0.10: "sometimes needlessly cautious", "after a kerb it refused to accelerate").
+  if opts.real ~= false then
+    local share = require('replay').cautionAll(root, params.throttle, params.traction)
+    fails.realCaution = math.floor(share * 1000 + 0.5) -- per mille, for the log
+    cost = cost + M.REAL_WEIGHT * share
+  end
+  return cost, passed, runs, fails
 end
 
 return M
