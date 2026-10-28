@@ -251,6 +251,18 @@ end
 local carCheck = 0
 local waitTimer = 0
 local lightsOn = false
+-- no LEDs found: the model may still be loading (slow tracks load the cockpit LOD late), so the search runs again,
+-- every 2 s for the first 30 s, then every 10 s; only a search that finds LEDs restarts the takeover
+local noLedsFor, noLedsTimer = 0, 0
+local function retryNoLeds(dt)
+  noLedsFor, noLedsTimer = noLedsFor + dt, noLedsTimer + dt
+  if noLedsTimer < (noLedsFor < 30 and 2 or 10) then return end
+  noLedsTimer = 0
+  local car = ac.getCar(0)
+  if not car or not M.info then return end
+  local ok, layout = pcall(detect.run, car, M.info, M.profile and M.profile.map)
+  if ok and layout and not layout.notReady and #layout.leds > 0 then M.restart('redetect') end
+end
 
 local function stopLights()
   if lightsOn then lights.release(); lightsOn = false end
@@ -268,6 +280,7 @@ function M.update(dt)
     M.restartReason = nil
     M.state = 'wait'
     waitTimer = 0
+    noLedsFor, noLedsTimer = 0, 0
     bump()
   end
   if M.state == 'wait' then
@@ -296,6 +309,7 @@ function M.update(dt)
     if S.master then attach(); bump() end
     return
   end
+  if M.state == 'noleds' then retryNoLeds(dt) end
   if M.state ~= 'run' then return end
   if not S.master then
     takeover.dispose()

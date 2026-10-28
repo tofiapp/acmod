@@ -238,6 +238,7 @@ apps/lua/LedControl/
                           hold / Test timers, per group highest priority active scenario paints, UNSET falls through,
                           rest = preset base ('off' / 'original')
   src/runtime.lua         states wait -> run | off | noleds | failed; restart on session, car change, method, map;
+                          noleds searches again (every 2 s for 30 s, then 10 s; a slow track loads the model late);
                           per frame car_state.fill -> engine.step or a test pattern -> takeover.set (hover blink only
                           on the car, never in fb); preset per car; lights.update while the master switch is on
   src/lights.lua          lights (tab Světla): outputs rain / headlights / hazards / flash (real controls via
@@ -266,7 +267,9 @@ tests/ledcontrol/         mock_csp.lua (scene graph, shared materials, AC LED wr
                           LOD switch, session reset), fake_csp.lua (fake adapter), sdk_signatures.txt, helpers.lua (test
                           cars: formula 15+3+3 with HR/LR/LOD B instances, GT3 10 LEDs one material, actsAsLED, names,
                           empty, display texture, two displays; seenLed / ledMatches), test_*.lua each in its own
-                          LuaJIT runtime
+                          LuaJIT runtime; test_timeline (a drive: pits with / without limiter, flags, limiter, fuel,
+                          ABS / TC, reset to pits, session restart, LOD switch, init orders; winner per group, colours,
+                          takeover vs jammer, restore), test_perf (writes / allocation per frame), test_storage
 ```
 
 Adapter: `src/csp.lua` is the only LedControl file that reads the CSP globals (ac, ui, render, io, os, JSON, stringify,

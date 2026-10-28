@@ -360,6 +360,7 @@ end
 -- AC's digital instruments: every frame, LED k gets its colour when rpm >= its threshold, else black.
 -- acWrites = 'mesh': into the mesh's current material; 'material': into the material it had at load.
 function M.acStep()
+  if not M.car then return end
   local rpm = M.car.rpm
   for i = 1, #M.acLeds do
     local a = M.acLeds[i]

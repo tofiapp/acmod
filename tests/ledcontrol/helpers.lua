@@ -265,7 +265,7 @@ function H.seenLed(i)
     local mesh = led.inst[k].ref[1]
     if chainActive(mesh) then return env.seen(mesh) end
   end
-  return env.seen(led.inst[1].ref[1])
+  return 0, 0, 0, 'inactive'      -- no instance on an active node chain: the LED is not drawn at all
 end
 
 -- true when LED i shows the colour the app wants (fb): off when it wants off, else the same hue (channels compared
@@ -274,6 +274,7 @@ function H.ledMatches(i)
   local p = app.runtime.fb[i]
   local r, g, b, how = H.seenLed(i)
   if how == 'double' then return false, 'original and copy both visible' end
+  if how == 'inactive' then return true end
   if p == nil or p < 0 then return true end           -- the car's own logic: nothing to compare
   local er, eg, eb = math.floor(p / 65536) % 256, math.floor(p / 256) % 256, p % 256
   local em, sm = math.max(er, eg, eb), math.max(r, g, b)

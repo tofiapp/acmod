@@ -90,7 +90,17 @@ return function (env)
       J.lodUntil = -1
       J.lodBack()
     end
-    if (J.opts.phase or 'before') == phase and active() then jam() end
+    if (J.opts.phase or 'before') == phase then
+      if active() then jam(); J.blinking = J.opts.reshow == true
+      elseif J.blinking then
+        -- the blink ends with the LEDs shown, as AC's own LED logic would leave them
+        J.blinking = false
+        for i = 1, #J.meshes do
+          local m = J.meshes[i]
+          if not m.disposed and not m.visible then env.writeVisible(m, true, 'jammer') end
+        end
+      end
+    end
   end
 
   -- LOD switch: the cockpit's LOD A nodes go inactive and LOD B active; after `frames` it switches back and, as a LOD
