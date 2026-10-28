@@ -23,6 +23,8 @@ local function loadSettings()
     MAX_THROTTLE = 100,
     TRACTION = true,
     TRACTION_MODE = 2,
+    TRACTION_RECOVERY = 100,
+    TRACTION_MEMORY = true,
     TARGET_SLIP = 100,
     TRACTION_RESPONSE = 100,
     CORNER_THROTTLE_REDUCTION = 0,
@@ -60,6 +62,8 @@ local P = {
   maxThrottle = math.clamp(S.MAX_THROTTLE / 100, 0, 1),
   traction = flag(S.TRACTION),
   tractionMode = tonumber(S.TRACTION_MODE) == 1 and 1 or 2, -- 1 = remembering foot (v0.7-0.9), 2 = tuned regulator
+  tractionRecovery = math.clamp(S.TRACTION_RECOVERY / 100, 0.5, 3), -- mode 2: how fast the throttle comes back
+  tractionMemory = flag(S.TRACTION_MEMORY),                         -- mode 2: remember limits per gear and rpm
   targetSlip = math.clamp(S.TARGET_SLIP / 100, 0.3, 3), -- in ndSlip units, 1 = tyre peak
   tractionResponse = math.clamp(S.TRACTION_RESPONSE / 100, 0.1, 5),
   cornerThrottleReduction = math.clamp(S.CORNER_THROTTLE_REDUCTION / 100, 0, 1),
@@ -100,7 +104,12 @@ local tractionParams = nil
 if P.tractionMode == 2 then
   for k, v in pairs(tuned.throttle) do throttleParams[k] = v end
   throttleParams.TARGET_SLIP = math.min(1, tuned.throttle.TARGET_SLIP * P.targetSlip) -- past the peak it runs away
-  tractionParams = tuned.traction
+  tractionParams = {}
+  for k, v in pairs(tuned.traction) do tractionParams[k] = v end
+  tractionParams.K_BACK = tuned.traction.K_BACK * P.tractionRecovery
+  tractionParams.K_UP = tuned.traction.K_UP * P.tractionRecovery
+  tractionParams.FORGET_RATE = (tuned.traction.FORGET_RATE or 1.5) * P.tractionRecovery
+  tractionParams.MEM = P.tractionMemory and (tuned.traction.MEM or 1) or 0
 end
 local throttleCore = Throttle.new(throttleParams, tractionParams)
 live.targetSlip = throttleParams.TARGET_SLIP -- the target really used (overlay, recorder's wheelspin flag)

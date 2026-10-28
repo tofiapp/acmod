@@ -17,6 +17,10 @@ M.THRESHOLDS = {
                          -- go, every drive type (USER asked for RWD ellipse safety, no number given)
   maxRate = 5,           -- PROPOSAL: throttle changes made by the assist at most 5 /s (the user wants smooth, never a
                          -- step); the driver's own key edges are excluded
+  recoveryTime = 0.5,    -- PROPOSAL: after a disturbance ends (scn.recovery.after) the throttle is back at the request
+                         -- (or the tyres are really near their peak again) at most 0.5 s later than the driver's own
+                         -- key ramp would bring it back (user report v0.10: after a
+                         -- kerb the car refused to accelerate on straight asphalt)
   reverseFollow = 0.01,  -- PROPOSAL: in reverse/neutral the throttle is the plain key ramp (no regulation)
 }
 
@@ -168,6 +172,25 @@ function M.evaluate(scn, tr, ref)
     graded('peakSlip', c.peakSlip, T.peakSlip, o and o.peakSlip)
     graded('over13Time', c.over13Time, T.over13Time, o and o.over13Time)
     graded('slideTime', c.slideTime, T.slideTime, o and o.slideTime)
+
+    -- recovery after a disturbance: time until the throttle is back at the request or the slip is near the peak
+    if scn.recovery then
+      -- measured as the delay beyond what the driver's own key ramp (RISE) needs from the throttle at that moment
+      local t0 = scn.recovery.after
+      local rec, thr0 = nil, nil
+      for i = 1, tr.n do
+        if tr.t[i] >= t0 then
+          thr0 = thr0 or tr.thr[i]
+          if tr.key[i] and (tr.thr[i] >= tr.req[i] - 0.05 or tr.nd[i] >= 0.8 * TARGET) then
+            rec = tr.t[i] - t0
+            break
+          end
+        end
+      end
+      local rampTime = thr0 and math.max(0, (1 - 0.05 - thr0) / (ref.rise or 1.2)) or 0
+      val.recoveryTime = math.max(0, (rec or (tr.t[tr.n] - t0)) - rampTime)
+      chk.recoveryTime = val.recoveryTime <= T.recoveryTime
+    end
 
     -- loss: distance covered, normalised by what the oracle gains over a car with no throttle at all
     if o and z then

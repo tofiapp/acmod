@@ -75,7 +75,7 @@ end
 -- bound, plus the loss itself (faster is better even when passing).
 local BOUNDS = {
   peakSlip = 'peakSlip', over13Time = 'over13Time', slideTime = 'slideTime', steadyDirChanges = 'steadyDirChanges',
-  steadyStd = 'steadyStd', maxRate = 'maxRate',
+  steadyStd = 'steadyStd', maxRate = 'maxRate', recoveryTime = 'recoveryTime',
 }
 function M.runCost(res)
   local T = metrics.THRESHOLDS
@@ -86,7 +86,8 @@ function M.runCost(res)
     if res.checks[name] ~= nil and v[name] then c = c + math.min(5, math.max(0, v[name] / T[tk] - 1)) end
   end
   if v.loss and v.lossBound then
-    c = c + math.min(5, math.max(0, v.loss / v.lossBound - 1)) + 2 * math.max(0, v.loss)
+    -- user v0.10: "sometimes needlessly cautious": speed weighs more (was 2 x loss)
+    c = c + math.min(5, math.max(0, v.loss / v.lossBound - 1)) + 4 * math.max(0, v.loss)
   end
   return c
 end

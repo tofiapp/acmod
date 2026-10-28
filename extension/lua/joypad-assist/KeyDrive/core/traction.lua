@@ -64,6 +64,13 @@ M.DEFAULTS = {
   TRACK = 0,            -- MODE 2 (0 = off until tuned): with plenty of grip (regulated slip below TRACK x the hold band) the cap follows
                         -- the requested throttle (+ AW) at once, so the driver's own key ramp is never slowed down
   GUARD = 1,            -- MODE 2: combined ndSlip over the target always cuts (lateral slide); 0 only for experiments
+  -- MODE 2 forgetting (user report v0.10: after a kerb the car refused to accelerate on straight asphalt: the kerb's
+  -- spin had taught a low limit for that gear and rpm band, and the cap crept back at CREEP only): while the cap
+  -- holds the throttle back and the slip stays below SPARE x the hold band for FORGET_DELAY, the remembered limit of
+  -- this band (and the next) rises at FORGET_RATE per second, so the throttle comes back.
+  SPARE = 0.9,
+  FORGET_DELAY = 0.25,  -- s
+  FORGET_RATE = 1.5,    -- per second
 }
 
 local RPM_BAND = 500
@@ -105,6 +112,7 @@ function M.new(params)
     slipRate = 0, prevSlip = 0,
     sx = 0, kappaPeak = p.KAPPA_PEAK, hasRatio = false, lateral = 0, targetX = 1,
     rampScale = 1,      -- MODE 2: cap recovery rates scale with the driver's key ramp (set by core/throttle.lua)
+    spareTime = 0,      -- MODE 2: how long the cap has held the throttle back with plenty of grip
   }, M)
   for g = 1, GEARS do
     o.memory[g], o.stamp[g], o.known[g] = {}, {}, {}
@@ -138,6 +146,7 @@ function M:reset()
   self.slip, self.ratio, self.k, self.limit, self.riseScale, self.memoryNow = 0, 0, 1, 1, 1, 1
   self.slipRate, self.prevSlip = 0, 0
   self.sx, self.lateral, self.targetX = 0, 0, 1
+  self.spareTime = 0
   self.active, self.airborne = false, false
   self.overTime = 0
   self.A = 1
@@ -317,6 +326,21 @@ local function update2(self, dt, carState, requested, target, response)
       self.crossBand = -1
       self.overTime = 0
       local hold = target * P.HOLD_BAND
+      -- forgetting: the cap holds the throttle back although the tyres have plenty of grip
+      if requested > A + 0.02 and reg < hold * P.SPARE and self.slip < fullTarget * P.HOLD_BAND then
+        self.spareTime = self.spareTime + dt
+      else
+        self.spareTime = 0
+      end
+      if useMem and self.spareTime > P.FORGET_DELAY then
+        local up = P.FORGET_RATE * self.rampScale * response * dt
+        if mem < 1 then setLevel(self, gear, band, math.min(1, mem + up)) end
+        if ahead < 1 then setLevel(self, gear, band + 1, math.min(1, ahead + up)) end
+        mem = level(self, gear, band)
+        ahead = level(self, gear, band + 1)
+        lim = mem < ahead and mem or ahead
+        T = lim < 1 and lim * P.RETURN or 1
+      end
       if reg < hold * P.TRACK and self.slip < fullTarget * P.HOLD_BAND * P.TRACK then
         -- plenty of grip: follow the driver's request
         local follow = requested + P.AW
