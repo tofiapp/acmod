@@ -26,10 +26,32 @@ def syntax_check(lua):
     return bad
 
 
+def api_names_check():
+    """Every CSP API name the app uses must be in sdk_signatures.txt (looked up in the SDK / official code with
+    tools/sdk_signatures.py), so a new call cannot slip in unverified."""
+    sys.path.insert(0, str(HERE / "tools"))
+    import sdk_signatures
+    listed = set()
+    for row in (HERE / "sdk_signatures.txt").read_text(encoding="utf-8").splitlines():
+        if row and not row.startswith("#"):
+            name, _, where = row.partition(" | ")
+            if not where.startswith("NOT FOUND"):
+                listed.add(name)
+    names, methods = sdk_signatures.used_names()
+    app_methods = sdk_signatures.app_defined_methods()
+    missing = [n for n in names if n not in listed] + [":" + m for m in methods
+                                                      if m not in app_methods and ":" + m not in listed]
+    for n in missing:
+        print(f"API: {n} is used but not verified in sdk_signatures.txt (run tests/ledcontrol/tools/sdk_signatures.py)")
+    return len(missing)
+
+
 def main():
     only = sys.argv[1:]
     bad = syntax_check(luajit21.LuaRuntime(unpack_returned_tuples=True))
+    bad += api_names_check()
     failed = 0
+    passed = 0
     files = sorted(HERE.glob("test_*.lua"))
     if only:
         files = [f for f in files if any(o in f.stem for o in only)]
@@ -39,9 +61,11 @@ def main():
             run = lua.eval("function(path, app, tmp, mock, helpers) return assert(loadfile(path))(app, tmp, mock, helpers) end")
             try:
                 failed += run(str(test), str(APP), tmp, str(HERE / "mock_csp.lua"), str(HERE / "helpers.lua")) or 0
+                passed += lua.globals().LC_PASSED or 0
             except Exception as e:  # a Lua error inside a test file
                 print(f"ERROR in {test.name}: {e}")
                 failed += 1
+    print(f"LedControl: {len(files)} files, {passed} checks passed, {failed} failed, {bad} syntax / API name errors")
     sys.exit(1 if (bad or failed) else 0)
 
 

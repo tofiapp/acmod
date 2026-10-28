@@ -1,6 +1,21 @@
 -- Minimal stand-in for the CSP Lua API, enough to run LedControl outside the game.
 -- Scene: nodes with live translation matrices, meshes with materials (shared on purpose), visibility, LOD and
 -- CSP flags; an AC LED driver that rewrites the LEDs' ksEmissive by RPM every frame (to prove the takeover wins).
+-- It is served to the app through the fake adapter (fake_csp.lua). Names and argument shapes follow the SDK
+-- (tests/ledcontrol/sdk_signatures.txt lists where each one is defined or used by official CSP code).
+--
+-- UNSURE (behaviour of the game this mock has to guess; a test that passes here may still fail in the game):
+--  * frame order: the mock runs AC's LED writer, then script.update, then script.frameBegin, then the render
+--    callback. When AC really writes ksEmissive relative to the app's callbacks is not documented.
+--  * whether AC / CSP write the emissive of the LED's material (shared by every mesh using it) or per mesh, and
+--    whether ensureUniqueMaterials on a created copy really detaches it from CSP's emissive logic.
+--  * whether a mesh hidden with setVisible(false) stays hidden after a LOD switch or a session reset (the mock
+--    keeps it hidden; the jammer in test_jammer.lua tries both).
+--  * render.mesh / render.circle: the mock only records the calls, it cannot tell whether the redrawn LED covers
+--    the original on screen (bloom, depth, transparency order).
+--  * createMesh / getVertices / getIndices: the mock copies tables; the game may refuse a mesh (skinned, too
+--    big, packed in a KN5 LOD that is not loaded).
+--  * ac.storage, io.save / io.load: written at once and never fail in the mock.
 
 local M = { frameNo = 0, clock = 0, storage = {}, callbacks = {}, renderCallbacks = {}, draws = {}, ini = {}, cspConfig = {},
   carId = 'test_car', ui = { texts = {} }, acLeds = {}, acWrites = 'mesh' }

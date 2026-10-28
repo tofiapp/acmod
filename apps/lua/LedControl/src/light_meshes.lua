@@ -7,6 +7,8 @@
 -- is hidden; heal() shows them again after a crash or reload, release() clears it.
 -- No allocation in set() / guard().
 
+local csp = require('src/csp')
+local ac, vec3, rgb = csp.ac, csp.vec3, csp.rgb
 local color = require('src/color')
 local detect = require('src/detect')
 

@@ -7,6 +7,42 @@ package.path = appDir .. '/?.lua;' .. package.path
 local env = dofile(mockPath)
 env.folder = tmpDir
 
+-- ---------------------------------------------------------------- adapter sandbox
+-- App modules see no CSP globals: only src/csp.lua (here replaced by the fake adapter) may hold them. Reading one
+-- from any other module is recorded in H.direct and raises an error naming it.
+local fakeAdapter = dofile(appDir .. '/../../../tests/ledcontrol/fake_csp.lua')
+local HIDDEN = {}
+for _, n in ipairs({ 'ac', 'ui', 'render', 'io', 'os', 'JSON', 'stringify', 'vec2', 'vec3', 'rgb', 'rgbm', 'mat4x4',
+  'script', 'bit' }) do HIDDEN[n] = true end
+local direct = {}
+local appEnv = setmetatable({}, {
+  __index = function (_, k)
+    if HIDDEN[k] then
+      direct[#direct + 1] = k
+      error('LedControl module read the CSP global "' .. tostring(k) .. '" directly (use src/csp.lua)', 2)
+    end
+    return _G[k]
+  end,
+  __newindex = function (_, k, v) rawset(_G, k, v) end,
+})
+local function appSearcher(name)
+  if type(name) ~= 'string' or not name:match('^src/') or name == 'src/csp' then return nil end
+  local path = appDir .. '/' .. name .. '.lua'
+  local f = io.open(path, 'r')
+  if not f then return nil end
+  f:close()
+  local chunk, err = loadfile(path)
+  if not chunk then error(err, 0) end
+  setfenv(chunk, appEnv)
+  return chunk
+end
+table.insert(package.loaders, 2, appSearcher)
+local function loadEntry(path)
+  local chunk = assert(loadfile(path))
+  setfenv(chunk, appEnv)
+  return chunk()
+end
+
 local H = { env = env, passed = 0, failed = 0 }
 local function check(cond, msg)
   if cond then H.passed = H.passed + 1 else H.failed = H.failed + 1; print('FAIL: ' .. msg) end
@@ -133,7 +169,8 @@ local function loadApp()
   end
   script = {}
   env.renderCallbacks = {}
-  dofile(appDir .. '/LedControl.lua')
+  package.loaded['src/csp'] = fakeAdapter()     -- built now: a test may swap a global (stringify, ...) before loading
+  loadEntry(appDir .. '/LedControl.lua')
   app = { runtime = require('src/runtime'), takeover = require('src/takeover'), config = require('src/config'),
     safety = require('src/safety'), detect = require('src/detect'), presets = require('src/presets'),
     engine = require('src/engine'), carState = require('src/car_state') }
@@ -175,10 +212,13 @@ H.baseCar, H.acLed, H.formulaCar, H.gt3Car, H.markedCar, H.namedCar, H.emptyCar 
   baseCar, acLed, formulaCar, gt3Car, markedCar, namedCar, emptyCar
 H.FORMULA_ORDER = FORMULA_ORDER
 H.loadApp = function () loadApp(); H.app = app; return app end
+H.direct = direct            -- CSP globals an app module read directly (must stay empty)
 H.frame, H.click, H.seenOf, H.mode = frame, click, seenOf, mode
 
 function H.finish(name)
+  check(#direct == 0, 'no app module called the CSP API directly (' .. table.concat(direct, ', ') .. ')')
   print(string.format('%s: %d passed, %d failed', name, H.passed, H.failed))
+  LC_PASSED = H.passed            -- read by run_tests.py for the summary
   return H.failed
 end
 

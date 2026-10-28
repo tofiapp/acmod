@@ -3,6 +3,7 @@
 # ready to drag into Content Manager.
 #   ./build.sh               both apps
 #   ./build.sh MirrorDelta   one app (MirrorDelta or LedControl)
+# Each app's tests run first (./run_tests <App>); a failing test stops the build.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -10,6 +11,11 @@ build() {
   local name=$1
   local app="apps/lua/$name"
   [ -f "$app/manifest.ini" ] || { echo "Unknown app: $name" >&2; exit 1; }
+  # no ZIP from red tests
+  if ! ./run_tests "$name"; then
+    echo "Tests of $name failed: no ZIP built." >&2
+    exit 1
+  fi
   local version
   version=$(sed -n 's/^VERSION *= *//p' "$app/manifest.ini" | tr -d '\r')
   local zip="dist/$name-$version.zip"

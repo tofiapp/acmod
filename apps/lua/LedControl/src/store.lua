@@ -3,6 +3,8 @@
 --   presets.lon       user presets
 -- Stored text is parsed with stringify.parse under pcall and sanitised, never executed as code.
 
+local csp = require('src/csp')
+local ac, io, stringify = csp.ac, csp.io, csp.stringify
 local M = {}
 
 function M.folder()

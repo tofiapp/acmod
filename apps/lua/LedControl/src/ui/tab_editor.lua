@@ -17,6 +17,8 @@
 -- ui.invisibleButton / itemRect / itemActive / mouseDown / itemHovered(HoveredFlags) / drawRect(Filled) (official apps),
 -- ui.alignTextToFramePadding (TimeShift) and ui.offsetCursorY (MirrorDelta, official apps), both only when present.
 
+local csp = require('src/csp')
+local ui, vec2, rgb, rgbm = csp.ui, csp.vec2, csp.rgb, csp.rgbm
 local config = require('src/config')
 local runtime = require('src/runtime')
 local presets = require('src/presets')

@@ -167,9 +167,10 @@ Poškození tab shows the live raw values for calibration.
 ## Commands
 
 ```bash
-pip install lupa && python tests/run_tests.py   # MirrorDelta: syntax check of all Lua files + simulated laps
-python tests/ledcontrol/run_tests.py            # LedControl: own mock (scene, shared materials, AC LED writer)
-./build.sh [MirrorDelta|LedControl]             # or build.ps1 on Windows; no argument builds both
+pip install lupa && ./run_tests                 # both suites (LuaJIT 2.1 via lupa); ./run_tests LedControl for one
+python tests/run_tests.py                       # MirrorDelta: syntax check of all Lua files + simulated laps
+python tests/ledcontrol/run_tests.py [name]     # LedControl: own mock (scene, shared materials, AC LED writer)
+./build.sh [MirrorDelta|LedControl]             # or build.ps1 on Windows; runs the app's tests first, no ZIP if red
 ```
 
 ## Defaults the user chose
@@ -188,6 +189,7 @@ Research: `docs/ledcontrol-research.md`, plan and data model: `docs/ledcontrol-p
 
 ```
 apps/lua/LedControl/
+  src/csp.lua             the adapter: the only file that reads the CSP globals (see below)
   LedControl.lua          entry: script.update / frameBegin / windowMain under the error boundary, ac.onRelease,
                           ac.onSessionStart, render.on('main.root.transparent'), hotkey handlers
   src/config.lua          ac.storage 'lc_' -> plain S (master, method, intensity, testMode, defaultPreset, hiddenGuard)
@@ -257,6 +259,17 @@ tests/ledcontrol/         mock_csp.lua (scene graph, shared materials, AC LED wr
                           cars: formula 15+3+3 with HR/LR/LOD B instances, GT3 10 LEDs one material, actsAsLED, names,
                           empty), test_*.lua each in its own LuaJIT runtime
 ```
+
+Adapter: `src/csp.lua` is the only LedControl file that reads the CSP globals (ac, ui, render, io, os, JSON, stringify,
+vec2/vec3/rgb/rgbm/mat4x4, script, bit); every other module binds them at its top
+(`local csp = require('src/csp')` + `local ac, ui = csp.ac, csp.ui`). The tests serve the fake adapter
+(tests/ledcontrol/fake_csp.lua over mock_csp.lua) and load every other module in an environment without these globals
+(helpers.lua), test_adapter.lua scans the sources statically. Every API name the app uses must be listed in
+tests/ledcontrol/sdk_signatures.txt (definition in acc-lua-sdk, or a call in official CSP code for C++-bound names),
+regenerated with `python3 -I tests/ledcontrol/tools/sdk_signatures.py <acc-lua-sdk> <official code dirs>`; run_tests.py
+fails on an unlisted name. CSP runs OpenResty's LuaJIT 2.1 fork with 5.2 compatibility (acc-lua-sdk README); the tests
+run stock LuaJIT 2.1 from lupa (no 5.2 compat), so avoid code whose meaning differs between the two (__len / __pairs on
+tables, table.pack / unpack, goto).
 
 Rules as for MirrorDelta: no per-frame allocation (every test file ends with an allocation check: window open, its
 tab drawn, < 4 KB over 300 frames), no invented CSP API (evidence in docs/ledcontrol-plan.md section 12; calls only seen

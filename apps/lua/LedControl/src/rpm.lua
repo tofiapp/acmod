@@ -11,6 +11,8 @@
 -- Writes ST.shiftUp (effective), ST.shiftStartManual (0 = from the preset), ST.limiterRpm, ST.limiterKnown.
 -- No allocation in update().
 
+local csp = require('src/csp')
+local ac = csp.ac
 local M = { version = 0, learned = 0, maxSeen = 0, flagUnreliable = false, auto = {}, ledRpm = nil,
   manual = { start = false, shift = false, limiter = false } }
 

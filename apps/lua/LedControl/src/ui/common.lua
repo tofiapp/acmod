@@ -1,5 +1,7 @@
 -- Small UI helpers shared by the tabs.
 
+local csp = require('src/csp')
+local ui = csp.ui
 local M = {}
 
 local TEXT_COLOUR = ui.StyleColor and ui.StyleColor.Text or nil

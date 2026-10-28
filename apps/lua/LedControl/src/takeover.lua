@@ -11,6 +11,8 @@
 --    when AC is seen writing it back, the colours are put back every frame in script.frameBegin.
 -- A failure while attaching falls back to the next method (1 -> 2 -> 3) with the reason kept in M.fallback.
 
+local csp = require('src/csp')
+local ac, render, vec3, rgb, rgbm, mat4x4 = csp.ac, csp.render, csp.vec3, csp.rgb, csp.rgbm, csp.mat4x4
 local config = require('src/config')
 local color = require('src/color')
 local detect = require('src/detect')

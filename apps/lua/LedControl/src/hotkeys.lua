@@ -1,6 +1,8 @@
 -- Bindable buttons (CSP controls, ac.ControlButton as TimeShift uses it; bound in the Nastavení tab with
 -- :control()), polled in script.update so they work with the window closed. Handlers are set by the entry script.
 
+local csp = require('src/csp')
+local ac = csp.ac
 local M = { list = {} }
 
 local function make(key, id, name)

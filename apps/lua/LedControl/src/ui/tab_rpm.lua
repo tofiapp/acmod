@@ -6,6 +6,8 @@
 -- (ControllerTweaks drawCurveBase); ui.pushFont(ui.Font.Title) (WebBrowser Blanks). No allocation per frame: labels
 -- are prebuilt, texts are rebuilt only when rpm / preset / runtime versions change, RPM numbers come from caches.
 
+local csp = require('src/csp')
+local ui, vec2, rgbm = csp.ui, csp.vec2, csp.rgbm
 local K = require('src/ui/kit')
 local runtime = require('src/runtime')
 local presets = require('src/presets')

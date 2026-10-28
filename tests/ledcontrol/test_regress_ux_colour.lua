@@ -211,14 +211,16 @@ H.formulaCar(1)
 env.storage = {}
 lightCar()
 env.car.speedKmh = 120
+-- counts saves: wrapped before the app loads, as the app takes stringify from the adapter (src/csp.lua) at load
+local calls = 0
+local baseStr = stringify
+stringify = setmetatable({ parse = baseStr.parse, tryParse = baseStr.tryParse }, { __call = function (_, v, ...) calls = calls + 1; return baseStr(v, ...) end })
 loadApp()
 frame(5)
 drawTab()
 clickTab('Palubní deska a kabina##lx_backlight')     -- the colour field shows when the row is expanded
 local before = L.byId.backlight.colour
-local calls = 0
-local baseStr = stringify
-stringify = setmetatable({ parse = baseStr.parse, tryParse = baseStr.tryParse }, { __call = function (_, v, ...) calls = calls + 1; return baseStr(v, ...) end })
+calls = 0
 local v0 = L.version
 env.windowOpen = true
 U.tab = 'Světla'

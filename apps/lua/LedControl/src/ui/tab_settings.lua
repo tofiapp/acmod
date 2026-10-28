@@ -7,6 +7,8 @@
 -- ui.slider (official apps), ac.setClipboardText / ui.getClipboardText (official apps), ui.pushStyleColor with
 -- ui.StyleColor.Button (WebBrowser).
 
+local csp = require('src/csp')
+local ac, ui, vec2 = csp.ac, csp.ui, csp.vec2
 local K = require('src/ui/kit')
 local config = require('src/config')
 local runtime = require('src/runtime')

@@ -3,6 +3,8 @@
 -- patterns, then collapsed sections: order and groups (led_map), takeover method, diagnostics. Without LEDs: one line
 -- with manual picking and the diagnostics copy.
 
+local csp = require('src/csp')
+local ac, ui, vec2, rgbm, bit = csp.ac, csp.ui, csp.vec2, csp.rgbm, csp.bit
 local K = require('src/ui/kit')
 local config = require('src/config')
 local runtime = require('src/runtime')

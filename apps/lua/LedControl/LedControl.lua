@@ -2,6 +2,8 @@
 -- Entry point: every callback runs under the error boundary (src/safety.lua); on an error, on the master switch, on
 -- unload (ac.onRelease) and on every restart the car gets its own LEDs and lights back.
 
+local csp = require('src/csp')
+local ac, render, script = csp.ac, csp.render, csp.script
 local config = require('src/config')
 local safety = require('src/safety')
 local runtime = require('src/runtime')

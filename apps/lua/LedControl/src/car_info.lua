@@ -2,6 +2,8 @@
 -- format besides OBJECT_NAME is not documented publicly), CSP car config emissive sections driven by RPM, generator
 -- lines, ai.ini shift point. ac.INIConfig.carData also reads data.acd.
 
+local csp = require('src/csp')
+local ac = csp.ac
 local M = {}
 
 local function first(list)

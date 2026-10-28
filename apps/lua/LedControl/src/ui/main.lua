@@ -2,6 +2,8 @@
 -- Layout as docs/ledcontrol-ui.md "Header". Car name: ac.getCarName(0) (as RallyCopilot / SetupExchange use it), read
 -- once per car under pcall, else the car id. Explanations sit in (?) tooltips, the main view stays short.
 
+local csp = require('src/csp')
+local ac, ui = csp.ac, csp.ui
 local K = require('src/ui/kit')
 local config = require('src/config')
 local runtime = require('src/runtime')

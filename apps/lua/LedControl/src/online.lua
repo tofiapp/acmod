@@ -3,6 +3,8 @@
 -- offline) are read on demand for the diagnostics only: no documented server switch blocks client visuals, so the
 -- only block is the user's own setting "online also real lights".
 
+local csp = require('src/csp')
+local ac = csp.ac
 local M = {
   isOnline = false,
   extrasRead = false,

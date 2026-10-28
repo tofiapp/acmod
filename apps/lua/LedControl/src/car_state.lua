@@ -3,6 +3,8 @@
 -- a field that is missing stays at its neutral value. Fields used here were all seen in official apps (RGBControl,
 -- Unbound, CSP's led_colors / stalling modules).
 
+local csp = require('src/csp')
+local ac = csp.ac
 local M = {}
 
 local ST = {

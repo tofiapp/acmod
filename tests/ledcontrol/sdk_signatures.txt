@@ -1,0 +1,153 @@
+# CSP API names used by LedControl, looked up in acc-lua-sdk 7cf60f5 Mon Aug 17 14:01:17 2026 -0400
+# name | SDK file:line | definition
+ac.ControlButton | common/ac_extras_binaryinput.d.lua:4 | function ac.ControlButton(id, defaults) end
+ac.FolderID.ScriptConfig | common/ac_enums.lua:207 | ScriptConfig = 1025,  -- …/Documents/Assetto Corsa/cfg/extension/state/lua/<mode>/<script ID>
+ac.INIConfig.carConfig | common/ac_extras_ini.lua:89 | function ac.INIConfig.carConfig(carIndex)
+ac.INIConfig.carData | common/ac_extras_ini.lua:54 | function ac.INIConfig.carData(carIndex, fileName)
+ac.INIConfig.onlineExtras | common/ac_extras_ini.lua:105 | function ac.INIConfig.onlineExtras()
+ac.LightSource | common/ac_light.lua:56 | function ac.LightSource(lightType)
+ac.LightType.Regular | common/ac_enums.lua:15 | Regular = 1,
+ac.TurningLights | common/ac_enums.lua:706 | ac.TurningLights = __enum({ cpp = 'lua_turning_lights' }, {
+ac.TurningLights.Hazards | common/ac_enums.lua:710 | Hazards = 3,
+ac.accessExtraSwitchParams | common/ac_car_control_physics.lua:26 | function ac.accessExtraSwitchParams(index)
+ac.emptySceneReference | lib_scene.lua:1218 | function ac.emptySceneReference() return _emptyNodeRef() end
+ac.findNodes | lib_scene.lua:1244 | function ac.findNodes(s) return s == nil and _emptyNodeRef() or cr(ffi.C.lj_noderef_new__scene(nf(s), 0x10000)) end
+ac.getCar | common/ac_state.lua:30 | ac.getCar = setmetatable({
+ac.getCarID | official app-csp-defaults/DynamicReturn/DynamicReturn.lua:21 | local dir = '%s\\%s_%s' % {ac.getFolder(ac.FolderID.ScriptConfig), ac.getTrackFullID('_'), ac.getCarID(0)}
+ac.getCarName | official app-csp-defaults/SetupExchange/SetupExchange.lua:57 | carName = ac.getCarName(0),
+ac.getExtraSwitchName | official app-csp-defaults/Unbound/Unbound.lua:14 | local r = ac.getExtraSwitchName(index - 1) or false
+ac.getFolder | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:13 | local aiFolder = ac.getFolder(ac.FolderID.CurrentTrackLayout)..'/ai'
+ac.getSim | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:6 | local sim = ac.getSim()
+ac.isExtraSwitchAvailable | official app-csp-defaults/Unbound/Unbound.lua:258 | local a = ac.isExtraSwitchAvailable(i - 1, false)
+ac.onRelease | common/common.lua:20 | function ac.onRelease(callback, item)
+ac.onSessionStart | official app-csp-defaults/Unbound/Unbound.lua:281 | ac.onSessionStart(function (sessionIndex, restarted)
+ac.overrideCarControls | official app-csp-defaults/Unbound/Unbound.lua:147 | local controls = ac.overrideCarControls()
+ac.setClipboardText | official app-csp-defaults/WebBrowser/src/Controls.lua:888 | ac.setClipboardText(status)
+ac.setHeadlights | official app-csp-defaults/Unbound/Unbound.lua:193 | ac.setHeadlights(value ~= 0)
+ac.setHighBeams | official app-csp-defaults/Unbound/Unbound.lua:194 | ac.setHighBeams(value == 2)
+ac.setTurningLights | official app-csp-defaults/Unbound/Unbound.lua:170 | if ui.iconButton(ui.Icons.TurnSignalLeft, vec2(w3, 0), 4, true, BTN_FN(car.turningLeftOnly)) then ac.setTurningLights(car.turningLeftOnly and ac.Turni
+ac.simulateCustomHotkeyPress | official app-csp-defaults/Unbound/Unbound.lua:237 | ac.simulateCustomHotkeyPress('__EXT_TELLTALE_RESET')
+ac.storage | common/ac_storage.lua:98 | ac.storage = setmetatable({}, {
+io.createDir | official app-csp-defaults/RGBControl/src/exchange.lua:882 | io.createDir(dstDir)
+io.deleteFile | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:247 | local hasBackup = io.fileExists(destination) and (io.deleteFile(destination..'_tmp.bak') or true) and io.move(destination, destination..'_tmp.bak')
+io.fileExists | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:243 | if not io.fileExists(destination..'_editor.bak') then
+io.load | tests/_core.lua:108 | function io.load(file)
+io.save | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:376 | if io.save(newDestination, contents) then
+io.scanDir | common/io.lua:64 | function io.scanDir(directory, mask, callback, callbackData)
+render.BlendMode.OpaqueForced | common/ac_render_enums.lua:32 | OpaqueForced = 27, -- Works even in transparent pass
+render.CullMode.None | common/ac_game_enums.lua:2 | None = 0,
+render.DepthMode.LessEqual | common/ac_render_enums.lua:49 | LessEqual = 3,
+render.mesh | common/ac_render.lua:266 | function render.mesh(params)
+render.on | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:119 | render.on('main.track.transparent', function ()
+render.setBlendMode | official app-csp-defaults/DynamicReturn/DynamicReturn.lua:179 | render.setBlendMode(render.BlendMode.AlphaBlend)
+render.setCullMode | official app-csp-defaults/DynamicReturn/DynamicReturn.lua:180 | render.setCullMode(render.CullMode.None)
+render.setDepthMode | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:124 | render.setDepthMode(render.DepthMode.Off)
+ui.ButtonFlags | common/ac_ui_enums.lua:208 | ui.ButtonFlags = __enum({ cpp = 'ImGuiButtonFlags' }, {
+ui.ButtonFlags.Disabled | common/ac_ui_enums.lua:218 | Disabled                  = 0x100,     -- Disable interactions
+ui.ButtonFlags.None | common/ac_game_enums.lua:2 | None = 0,
+ui.ColorPickerFlags | common/ac_ui_enums.lua:357 | ui.ColorPickerFlags = __enum({ cpp = 'ImGuiColorEditFlags' }, {
+ui.ColorPickerFlags.NoPicker | common/ac_ui_enums.lua:360 | NoPicker         = 0x4,        -- Disable picker when clicking on colored square.
+ui.ColorPickerFlags.NoTooltip | common/ac_ui_enums.lua:316 | NoTooltip                         = 0x20,  -- Disable tooltips when hovering a tab
+ui.ColorPickerFlags.PickerHueBar | common/ac_ui_enums.lua:377 | PickerHueBar     = 0x2000000,  -- Bar for Hue, rectangle for Sat/Value.
+ui.ComboFlags.None | common/ac_game_enums.lua:2 | None = 0,
+ui.Font | common/ac_ui_enums.lua:80 | ui.Font = __enum({ override = 'ui.*/fontType:integer' }, {
+ui.Font.Small | common/ac_ui_enums.lua:81 | Small = 1,
+ui.Font.Title | common/ac_ui_enums.lua:86 | Title = 6,
+ui.HoveredFlags | common/ac_ui_enums.lua:28 | ui.HoveredFlags = __enum({ cpp = 'ImGuiHoveredFlags' }, {
+ui.HoveredFlags.AllowWhenBlockedByActiveItem | common/ac_ui_enums.lua:34 | AllowWhenBlockedByActiveItem  = 32,   -- Return true even if an active item is blocking access to this item/window. Useful for Drag and Drop patterns.
+ui.Icons | common/ac_enums.lua:994 | ui.Icons = __enum({ override = 'ui.*/*conID:string|*.*/iconID:string', underlying = 'string' }, {
+ui.Icons.ArrowDown | official app-csp-defaults/Unbound/Unbound.lua:623 | ui.iconButton(ui.Icons.ArrowDown, 22, 4, true)
+ui.Icons.ArrowLeft | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:304 | ui.setNextItemIcon(ui.Icons.ArrowLeft)
+ui.Icons.ArrowRight | official app-csp-defaults/Unbound/Unbound.lua:627 | ui.iconButton(ui.Icons.ArrowRight, 22, 4, true)
+ui.Icons.ArrowUp | official app-csp-defaults/RGBControl/RGBControl.lua:479 | if ui.iconButton(ui.Icons.ArrowUp, vec2(16, 0), 5, true, i > 1 and 0 or ui.ButtonFlags.Disabled) then
+ui.Icons.Copy | official app-csp-defaults/RallyCopilot/src/Voice.lua:493 | ui.toast(ui.Icons.Copy, 'Phrase copied###rallyVoiceEditor', function ()
+ui.Icons.Edit | official app-csp-defaults/RallyCopilot/src/EditorUI.lua:314 | ui.modalPrompt('Rename pacenotes?', 'New name:', v.metadata.name, 'Rename', 'Cancel', ui.Icons.Edit, ui.Icons.Cancel, function (newName)
+ui.Icons.Plus | official app-csp-defaults/InternetRadio/InternetRadio.lua:261 | ui.setNextItemIcon(ui.Icons.Plus)
+ui.Icons.Trash | official app-csp-defaults/InternetRadio/InternetRadio.lua:106 | ui.toast(ui.Icons.Trash, 'Station deleted', function ()
+ui.InputTextFlags | common/ac_ui_enums.lua:278 | ui.InputTextFlags = __enum({ cpp = 'ImGuiInputTextFlags' }, {
+ui.InputTextFlags.Placeholder | common/ac_ui_enums.lua:294 | Placeholder            = 0x400000,  -- Show label as a placeholder
+ui.StyleColor | common/ac_ui_enums.lua:155 | ui.StyleColor = __enum({ cpp = 'ImGuiCol' }, {
+ui.StyleColor.Button | common/ac_ui_enums.lua:177 | Button = 21,
+ui.StyleColor.Text | common/ac_game_enums.lua:16 | Text = 8,
+ui.TreeNodeFlags | common/ac_ui_enums.lua:338 | ui.TreeNodeFlags = __enum({ cpp = 'ImGuiTreeNodeFlags' }, {
+ui.TreeNodeFlags.DefaultOpen | common/ac_ui_enums.lua:345 | DefaultOpen             = 0x20,   -- Default node to be open
+ui.TreeNodeFlags.Framed | common/ac_ui_enums.lua:341 | Framed                  = 0x2,    -- Full colored frame (e.g. for CollapsingHeader)
+ui.alignTextToFramePadding | official app-csp-defaults/TimeShift/TimeShift.lua:46 | ui.alignTextToFramePadding()
+ui.availableSpaceX | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:435 | ui.setNextItemWidth(ui.availableSpaceX())
+ui.button | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:305 | if ui.button('Back') then
+ui.checkbox | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:394 | if ui.checkbox('Snap to surfaces', settings.autosnap) then
+ui.childWindow | common/ac_ui.lua:225 | function ui.childWindow(id, size, border, flags, content)
+ui.colorButton | common/ac_ui.lua:122 | function ui.colorButton(label, color, flags, size)
+ui.combo | common/ac_ui.lua:365 | function ui.combo(label, previewValue, flags, content)
+ui.drawCircleFilled | official app-csp-defaults/InternetRadio/InternetRadio.lua:129 | ui.drawCircleFilled((ir1 + ir2) / 2, 14, pastelTone(v.url), 24)
+ui.drawRect | official app-csp-defaults/RGBControl/RGBControl.lua:261 | ui.drawRect(p1, p2, rgbm.colors.gray)
+ui.drawRectFilled | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:228 | ui.drawRectFilled(from, from + range, rgbm(0, 0, 0, 0.5))
+ui.dummy | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:217 | ui.dummy(range)
+ui.getClipboardText | official app-csp-defaults/WebBrowser/src/Controls.lua:523 | clipboardContent = ui.getClipboardText():trim()
+ui.getCursorX | official app-csp-defaults/InternetRadio/InternetRadio.lua:238 | local cr1, cr2 = vec2(0, 0), vec2(ui.getCursorX() + ui.availableSpaceX() - 20, math.huge)
+ui.getCursorY | official app-csp-defaults/InternetRadio/InternetRadio.lua:253 | draggingPos = ui.getCursorY()
+ui.header | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:421 | ui.header('Found tables (newest first):')
+ui.iconButton | official app-csp-defaults/WebBrowser/WebBrowser.lua:317 | if ui.iconButton(ui.Icons.AppWindow, 22, 5) then
+ui.indent | official acc-lua-internal/included-cars/android_auto/system.lua:520 | ui.indent(padding)
+ui.inputText | common/ac_ui.lua:92 | function ui.inputText(label, str, flags, size)
+ui.invisibleButton | official app-csp-defaults/RGBControl/RGBControl.lua:318 | ui.invisibleButton('#drag', vec2(gapRight, 20))
+ui.itemActive | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:458 | if selectedPoint and (ui.itemActive() or uis.ctrlDown and ui.keyboardButtonDown(ui.KeyIndex.Q)) then
+ui.itemClicked | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:344 | if ui.itemClicked(ui.MouseButton.Right) then
+ui.itemDeactivatedAfterEdit | official acc-lua-internal/included-cars/android_auto/apps/messenger/app.lua:114 | if changed or ui.itemDeactivatedAfterEdit() then
+ui.itemHovered | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:342 | if ui.itemHovered() then
+ui.itemRect | common/ac_ui.lua:1984 | function ui.itemRect()
+ui.measureText | official app-csp-defaults/RGBControl/RGBControl.lua:250 | local w = ui.measureText(zoneName).x
+ui.mouseDown | official app-csp-defaults/WebBrowser/WebBrowser.lua:459 | resizingActive = resizingActive and ui.mouseDown() or ui.itemHovered() and ui.mouseClicked()
+ui.offsetCursorY | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:215 | ui.offsetCursorY(4)
+ui.popFont | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:309 | ui.popFont()
+ui.popID | official app-csp-defaults/WebBrowser/WebBrowser.lua:440 | ui.popID()
+ui.popStyleColor | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:910 | ui.popStyleColor()
+ui.pushFont | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:301 | ui.pushFont(ui.Font.Small)
+ui.pushID | common/ac_ui.lua:68 | function ui.pushID(value)
+ui.pushStyleColor | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:908 | ui.pushStyleColor(ui.StyleColor.PlotHistogram, rgbm(0, 0.4, 0, 1))
+ui.sameLine | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:366 | ui.sameLine(0, 4)
+ui.selectable | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:323 | if ui.selectable(v, v == selected) then
+ui.separator | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:837 | ui.separator()
+ui.setNextItemIcon | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:304 | ui.setNextItemIcon(ui.Icons.ArrowLeft)
+ui.setNextItemWidth | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:316 | ui.setNextItemWidth(188)
+ui.setTooltip | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:343 | ui.setTooltip('Save as %s (Ctrl+S)\nUse context menu to save a new spline\n\nYou can use Traffic Planner tool to quickly create a new spline by export
+ui.slider | common/ac_ui.lua:442 | function ui.slider(label, value, min, max, format, power)
+ui.tabBar | common/ac_ui.lua:280 | function ui.tabBar(id, flags, content)
+ui.tabItem | common/ac_ui.lua:303 | function ui.tabItem(label, flags, content, opened)
+ui.text | official app-csp-defaults/TimeShift/TimeShift.lua:45 | ui.text('Not available in this race:')
+ui.textColored | official app-csp-defaults/DynamicReturn/DynamicReturn.lua:237 | ui.textColored('%s%.03f' % {runData.deltas.best < 0 and '−' or '+', math.abs(runData.deltas.best) / 1e3}, runData.deltas.best < 0 and rgbm.colors.lime
+ui.textDisabled | official app-csp-defaults/SetupExchange/SetupExchange.lua:565 | ui.textDisabled('No comments yet')
+ui.textWrapped | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:274 | ui.textWrapped(label or 'Curve:', 300)
+ui.treeNode | common/ac_ui.lua:260 | function ui.treeNode(label, flags, content)
+ui.unindent | official acc-lua-internal/included-cars/android_auto/system.lua:544 | ui.unindent(padding)
+:append | lib_scene.lua:635 | append = function (s, sceneRef) ffi.C.lj_noderef_append__scene(s, sceneRef) return s end,
+:assignMaterialFrom | lib_scene.lua:954 | assignMaterialFrom = function (s, otherSceneRef, index)
+:at | lib_scene.lua:982 | at = function (s, index, outSceneRef)
+:boundingSphere | lib_scene.lua:904 | boundingSphere = function (s, index, outVec)
+:byte | common/ac_struct_item.lua:96 | function ac.StructItem.byte() return {t = 1, c = counter()} end
+:control | common/ac_extras_binaryinput.lua:164 | control = function(s, size, flags, emptyLabel)
+:createMesh | lib_scene.lua:318 | createMesh = function (s, name, materialName, vertices, indices, keepAlive, moveData)
+:ensureUniqueMaterials | lib_scene.lua:230 | ensureUniqueMaterials = function (s) ffi.C.lj_noderef_ensureuniquematerials__scene(s) return s end,
+:find | official app-csp-defaults/SetupExchange/SetupExchange.lua:304 | if item:find('PRESSURE_[LR]F') then return 'Tyre pressure (front)' end
+:getIndices | lib_scene.lua:366 | getIndices = function (s)
+:getMaterialsCount | lib_scene.lua:888 | getMaterialsCount = function (s)
+:getParent | lib_scene.lua:630 | getParent = function (s) return cr(ffi.C.lj_noderef_parent__scene(s)) end,
+:getTransformationRaw | lib_scene.lua:574 | getTransformationRaw = function (s)
+:getVertices | lib_scene.lua:357 | getVertices = function (s)
+:gsub | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:345 | fileName = filename:gsub('.*[/\\\\]', '')
+:isActive | lib_scene.lua:694 | isActive = function (s, index)
+:isVisible | lib_scene.lua:701 | isVisible = function (s, index)
+:lower | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:346 | if fileName:lower():match('%.csv$') then
+:match | lib_binary.lua:178 | function _readMt_index:match(pattern)
+:mul | common/ac_primitive_rgbm.d.lua:103 | function rgbm:mul(valueToMultiplyBy, out) end
+:mulSelf | common/ac_matrices.d.lua:149 | function mat4x4:mulSelf(other) end
+:name | lib_scene.lua:687 | name = function (s, index)
+:pressed | car_scriptable_display/car_scriptable_display_utils.lua:142 | pressed = function(texStart, texSize, inCarPos, inCarRadius, inCarLocalPos)
+:set | lib_scene.lua:47 | function _ac_VertexBuffer:set(index, vertex) end
+:setMaterialProperty | lib_scene.lua:154 | setMaterialProperty = function (s, property, value)
+:setShadows | lib_scene.lua:470 | setShadows = function (s, shadows) ffi.C.lj_noderef_setshadows__scene(s, shadows == true) return s end,
+:setTransparent | lib_scene.lua:482 | setTransparent = function (s, transparent) ffi.C.lj_noderef_settransparent__scene(s, transparent == true) return s end,
+:setVisible | lib_scene.lua:466 | setVisible = function (s, visible, resetMotion) ffi.C.lj_noderef_setvisible__scene(s, visible == true, resetMotion ~= false) return s end,
+:sub | common/ac_primitive_rgbm.d.lua:98 | function rgbm:sub(valueToSubtract, out) end
+:transformPointTo | common/ac_matrices.d.lua:108 | function mat4x4:transformPointTo(destination, vec) end
+:upper | official app-csp-defaults/PocketTechnician/PocketTechnician.lua:9 | return x:upper()

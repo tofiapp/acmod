@@ -12,6 +12,8 @@
 -- Export / import: one line "LEDCONTROL-PRESET 1 " + JSON; imported text is parsed with JSON.parse under pcall
 -- and sanitised (never executed).
 
+local csp = require('src/csp')
+local JSON = csp.JSON
 local scenarios = require('src/scenarios')
 local conditions = require('src/conditions')
 local patterns = require('src/patterns')

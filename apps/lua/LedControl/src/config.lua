@@ -1,6 +1,8 @@
 -- Global settings. Stored with ac.storage, copied once into a plain table (S) so the frame loop never goes through
 -- the storage layer. Change settings only via M.set().
 
+local csp = require('src/csp')
+local ac = csp.ac
 local defaults = {
   master = true,       -- master switch: false gives the car its own LEDs back
   method = 1,          -- default takeover method for cars without a profile: 1 shadow copy, 2 redraw, 3 direct write

@@ -19,6 +19,8 @@
 -- (WebBrowser), ui.setNextItemIcon (AISplineEditor, RGBControl), ui.Icons.ArrowUp / ArrowDown (RGBControl),
 -- ui.Icons.Cancel (WebBrowser), ui.Icons.Plus (RGBControl), ui.indent / unindent (official android_auto apps).
 
+local csp = require('src/csp')
+local ui, vec2, rgbm = csp.ui, csp.vec2, csp.rgbm
 local K = require('src/ui/kit')
 local config = require('src/config')
 local runtime = require('src/runtime')

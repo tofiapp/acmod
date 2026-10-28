@@ -14,6 +14,8 @@
 -- are global (own ac.storage, prefix 'lcl_'); the rain light mode and picked meshes are per car (profile.lights).
 -- No allocation per frame in update().
 
+local csp = require('src/csp')
+local ac, stringify, vec3 = csp.ac, csp.stringify, csp.vec3
 local color = require('src/color')
 local store = require('src/store')
 local meshes = require('src/light_meshes')

@@ -4,6 +4,8 @@
 -- Per frame in run: car_state.fill -> engine.step (scenarios of the car's preset) or a test pattern from the Diody tab
 -- -> takeover.set for every LED (change-only). The lights module runs in every state but wait.
 
+local csp = require('src/csp')
+local ac = csp.ac
 local config = require('src/config')
 local store = require('src/store')
 local carInfo = require('src/car_info')

@@ -6,6 +6,8 @@
 -- Position: the bounding sphere centre (parent space) through the live local matrices up the node chain
 -- (:getTransformationRaw(), as CSP's vr_rig_base getActualTransform), then projected on the car's side and up axes.
 
+local csp = require('src/csp')
+local ac, vec3, mat4x4 = csp.ac, csp.vec3, csp.mat4x4
 local M = {}
 
 local MAX_RADIUS = 0.06      -- m; a bigger mesh is not a single LED

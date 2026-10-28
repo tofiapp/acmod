@@ -7,6 +7,8 @@
 -- (WebBrowser), ui.iconButton(icon, size, padding) with ui.Icons (WebBrowser, AISplineEditor), ui.pushID / popID,
 -- ui.colorButton (Flashlight), ui.dummy, ui.getCursorX / getCursorY, ui.drawCircleFilled (MirrorDelta, official apps).
 
+local csp = require('src/csp')
+local ui, vec2, rgbm, bit = csp.ui, csp.vec2, csp.rgbm, csp.bit
 local patterns = require('src/patterns')
 local color = require('src/color')
 

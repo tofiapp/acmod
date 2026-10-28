@@ -9,6 +9,8 @@
 -- ui.InputTextFlags.Placeholder (WebBrowser, RailroadEditor), ui.Icons.ArrowUp / ArrowDown (official apps),
 -- ac.setClipboardText (official apps); the rest through src/ui/kit.lua.
 
+local csp = require('src/csp')
+local ac, ui, vec2, rgbm = csp.ac, csp.ui, csp.vec2, csp.rgbm
 local K = require('src/ui/kit')
 local config = require('src/config')
 local runtime = require('src/runtime')

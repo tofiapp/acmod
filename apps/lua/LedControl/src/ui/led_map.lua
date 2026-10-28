@@ -3,6 +3,8 @@
 -- then uses it instead of the automatic order). A list of small cockpit meshes (detect.listMeshes) adds LEDs by hand,
 -- also on a car with none detected (M.startPicking, drawn inline by the tab). Hovering a row blinks that LED on the car.
 
+local csp = require('src/csp')
+local ac, ui, vec2 = csp.ac, csp.ui, csp.vec2
 local K = require('src/ui/kit')
 local runtime = require('src/runtime')
 local detect = require('src/detect')
