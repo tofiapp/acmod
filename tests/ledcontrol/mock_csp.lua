@@ -265,6 +265,7 @@ function refmt:getTextureSlotFilename(index, slot)
   if not o then return nil end
   local t = o.textures and o.textures[slot]
   if type(t) == 'string' then return t end
+  if o.texFile == false then return nil end           -- (a test: the game gives no filename)
   return o.texFile or ('tex_' .. o.name .. '_' .. tostring(slot) .. '.dds')
 end
 function refmt:getIndices() if self[1] and self[1].kind == 'mesh' then return { source = self[1] } end return nil end

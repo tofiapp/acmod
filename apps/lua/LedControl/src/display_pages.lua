@@ -41,7 +41,7 @@ M.COLOUR_NAMES = { 'Pozadí', 'Text', 'Popisky', 'Zvýraznění', 'Zhasnutá dio
 
 local style = { bg = 0x000000, text = 0xFFFFFF, label = 0x9A9A9A, accent = 0xC080FF, cellOff = 0x1E1E1E, strip = 0x101010,
   font = M.FONT, rounding = 0, brightness = 1, cells = true, cellH = 1, cellGap = 0.008,
-  zones = { 'speed', 'gear', 'lap', 'last', 'fuel', 'pos', 'delta' } }
+  zones = { 'speed', 'gear', 'lap', 'last', 'fuel', 'pos', 'delta' }, textScale = 1, margin = 0.03 }
 M.style = style
 
 -- fields a zone of the page Vlastní can show
@@ -133,10 +133,11 @@ end
 M.text = text
 
 -- the virtual LED row as a bar of cells; returns the height used (0 when the row is switched off)
+local pageH = 480        -- height of the page being drawn (the row never grows past its bottom margin)
 local function cells(d, x, y, w, h)
   local n = d.nCells or 0
   if n <= 0 or not style.cells then return 0 end
-  h = h * style.cellH
+  h = math.min(h * style.cellH, pageH - y - math.min(w, pageH) * style.margin)
   local gap = math.max(1, w * style.cellGap)
   local cw = (w - gap * (n - 1)) / n
   local r = style.rounding * math.min(cw, h) * 0.5
@@ -151,52 +152,19 @@ local function deltaColour(d) return d.deltaSign < 0 and 0x20D040 or (d.deltaSig
 
 -- ---------------------------------------------------------------- pages
 
--- Závod: LED row on top, speed | gear | lap time, a strip with position, lap and delta at the bottom
-local function race(W, H, d)
-  local m = W * 0.03
-  local ch = cells(d, m, m, W - 2 * m, H * 0.13)
-  local top, bottom = (ch > 0 and ch + 2 * m or m), H * 0.82
-  local colW = (W - 2 * m) / 10
-  text(d.speedUnit, m, top, colW * 3, (bottom - top) * 0.2, 200, 0.5, style.label)
-  text(d.speed, m, top + (bottom - top) * 0.2, colW * 3, (bottom - top) * 0.6, 400, 0.5, style.text)
-  text(d.gear, m + colW * 3, top, colW * 4, bottom - top, 900, 0.5, style.text)
-  local rx, rw, rh = m + colW * 7, colW * 3, (bottom - top) / 4
-  text(d.lap, rx, top, rw, rh * 1.3, 300, 1, style.text)
-  text(d.last, rx, top + rh * 1.4, rw, rh, 300, 1, style.label)
-  text(d.fuel, rx, top + rh * 2.6, rw, rh * 1.1, 300, 1, style.text)
-  rect(0, bottom, W, H - bottom, style.strip)
-  text(d.pos, m, bottom, W * 0.45, H - bottom, 200, 0, style.text)
-  text(d.delta, W * 0.5, bottom, W * 0.5 - m, H - bottom, 200, 1, deltaColour(d))
+-- The shape of the screen decides the arrangement: 'wide' (a strip, W >= 2.4 H, e.g. a MoTeC data display), 'tall'
+-- (H > 1.1 W) or 'normal'. Sizes inside are relative to the box, the text scale and margin come from the style.
+local function shapeOf(W, H)
+  if W >= H * 2.4 then return 'wide' end
+  if H > W * 1.1 then return 'tall' end
+  return 'normal'
 end
+M.shapeOf = shapeOf
 
--- Otáčky: a big LED row, the RPM and the gear
-local function revs(W, H, d)
-  local m = W * 0.03
-  local ch = cells(d, m, m, W - 2 * m, H * 0.34)
-  local top = ch > 0 and ch + 2 * m or m
-  text(d.rpm, m, top, W * 0.62, H - top - m, 500, 0, style.text)
-  text(d.gear, W * 0.64, top, W * 0.36 - m, H - top - m, 900, 0.5, style.text)
-end
+local function marginOf(W, H) return math.min(W, H) * style.margin end
+local function ts(size) return size * style.textScale end
 
--- Kola: lap times and the race position
-local LAP_LABELS = { 'Aktuální', 'Poslední', 'Nejlepší', 'Pozice', 'Kolo' }
-local lapValues = {}
-local function laps(W, H, d)
-  local m = W * 0.04
-  local ch = cells(d, m, m, W - 2 * m, H * 0.08)
-  local top = ch > 0 and ch + 2 * m or m
-  local rh = (H - top - m) / 5
-  lapValues[1], lapValues[2], lapValues[3], lapValues[4], lapValues[5] = d.lap, d.last, d.best, d.pos, d.laps
-  local r = style.rounding * rh * 0.3
-  for i = 1, 5 do
-    local y = top + (i - 1) * rh
-    if i % 2 == 0 then rect(m, y, W - 2 * m, rh, style.strip, r) end
-    text(LAP_LABELS[i], m * 1.5, y, W * 0.38, rh, 200, 0, style.label)
-    text(lapValues[i], W * 0.44, y, W * 0.56 - m * 1.5, rh, 260, 1, i == 3 and style.accent or style.text)
-  end
-end
-
--- Vlastní: the layout of Závod with a field of the user's choice in each of the 7 zones
+-- the value fields shown on the page Vlastní (and, with the default zones, on Závod)
 local function valueOf(d, id)
   if id == 'none' then return nil end
   return d[id]
@@ -211,31 +179,132 @@ local function labelOf(d, id)
   local f = M.FIELD_BY_ID[id]
   return f and f.label or nil
 end
--- a zone: a small label on top, the value under it
+-- a zone: a small label on top (when the box is high enough), the value under it
 local function zone(d, id, x, y, w, h, size, align)
   local v = valueOf(d, id)
   if not v then return end
   local l = labelOf(d, id)
-  if l and l ~= '' and h > 40 then
-    text(l, x, y, w, h * 0.22, 200, align, style.label)
-    text(v, x, y + h * 0.22, w, h * 0.78, size, align, colourOf(d, id))
+  if l and l ~= '' and h > 44 then
+    -- the label never gets bigger than half of its value
+    local vs = M.fit(v, ts(size), w, h * 0.76)
+    text(l, x, y, w, h * 0.24, math.min(ts(200), vs * 0.5), align, style.label)
+    text(v, x, y + h * 0.24, w, h * 0.76, ts(size), align, colourOf(d, id))
   else
-    text(v, x, y, w, h, size, align, colourOf(d, id))
+    text(v, x, y, w, h, ts(size), align, colourOf(d, id))
   end
 end
-local function custom(W, H, d)
-  local z = style.zones
-  local m = W * 0.03
+
+-- seven zones arranged for the shape: 1 left, 2 centre (big), 3..5 right column, 6 / 7 bottom strip
+local function zones(W, H, d, z)
+  local m = marginOf(W, H)
+  local shape = shapeOf(W, H)
+  if shape == 'wide' then
+    -- a strip: LED row on top, then one row of columns
+    local ch = cells(d, m, m, W - 2 * m, H * 0.2)
+    local top = ch > 0 and ch + 2 * m or m
+    local h = H - top - m
+    local cw = (W - 2 * m) / 16
+    local x = m
+    zone(d, z[1], x, top, cw * 2.5, h, 400, 0.5); x = x + cw * 2.5
+    zone(d, z[2], x, top, cw * 2.5, h, 900, 0.5); x = x + cw * 2.5
+    zone(d, z[3], x, top, cw * 3, h, 300, 0.5); x = x + cw * 3
+    zone(d, z[4], x, top, cw * 2.7, h, 300, 0.5); x = x + cw * 2.7
+    zone(d, z[5], x, top, cw * 2.3, h, 300, 0.5); x = x + cw * 2.3
+    zone(d, z[6], x, top, cw * 3, h / 2, 200, 1)
+    zone(d, z[7], x, top + h / 2, cw * 3, h / 2, 200, 1)
+    return
+  end
+  if shape == 'tall' then
+    local ch = cells(d, m, m, W - 2 * m, H * 0.08)
+    local y = ch > 0 and ch + 2 * m or m
+    local fullW, half = W - 2 * m, (W - 2 * m) / 2
+    local avail = H * 0.86 - y
+    zone(d, z[2], m, y, fullW, avail * 0.38, 900, 0.5); y = y + avail * 0.38
+    zone(d, z[1], m, y, half, avail * 0.22, 400, 0)
+    zone(d, z[3], m + half, y, half, avail * 0.22, 300, 1); y = y + avail * 0.22
+    zone(d, z[4], m, y, half, avail * 0.2, 300, 0)
+    zone(d, z[5], m + half, y, half, avail * 0.2, 300, 1); y = y + avail * 0.2
+    zone(d, z[6], m, y, fullW, avail * 0.2, 300, 0.5)
+    local bottom = H * 0.86
+    rect(0, bottom, W, H - bottom, style.strip)
+    zone(d, z[7], m, bottom, fullW, H - bottom, 200, 0.5)
+    return
+  end
   local ch = cells(d, m, m, W - 2 * m, H * 0.13)
   local top, bottom = (ch > 0 and ch + 2 * m or m), H * 0.82
   local colW = (W - 2 * m) / 10
-  zone(d, z[1] or 'none', m, top, colW * 3, bottom - top, 400, 0.5)
-  zone(d, z[2] or 'none', m + colW * 3, top, colW * 4, bottom - top, 900, 0.5)
+  zone(d, z[1], m, top, colW * 3, bottom - top, 400, 0.5)
+  zone(d, z[2], m + colW * 3, top, colW * 4, bottom - top, 900, 0.5)
   local rx, rw, rh = m + colW * 7, colW * 3, (bottom - top) / 3
-  for k = 1, 3 do zone(d, z[2 + k] or 'none', rx, top + (k - 1) * rh, rw, rh, 300, 1) end
+  for k = 1, 3 do zone(d, z[2 + k], rx, top + (k - 1) * rh, rw, rh, 300, 1) end
   rect(0, bottom, W, H - bottom, style.strip)
-  zone(d, z[6] or 'none', m, bottom, W * 0.45, H - bottom, 200, 0)
-  zone(d, z[7] or 'none', W * 0.5, bottom, W * 0.5 - m, H - bottom, 200, 1)
+  zone(d, z[6], m, bottom, W * 0.45, H - bottom, 200, 0)
+  zone(d, z[7], W * 0.5, bottom, W * 0.5 - m, H - bottom, 200, 1)
+end
+
+-- Závod: speed | gear | lap time, last lap, fuel | position, delta
+local function race(W, H, d) zones(W, H, d, M.DEFAULT_ZONES) end
+
+-- Vlastní: the same arrangement with the user's field in each zone
+local function custom(W, H, d) zones(W, H, d, style.zones) end
+
+-- Otáčky: a big LED row, the RPM and the gear
+local function revs(W, H, d)
+  local m = marginOf(W, H)
+  local shape = shapeOf(W, H)
+  if shape == 'wide' then
+    local cw = (W - 2 * m) * 0.68
+    cells(d, m, m, cw, H - 2 * m)
+    local x = m * 2 + cw
+    text(d.rpm, x, m, W - x - m, (H - 2 * m) * 0.45, ts(500), 0.5, style.text)
+    text(d.gear, x, m + (H - 2 * m) * 0.45, W - x - m, (H - 2 * m) * 0.55, ts(900), 0.5, style.text)
+    return
+  end
+  if shape == 'tall' then
+    local ch = cells(d, m, m, W - 2 * m, H * 0.25)
+    local top = ch > 0 and ch + 2 * m or m
+    local h = H - top - m
+    text(d.rpm, m, top, W - 2 * m, h * 0.3, ts(500), 0.5, style.text)
+    text(d.gear, m, top + h * 0.3, W - 2 * m, h * 0.7, ts(900), 0.5, style.text)
+    return
+  end
+  local ch = cells(d, m, m, W - 2 * m, H * 0.34)
+  local top = ch > 0 and ch + 2 * m or m
+  text(d.rpm, m, top, W * 0.62, H - top - m, ts(500), 0, style.text)
+  text(d.gear, W * 0.64, top, W * 0.36 - m, H - top - m, ts(900), 0.5, style.text)
+end
+
+-- Kola: lap times and the race position (rows, or columns on a strip)
+local LAP_LABELS = { 'Aktuální', 'Poslední', 'Nejlepší', 'Pozice', 'Kolo' }
+local lapValues = {}
+local function laps(W, H, d)
+  local m = marginOf(W, H)
+  lapValues[1], lapValues[2], lapValues[3], lapValues[4], lapValues[5] = d.lap, d.last, d.best, d.pos, d.laps
+  if shapeOf(W, H) == 'wide' then
+    local ch = cells(d, m, m, W - 2 * m, H * 0.14)
+    local top = ch > 0 and ch + 2 * m or m
+    local h = H - top - m
+    local cw = (W - 2 * m) / 5
+    for i = 1, 5 do
+      local x = m + (i - 1) * cw
+      if i % 2 == 0 then rect(x, top, cw, h, style.strip, style.rounding * h * 0.2) end
+      local vs = M.fit(lapValues[i] or '', ts(300), cw, h * 0.7)
+      text(LAP_LABELS[i], x, top, cw, h * 0.3, math.min(ts(200), vs * 0.5), 0.5, style.label)
+      text(lapValues[i], x, top + h * 0.3, cw, h * 0.7, ts(300), 0.5, i == 3 and style.accent or style.text)
+    end
+    return
+  end
+  local ch = cells(d, m, m, W - 2 * m, H * 0.08)
+  local top = ch > 0 and ch + 2 * m or m
+  local rh = (H - top - m) / 5
+  local r = style.rounding * rh * 0.3
+  for i = 1, 5 do
+    local y = top + (i - 1) * rh
+    if i % 2 == 0 then rect(m, y, W - 2 * m, rh, style.strip, r) end
+    local vs = M.fit(lapValues[i] or '', ts(260), W * 0.56 - m * 1.5, rh)
+    text(LAP_LABELS[i], m * 1.5, y, W * 0.38, rh, math.min(ts(200), vs * 0.7), 0, style.label)
+    text(lapValues[i], W * 0.44, y, W * 0.56 - m * 1.5, rh, ts(260), 1, i == 3 and style.accent or style.text)
+  end
 end
 
 M.PAGES = {
@@ -279,6 +348,7 @@ end
 
 -- Draws page `page` (index in PAGES) of size W x H at the current origin, with a takeover overlay on top.
 function M.draw(page, W, H, d)
+  pageH = H
   ui.pushDWriteFont(style.font)
   rect(0, 0, W, H, style.bg)
   local o = d.overlay

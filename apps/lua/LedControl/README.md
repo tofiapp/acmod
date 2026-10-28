@@ -160,7 +160,15 @@ Nastavení vzhledu (sbalené sekce):
   diody a pruhů; písmo (Bahnschrift, Segoe UI, Arial, Consolas); zaoblení; jas; rychlost v km/h nebo mph.
 - **Řada diod**: zobrazit / skrýt, počet políček (4–24), výška, mezera.
 - **Vlastní stránka**: co je na kterém místě.
-- **Oblast displeje**: posun a velikost oblasti v textuře, když stránka sedí posunutá nebo oříznutá.
+- **Oblast displeje**: posun a velikost oblasti v textuře, když stránka sedí posunutá nebo oříznutá. Po úpravě se
+  displej převezme znovu, aby v textuře nezůstal starý snímek.
+
+Rozvržení se řídí tvarem displeje: na úzkém pruhu (např. MoTeC, šířka víc než 2,4× výška) jsou údaje vedle sebe, na
+vysokém displeji pod sebou, jinak klasicky. **Velikost textu** a **Okraje** (sekce Vzhled) je doladí.
+
+Jas (hned pod stránkou, nesbalený): **Svit displeje** mění, jak silně displej svítí sám (emisivita jeho materiálu,
+100 % = jako v autě, až 400 %); **Jas barev** tlumí barvy stránky; **V noci ztlumit** podle času na trati (před 6:00
+a od 20:00) ztlumí obojí na zadanou hodnotu. Když displej sám nesvítí, karta to napíše a jde měnit jen Jas barev.
 
 Funguje u aut, která mají displej jako „scriptable display“ CSP (sekce `[SCRIPTABLE_DISPLAY_...]` v konfiguraci auta).
 Normálně se kreslí do kopie displeje a původní se schová. Když hra z meshe displeje kopii udělat nedovolí (nevydá jeho

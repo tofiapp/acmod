@@ -25,7 +25,8 @@ local app = H.loadApp()
 frame(3)
 local pages = require('src/display_pages')
 
-local SIZES = { { 800, 480 }, { 480, 272 }, { 512, 512 } }
+-- usual screens, a square one, a strip (MoTeC data display) and a tall one
+local SIZES = { { 800, 480 }, { 480, 272 }, { 512, 512 }, { 1024, 256 }, { 320, 640 } }
 -- long, realistic values (the widest each field gets)
 local DATA = { gear = 'N', speed = '312', speedUnit = 'km/h', rpm = '18450', lap = '12:59.9', last = '1:23.4', best = '1:22.9', fuel = '105.3 l',
   pos = 'P12', laps = 'Kolo 123', delta = '+12.34', deltaSign = 1, cells = {}, nCells = 12, overlay = nil, overlaySub = '',
@@ -268,8 +269,10 @@ local STYLES = {
   { name = 'theme4', set = { displayTheme = 4, displayCells = 24, displayCellH = 200, displayCellGap = 50 } },
   { name = 'own', set = { displayTheme = 0, displayColours = '#202020,#00FF80,#808080,#FF00FF,#300000,#303030',
     displayCells = 4, displayCellH = 40, displayCellGap = 0, displayFont = 3 } },
+  { name = 'bigtext', set = { displayTheme = 1, displayTextScale = 160, displayMargin = 12, displayFont = 1 } },
+  { name = 'smalltext', set = { displayTextScale = 50, displayMargin = 0 } },
   { name = 'norow', set = { displayTheme = 1, displayCellsOn = false, displayRounding = 0, displayCells = 12,
-    displayCellH = 100, displayCellGap = 8, displayFont = 1 } },
+    displayCellH = 100, displayCellGap = 8, displayFont = 1, displayTextScale = 100, displayMargin = 3 } },
 }
 for _, st in ipairs(STYLES) do
   setAll(st.set)
@@ -278,7 +281,7 @@ for _, st in ipairs(STYLES) do
       local cv = render(p, sz[1], sz[2], nil)
       local name = string.format('%s_%s_%dx%d', st.name, pages.PAGES[p].id, sz[1], sz[2])
       bounds(cv, sz[1], sz[2], 'style ' .. name)
-      if sz[1] == 800 then dump(cv, sz[1], sz[2], 'style_' .. name) end
+      if sz[1] == 800 or sz[1] == 1024 or sz[1] == 320 then dump(cv, sz[1], sz[2], 'style_' .. name) end
     end
   end
 end
@@ -343,6 +346,51 @@ check(env.storage['lc_displayRounding'] ~= 55 and cfgS.displayRounding == 55, 'l
 app.config.flushLive()
 check(env.storage['lc_displayRounding'] == 55, 'live edit: stored after flush')
 
+-- the shapes pick their arrangement
+check(pages.shapeOf(1024, 256) == 'wide' and pages.shapeOf(320, 640) == 'tall' and pages.shapeOf(800, 480) == 'normal',
+  'screen shapes: strip, tall, normal')
+
+-- ---------------------------------------------------------------- glow and night
+
+H.displayCar(1)
+env.storage = {}
+env.displayMesh.material.ksEmissive.r, env.displayMesh.material.ksEmissive.g, env.displayMesh.material.ksEmissive.b = 2, 2, 2
+app = H.loadApp()
+frame(3)
+display = require('src/display')
+display.cfg().on = true
+env.car.speedKmh, env.car.rpm = 100, 9000
+frame(10)
+local function copyMesh()
+  for _, c in ipairs(env.displayMesh.parent.children) do if c.created and not c.disposed then return c end end
+end
+local cm = copyMesh()
+check(cm and display.glows(1) == true and math.abs(cm.material.ksEmissive.r - 2) < 1e-6, 'glow 100 %: the material\'s own')
+app.config.set('displayGlow', 50)
+frame(10)
+check(math.abs(cm.material.ksEmissive.r - 1) < 1e-6, 'Svit 50 %: half of the display\'s own glow')
+local red0 = env.redundant.emissive
+frame(60)
+check(env.redundant.emissive == red0, 'glow written only when it changes')
+app.config.set('displayNightOn', true)
+app.config.set('displayNight', 40)
+env.sim.timeHours = 22
+frame(10)
+check(math.abs(cm.material.ksEmissive.r - 0.4) < 1e-6 and math.abs(require('src/display_pages').style.brightness - 0.4) < 1e-6,
+  'night: glow and colours at 40 %')
+env.sim.timeHours = 14
+frame(10)
+check(math.abs(cm.material.ksEmissive.r - 1) < 1e-6 and require('src/display_pages').style.brightness == 1,
+  'day again: back to Svit 50 %, full colours')
+-- region change: taken again, so nothing painted outside the new region stays
+local before = copyMesh()
+display.cfg().adjust = { { 0, 0, -200, -100 } }
+display.retake()
+frame(5)
+local after = copyMesh()
+check(before.disposed and after and after ~= before and after.textures.txDiffuse.region.size.x == 600,
+  'region change: a fresh copy painted in the new region (old picture gone)')
+
 -- ---------------------------------------------------------------- no vertex data: painted directly
 
 H.displayCar(1)
@@ -366,6 +414,17 @@ check(app.config.S.displayGuard == '', 'direct: nothing hidden, no self-heal mar
 app.config.set('master', false)
 frame(3)
 check(orig.textures.txDiffuse == 'motec_screen.dds', 'master off: the original texture set back by its filename')
+-- no filename either: one empty paint with the original texture as the background
+app.config.set('master', true)
+env.displayMesh.texFile = false
+env.displayMesh.textures = nil
+display.retake()
+frame(10)
+app.config.set('master', false)
+frame(3)
+local last = orig.textures.txDiffuse
+check(type(last) == 'table' and last.n == 0 and last.background == nil and display.lastRestore:find('pozadím', 1, true),
+  'no filename: restored by an empty paint over the original background (' .. tostring(display.lastRestore) .. ')')
 env.noVertices = {}
 
 -- ---------------------------------------------------------------- the tab: drawn, no UI error, no allocation

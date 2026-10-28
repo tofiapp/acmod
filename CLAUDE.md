@@ -260,9 +260,13 @@ apps/lua/LedControl/
                           getVertices is nil is painted directly (ensureUniqueMaterials, getTextureSlotFilename kept
                           and set back on release); design settings S.display* (theme / own colours, font, rounding,
                           brightness, LED row, zones of Vlastní, units) -> display_pages.setStyle via applyStyle;
-                          the tab saves sliders / pickers once they rest (config.setLive / flushLive)
-  src/display_pages.lua   pages Závod / Otáčky / Kola / Vlastní + OVERLAYS, THEMES, FONTS, FIELDS; relative layout,
-                          text fitted with measureDWriteText
+                          the tab saves sliders / pickers once they rest (config.setLive / flushLive); glow = the
+                          material's own ksEmissive (read at take) x S.displayGlow x night factor, written on change;
+                          a region change retakes (nothing stale outside the region); direct release restores the
+                          slot filename, else one empty paint with background nil
+  src/display_pages.lua   pages Závod / Otáčky / Kola / Vlastní + OVERLAYS, THEMES, FONTS, FIELDS; arrangement by
+                          shapeOf(W, H): 'wide' (W >= 2.4 H, a strip), 'tall' (H > 1.1 W), 'normal'; text scale and
+                          margin from the style; labels at most half of their value; text fitted with measureDWriteText
                           (width per string cached), ui.dwriteDrawTextClipped / drawRectFilled; also the tab preview
   src/online.lua          online state, banner and the optional block of real controls online
   src/hotkeys.lua         ac.ControlButton master / next preset / flash, polled in script.update

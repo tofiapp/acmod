@@ -21,7 +21,7 @@
 -- not matter); how expensive a paint is.
 
 local csp = require('src/csp')
-local ac, vec2, rgbm = csp.ac, csp.vec2, csp.rgbm
+local ac, vec2, vec3, rgbm = csp.ac, csp.vec2, csp.vec3, csp.rgbm
 local config = require('src/config')
 local engine = require('src/engine')
 local presets = require('src/presets')
@@ -146,6 +146,7 @@ local BLACK = rgbm(0, 0, 0, 1)
 -- original itself ("direct": its material is made its own with ensureUniqueMaterials, the texture filename of the
 -- slot is kept and set back on release; getVertices returns nil for meshes without CPU data, as the SDK says).
 -- UNSURE: whether a scriptable display's own texture comes back from its filename (a dynamic one may start with '$').
+local RESTORE = { textureSize = nil, background = nil, callback = function () end }
 local function release(i)
   local t = M.taken[i]
   if not t then return end
@@ -153,7 +154,24 @@ local function release(i)
   for k = 1, #t.origs do pcall(t.origs[k].setVisible, t.origs[k], true) end
   for k = 1, #t.direct do
     local e = t.direct[k]
-    if e.file and e.file ~= '' then pcall(e.ref.setMaterialTexture, e.ref, e.slot, e.file) end
+    local ok = false
+    if e.file and e.file ~= '' then ok = pcall(e.ref.setMaterialTexture, e.ref, e.slot, e.file) end
+    if not ok then
+      -- no filename (or it failed): one paint with nothing drawn and the original texture as the background
+      -- ("background = nil reuses original texture", SDK lib_scene) - UNSURE whether that brings it back
+      RESTORE.textureSize = t.params and t.params.textureSize or M.displays[i].res
+      ok = pcall(e.ref.setMaterialTexture, e.ref, e.slot, RESTORE)
+      M.lastRestore = ok and 'prázdné překreslení s původním pozadím' or 'nepodařilo se'
+    else
+      M.lastRestore = 'textura ' .. tostring(e.file)
+    end
+  end
+  -- the original's own glow back (only meshes painted directly: copies are disposed)
+  if t.glowBase and t.glowNow ~= 1 then
+    for k = 1, #t.targets do
+      local b = t.glowBase[k]
+      if b and t.isDirect[k] then pcall(t.targets[k].setMaterialProperty, t.targets[k], 'ksEmissive', b) end
+    end
   end
   M.taken[i] = nil
   M.nTaken = M.nTaken - 1
@@ -169,7 +187,7 @@ local function take(i)
   local d = M.displays[i]
   local root = ac.findNodes('carRoot:0')
   local slot = slotName()
-  local t = { copies = {}, origs = {}, direct = {}, targets = {}, params = nil, mode = '' }
+  local t = { copies = {}, origs = {}, direct = {}, targets = {}, isDirect = {}, params = nil, mode = '' }
   for _, name in ipairs(d.meshes) do
     local ref = root:findMeshes(name)
     for k = 1, #ref do
@@ -193,7 +211,17 @@ local function take(i)
         one:ensureUniqueMaterials()
         t.direct[#t.direct + 1] = { ref = one, slot = slot, file = okF and file or nil }
         t.targets[#t.targets + 1] = one
+        t.isDirect[#t.targets] = true
       end
+    end
+  end
+  -- the material's own glow (ksEmissive), scaled by the Svit setting; written only when the factor changes
+  t.glowBase, t.glowNow = {}, -1
+  for k = 1, #t.targets do
+    local ref = t.targets[k]
+    local ok, v = pcall(ref.getMaterialPropertyValue, ref, 1, 'ksEmissive')
+    if ok and v ~= nil and type(v) ~= 'number' then
+      t.glowBase[k] = vec3(v.x or v.r or 0, v.y or v.g or 0, v.z or v.b or 0)
     end
   end
   if #t.targets == 0 then error('mesh displeje nenalezen (' .. table.concat(d.meshes, ', ') .. ')') end
@@ -337,6 +365,16 @@ local function packed(hex, default)
 end
 
 local styleVersion = 0
+local appliedNight = 1
+
+-- 1 by day; S.displayNight % at night when switched on (sim time before 6:00 or from 20:00)
+local stClock = nil
+function M.nightFactor()
+  if S.displayNightOn ~= true then return 1 end
+  local h = stClock and stClock.timeHours or 12
+  if h < 6 or h >= 20 then return math.max(0.05, math.min(1, (tonumber(S.displayNight) or 50) / 100)) end
+  return 1
+end
 -- Reads the design settings from S into display_pages (theme or own colours, font, rounding, brightness, LED row,
 -- zones of the page Vlastní, units) and makes the next paint happen.
 function M.applyStyle()
@@ -362,7 +400,12 @@ function M.applyStyle()
   end
   for k = #zones + 1, #pages.DEFAULT_ZONES do zones[k] = pages.DEFAULT_ZONES[k] end
   st.zones = zones
+  st.textScale = math.max(0.5, math.min(1.6, (tonumber(S.displayTextScale) or 100) / 100))
+  st.margin = math.max(0, math.min(0.12, (tonumber(S.displayMargin) or 3) / 100))
+  local night = M.nightFactor()
+  st.brightness = st.brightness * night
   pages.setStyle(st)
+  appliedNight = night
   local n = math.max(4, math.min(24, math.floor(tonumber(S.displayCells) or 12)))
   if n ~= VIRTUAL_N then
     buildLayout(n)
@@ -383,6 +426,8 @@ function M.setSetting(key, value)
 end
 
 local function fill(ST, preset, t)
+  stClock = ST
+  if M.nightFactor() ~= appliedNight then M.applyStyle() end
   -- LED row
   if compiledFor ~= preset or compiledVersion ~= presets.version or compiledRpm ~= rpm.version then
     compiled = engine.compile(preset, VLAYOUT, ST)
@@ -454,6 +499,34 @@ local function paintCallback()
   pages.draw(M.page, t.w, t.h, D)
 end
 
+-- glow factor of the display now (Svit x night)
+local GLOW = vec3()
+local function glowFactor()
+  return math.max(0, math.min(4, (tonumber(S.displayGlow) or 100) / 100)) * M.nightFactor()
+end
+local function applyGlow(t)
+  local k = glowFactor()
+  if k == t.glowNow then return end
+  t.glowNow = k
+  for q = 1, #t.targets do
+    local b = t.glowBase[q]
+    if b then
+      GLOW.x, GLOW.y, GLOW.z = b.x * k, b.y * k, b.z * k
+      t.targets[q]:setMaterialProperty('ksEmissive', GLOW)
+    end
+  end
+end
+-- true when the display's material glows on its own (Svit has an effect)
+function M.glows(i)
+  local t = M.taken[i]
+  if not t then return nil end
+  for q = 1, #t.targets do
+    local b = t.glowBase[q]
+    if b and (b.x > 0.001 or b.y > 0.001 or b.z > 0.001) then return true end
+  end
+  return false
+end
+
 local function paint(i)
   local t = M.taken[i]
   t.params.callback = paintCallback
@@ -517,6 +590,7 @@ function M.update(dt, ST, preset)
   if timer < 1 / hz then return end
   timer = 0
   local f = fill(ST, preset, t)
+  for i in pairs(M.taken) do pcall(applyGlow, M.taken[i]) end
   if f == lastFp then return end       -- nothing on the page changed: no paint
   lastFp = f
   for i in pairs(M.taken) do

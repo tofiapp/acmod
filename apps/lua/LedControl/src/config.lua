@@ -31,6 +31,11 @@ local defaults = {
   displayCellGap = 8,  -- gap between cells, per mille of the width
   displayUnits = 1,    -- 1 km/h, 2 mph
   displayZones = 'speed,gear,lap,last,fuel,pos,delta', -- page Vlastní: field per zone
+  displayTextScale = 100, -- text size, % (always fitted to its box)
+  displayMargin = 3,   -- page margin, % of the shorter side
+  displayGlow = 100,   -- glow of the display: % of its material's own ksEmissive
+  displayNightOn = false, -- dim the display at night (sim time before 6:00 or from 20:00)
+  displayNight = 50,   -- ... to this % of the glow and of the colours
 }
 
 local stored = ac.storage(defaults, 'lc_')

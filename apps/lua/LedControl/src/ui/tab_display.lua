@@ -46,8 +46,19 @@ local T = {
   font = 'Písmo',
   fontHelp = 'Písma z Windows. Text se vždy zmenší tak, aby se vešel.',
   rounding = 'Zaoblení',
-  brightness = 'Jas',
-  brightnessHelp = 'Ztlumí všechny barvy stránky (v noci displej neoslňuje). Převzetí vlajkou svítí stejně.',
+  textScale = 'Velikost textu',
+  textScaleHelp = 'Text se vždy zmenší tak, aby se vešel do svého místa; tady ho jde celkově zmenšit nebo zvětšit.',
+  margin = 'Okraje',
+  light = 'Jas',
+  brightness = 'Jas barev',
+  brightnessHelp = 'Ztlumí barvy stránky (bílá šedne). Převzetí vlajkou se ztlumí taky.',
+  glow = 'Svit displeje',
+  glowHelp = 'Jak silně displej svítí sám (emisivita jeho materiálu, 100 % = jako v autě). Když je displej v noci '
+    .. 'oslňující nebo ve dne bledý, upravte ho tady.',
+  noGlow = 'Tento displej sám nesvítí (materiál bez emisivity): jas jde měnit jen přes Jas barev.',
+  nightOn = 'V noci ztlumit##dispNightOn',
+  nightHelp = 'Podle času na trati: před 6:00 a od 20:00 se svit i barvy ztlumí na zadanou hodnotu.',
+  night = 'V noci na',
   units = 'Rychlost',
   row = 'Řada diod##dispRow',
   rowShow = 'Zobrazit řadu diod##dispCellsOn',
@@ -127,9 +138,12 @@ local function live(key, value)
   editedAt = runtime.clock
 end
 
+local regionDirty = false
 local function flush()
   config.flushLive()
   if profileDirty then display.save(); profileDirty = false end
+  -- a moved / resized region: take the display again, so nothing painted outside the new region stays in the texture
+  if regionDirty then display.retake(); regionDirty = false end
 end
 
 local function slider(label, id, key, lo, hi, fmt)
@@ -231,11 +245,27 @@ local function lookRows()
   if pick then live('displayFont', pick) end
   K.help(T.fontHelp)
   slider(T.rounding, '##dispRounding', 'displayRounding', 0, 100, '%.0f %%')
-  slider(T.brightness, '##dispBrightness', 'displayBrightness', 20, 100, '%.0f %%')
-  K.help(T.brightnessHelp)
+  slider(T.textScale, '##dispTextScale', 'displayTextScale', 50, 160, '%.0f %%')
+  K.help(T.textScaleHelp)
+  slider(T.margin, '##dispMargin', 'displayMargin', 0, 12, '%.0f %%')
   K.label(T.units)
   pick = K.choice(UNIT_LABELS, tonumber(S.displayUnits) or 1)
   if pick then live('displayUnits', pick) end
+end
+
+-- brightness rows (in the main view: glow of the display material, colour brightness, night dimming)
+local function lightRows()
+  K.caption(T.light)
+  slider(T.glow, '##dispGlow', 'displayGlow', 0, 400, '%.0f %%')
+  K.help(T.glowHelp)
+  for k = 1, #display.displays do
+    if display.modeOf(k) and display.glows(k) == false then K.note(T.noGlow, K.GREY); break end
+  end
+  slider(T.brightness, '##dispBrightness', 'displayBrightness', 20, 100, '%.0f %%')
+  K.help(T.brightnessHelp)
+  if ui.checkbox(T.nightOn, S.displayNightOn == true) then live('displayNightOn', S.displayNightOn ~= true) end
+  K.help(T.nightHelp)
+  if S.displayNightOn == true then slider(T.night, '##dispNight', 'displayNight', 5, 100, '%.0f %%') end
 end
 
 local function rowRows()
@@ -297,7 +327,7 @@ local function areaRows()
       c.adjust[i] = a
       display.applyRegion(i)
       display.invalidate()
-      profileDirty, editedAt = true, runtime.clock
+      profileDirty, regionDirty, editedAt = true, true, runtime.clock
     end
     if k == 1 then K.help(T.areaHelp) end
   end
@@ -310,9 +340,8 @@ local function areaRows()
   K.dim(areaText)
   if ui.button(T.areaReset) and c.adjust then
     c.adjust[i] = nil
-    display.applyRegion(i)
-    display.invalidate()
     display.save()
+    display.retake()
   end
 end
 
@@ -351,9 +380,10 @@ end
 local function draw()
   refresh()
   rate()
-  if (config.hasLive() or profileDirty) and runtime.clock - editedAt > SAVE_AFTER then flush() end
+  if (config.hasLive() or profileDirty or regionDirty) and runtime.clock - editedAt > SAVE_AFTER then flush() end
   if #display.displays == 0 then K.note(T.none, K.GREY) end
   settingsRows()
+  lightRows()
   K.section(T.look, false, lookRows)
   K.section(T.row, false, rowRows)
   K.section(T.custom, false, customRows)
