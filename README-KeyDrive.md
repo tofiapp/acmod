@@ -50,7 +50,8 @@ Klávesa **X** (nastavení TRACTION_KEY) hlídání prokluzu vypne – plyn pak 
 můžou protáčet (gumování, otočka). Ve hře se ukáže hláška a nahoře uprostřed zůstane nápis **KeyDrive: hlídání prokluzu
 VYP**, i když je diagnostika skrytá. Dalším stiskem se hlídání zapne; plyn se pak plynule (ne skokem) stáhne, pokud
 kola pořád hrabou. Po restartu skriptu (nová jízda) je hlídání vždy zapnuté, teleport do boxů ho nemění. Ctrl+X
-a Alt+X se ignorují (jiné zkratky). Když je TRACTION_KEY stejná klávesa jako plyn, brzda, řízení, řazení nebo ruční
+a Alt+X se ignorují (jiné zkratky), stejně jako X při psaní do chatu nebo jiného textového pole CSP a když AC není
+aktivní okno. Když je TRACTION_KEY stejná klávesa jako plyn, brzda, řízení, řazení nebo ruční
 brzda, vypínač se nepoužije a hra ukáže hlášku.
 
 ## Logy pro ladění

@@ -136,10 +136,18 @@ local tractionUserOff = false
 local tractionKeyWasDown = false
 local TRACTION_ON, TRACTION_OFF = { TRACTION = P.traction }, { TRACTION = false }
 
+-- sim.isWindowForeground (ac.StateSim, read by CSP's own ui key helpers): off while AC is not the active window, so
+-- typing in another program does not toggle. Checked once: a missing field would raise an error on the struct.
+local hasForeground = pcall(function () return sim.isWindowForeground end)
+
 local function applyKeys()
   keys.tractionKey = P.tractionKey
   if P.tractionKey > 0 and keys.isDrivingKey(P.tractionKey) then
     keys.tractionKey = -1
+    if tractionUserOff then -- the switch can no longer be pressed: never leave the traction stuck off
+      tractionUserOff = false
+      throttleCore:setParams(TRACTION_ON)
+    end
     pcall(ac.setMessage, 'KeyDrive', 'TRACTION_KEY je stejná klávesa jako jedna z kláves pro jízdu: vypínač hlídání prokluzu nefunguje')
   end
   live.bindGas, live.bindBrake, live.bindLeft, live.bindRight = keys.gas, keys.brake, keys.left, keys.right
@@ -217,8 +225,11 @@ function script.update(dt)
 
   local kGas, kBrake, kLeft, kRight = keys.gasDown(), keys.brakeDown(), keys.leftDown(), keys.rightDown()
 
+  -- press edge of the raw key; ignored with Ctrl/Alt held, while typing in a text field (chat; flag from the render
+  -- module) or with AC in the background
   local kTc = keys.tractionKeyDown()
-  if kTc and not tractionKeyWasDown and P.traction then
+  if kTc and not tractionKeyWasDown and P.traction and not keys.modifierDown() and not live.keyboardCaptured
+    and (not hasForeground or sim.isWindowForeground ~= false) then
     tractionUserOff = not tractionUserOff
     throttleCore:setParams(tractionUserOff and TRACTION_OFF or TRACTION_ON)
     pcall(ac.setMessage, 'KeyDrive', tractionUserOff and 'Hlídání prokluzu VYPNUTO' or 'Hlídání prokluzu zapnuto')

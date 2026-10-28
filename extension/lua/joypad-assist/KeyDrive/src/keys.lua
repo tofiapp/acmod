@@ -42,6 +42,7 @@ function M.parseKey(v)
   if type(v) == 'number' then return v > 0 and math.floor(v) or -1 end
   if type(v) ~= 'string' then return -1 end
   local s = v:match('^%s*(%S*)'):upper()
+  if s == '' or tonumber(s) == 0 then return -1 end -- "0" means no key, not the digit key (that one is 0x30)
   if s:match('^[A-Z0-9]$') then return s:byte() end
   local f = tonumber(s:match('^F(%d%d?)$'))
   if f and f >= 1 and f <= 12 then return 111 + f end
@@ -49,11 +50,11 @@ function M.parseKey(v)
   return n and n > 0 and math.floor(n) or -1
 end
 
--- The traction switch key, pressed on its own (Ctrl or Alt held: some other shortcut, ignored).
+-- The traction switch key. assist.lua takes the press edge of the raw key and ignores it when Ctrl or Alt is held
+-- at that moment (some other shortcut), so releasing Ctrl first while X is still down does not toggle either.
 M.tractionKey = -1
-function M.tractionKeyDown()
-  return down(M.tractionKey) and not ac.isKeyDown(17) and not ac.isKeyDown(18)
-end
+function M.tractionKeyDown() return down(M.tractionKey) end
+function M.modifierDown() return ac.isKeyDown(17) or ac.isKeyDown(18) end
 
 -- True when `k` is one of AC's driving or button keys read above (a switch there would fire while driving).
 function M.isDrivingKey(k)

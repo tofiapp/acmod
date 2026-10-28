@@ -150,7 +150,7 @@ extension/lua/joypad-assist/KeyDrive/
                                after SPIN/CRASH/OFF, in Documents/Assetto Corsa/logs/keydrive (fallback: script folder;
                                v0.6 and older wrote into the script folder, which a reinstall wipes). Ask the user for
                                these files instead of guessing.
-  src/shared.lua               ac.connect layout 'KeyDrive.Live.v9' (v9: + traction mode 2 state) (same layout on every side)
+  src/shared.lua               ac.connect layout 'KeyDrive.Live.v10' (v9: + traction mode 2 state; v10: + keyboardCaptured from the render module) (same layout on every side)
 apps/lua/KeyDriveKeyboardTest/ input method test, variant A (LAZY = FULL): with Input method = Keyboard drives gas/brake/
                                steer via ac.overrideCarControls (combineAxis = false), compares car.gas/brake/steer with
                                what it wrote (SEDÍ/NESEDÍ per channel), logs/keydrive/kb-test.csv; writeSafe() hands the car

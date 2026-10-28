@@ -5,6 +5,10 @@ local shared = require('src/shared')
 local recorder = require('src/recorder')
 
 local live = shared.connect()
+-- text input focus (chat, CSP text fields): the physics script then ignores TRACTION_KEY
+local okUI, uiState = pcall(ac.getUI)
+if not okUI then uiState = nil end
+local okCapture = uiState ~= nil and pcall(function () return uiState.wantCaptureKeyboard end)
 local carState = ac.getCar(__carIndex)
 recorder.init(__dirname)
 ac.onRelease(recorder.save)
@@ -42,6 +46,7 @@ local function gearText(g)
 end
 
 function script.update(dt)
+  live.keyboardCaptured = okCapture and uiState.wantCaptureKeyboard == true
   -- the badge for traction switched off with TRACTION_KEY shows even with the diagnostics hidden
   ac.setDrawUIActive(live.showDiagnostics or live.tcState == 5)
   if live.recordLog then recorder.update(dt, live, carState) end

@@ -60,6 +60,7 @@ function M.reset()
   M.renderModules = {}
   M.calls = {}
   M.messages = {}
+  M.uiState = { wantCaptureKeyboard = false }
 end
 
 local function count(name) M.calls[name] = (M.calls[name] or 0) + 1 end
@@ -129,6 +130,7 @@ function M.install(core)
     onControlSettingsChanged = function (cb) table.insert(M.callbacks.controls, cb) end,
     loadRenderThreadModule = function (name) table.insert(M.renderModules, name) end,
     getCar = function () return M.car end,
+    getUI = function () return M.uiState end,
     getCarID = function () return 'test_car' end,
     setDrawUIActive = function (v) M.drawUIActive = v end,
     setMessage = function (title, text) M.messages[#M.messages + 1] = text end,
