@@ -139,6 +139,35 @@ local function gt3Car(sideX)
   for k = 0, 9 do acLed('GT_LED_' .. k, 6000, 30, 0, 0) end
 end
 
+-- Display car: the shift lights are drawn by a CSP scriptable display into the dash texture, no LED meshes.
+-- Sections as in acc-lua-examples/cars/dash_display_8100 (MESHES, RESOLUTION, DISPLAY_POS, DISPLAY_SIZE, SCRIPT).
+local function displayCar(sideX)
+  baseCar(sideX or 1)
+  env.carId = 'test_display'
+  local dash = env.node('DASH', env.node('COCKPIT_HR', env.root, 0, 0.5, 0.3), 0, 0.1, 0.4)
+  env.displayMesh = env.mesh('DISPLAY_SCREEN', dash, { centre = { 0, 0, 0 }, radius = 0.12,
+    material = env.material('dash_screen') })
+  env.cspConfig = {
+    SCRIPTABLE_DISPLAY_0 = { MESHES = { 'DISPLAY_SCREEN' }, RESOLUTION = { '1024', '1024' }, DISPLAY_POS = { '112', '272' },
+      DISPLAY_SIZE = { '800', '480' }, SCRIPT = { 'display.lua' } },
+  }
+end
+
+-- Two displays (dash 800 x 480 and a small steering wheel screen 480 x 272) plus the GT3 LED row.
+local function dualDisplayCar(sideX)
+  gt3Car(sideX or 1)
+  env.carId = 'test_dual_display'
+  local cockpit = env.root.children[1]
+  local dash = env.node('DASH', cockpit, 0, 0.1, 0.4)
+  env.displayMesh = env.mesh('DASH_SCREEN', dash, { centre = { 0, 0, 0 }, radius = 0.12, material = env.material('dash_screen') })
+  env.displayMesh2 = env.mesh('WHEEL_SCREEN', cockpit.children[1], { centre = { 0, -0.02, 0 }, radius = 0.05,
+    material = env.material('wheel_screen') })
+  env.cspConfig.SCRIPTABLE_DISPLAY_0 = { MESHES = { 'DASH_SCREEN' }, RESOLUTION = { '1024', '512' },
+    DISPLAY_POS = { '0', '0' }, DISPLAY_SIZE = { '800', '480' }, SCRIPT = { 'dash.lua' } }
+  env.cspConfig.SCRIPTABLE_DISPLAY_1 = { MESHES = { 'WHEEL_SCREEN' }, RESOLUTION = { '512', '512' },
+    DISPLAY_POS = { '16', '120' }, DISPLAY_SIZE = { '480', '272' }, SCRIPT = { 'wheel.lua' } }
+end
+
 local function markedCar()
   baseCar(1)
   env.carId = 'test_marked'
@@ -183,8 +212,10 @@ local function frame(n)
     env.frameNo = env.frameNo + 1
     env.clock = env.clock + DT
     env.acStep()
+    if env.jammer then env.jammer.step('before') end
     script.update(DT)
     script.frameBegin(DT)
+    if env.jammer then env.jammer.step('after') end
     local cb = env.renderCallbacks['main.root.transparent']
     if cb then cb() end
     if env.windowOpen then script.windowMain(DT) end
@@ -210,9 +241,47 @@ end
 
 H.baseCar, H.acLed, H.formulaCar, H.gt3Car, H.markedCar, H.namedCar, H.emptyCar =
   baseCar, acLed, formulaCar, gt3Car, markedCar, namedCar, emptyCar
+H.displayCar, H.dualDisplayCar = displayCar, dualDisplayCar
 H.FORMULA_ORDER = FORMULA_ORDER
 H.loadApp = function () loadApp(); H.app = app; return app end
 H.direct = direct            -- CSP globals an app module read directly (must stay empty)
+
+-- ---------------------------------------------------------------- what the driver sees
+
+local function chainActive(o)
+  local p = o.parent
+  while p do
+    if p.active == false then return false end
+    p = p.parent
+  end
+  return true
+end
+H.chainActive = chainActive
+
+-- Colour the driver sees on layout LED i (r, g, b, how): the instance on an active node chain (current LOD) decides.
+function H.seenLed(i)
+  local led = app.runtime.layout.leds[i]
+  for k = 1, #led.inst do
+    local mesh = led.inst[k].ref[1]
+    if chainActive(mesh) then return env.seen(mesh) end
+  end
+  return env.seen(led.inst[1].ref[1])
+end
+
+-- true when LED i shows the colour the app wants (fb): off when it wants off, else the same hue (channels compared
+-- after scaling to the brightest one; tolerance 0.2). A doubled LED (original and copy both visible) never matches.
+function H.ledMatches(i)
+  local p = app.runtime.fb[i]
+  local r, g, b, how = H.seenLed(i)
+  if how == 'double' then return false, 'original and copy both visible' end
+  if p == nil or p < 0 then return true end           -- the car's own logic: nothing to compare
+  local er, eg, eb = math.floor(p / 65536) % 256, math.floor(p / 256) % 256, p % 256
+  local em, sm = math.max(er, eg, eb), math.max(r, g, b)
+  if em == 0 then return sm < 0.05, string.format('wants off, shows %.1f %.1f %.1f', r, g, b) end
+  if sm <= 0 then return false, 'wants a colour, shows off' end
+  local ok = math.abs(er / em - r / sm) < 0.2 and math.abs(eg / em - g / sm) < 0.2 and math.abs(eb / em - b / sm) < 0.2
+  return ok, string.format('wants #%06X, shows %.1f %.1f %.1f (%s)', p, r, g, b, tostring(how))
+end
 H.frame, H.click, H.seenOf, H.mode = frame, click, seenOf, mode
 
 function H.finish(name)

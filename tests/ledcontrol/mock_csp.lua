@@ -68,6 +68,61 @@ mat4x4 = {
 }
 M.newMat = newMat
 
+-- ---------------------------------------------------------------- write log
+-- Every material and visibility write is logged on the object (a ring of LOG_MAX entries: frame, kind, writer,
+-- value), with counts per writer. The app is the writer of every scene reference call; AC's LED writer ('ac') and the
+-- jammer ('jammer') write through M.writeEmissive / M.writeVisible with their own name. An app write that repeats
+-- the app's own last write on that object (no other writer in between, same value) is counted as redundant.
+
+M.LOG_MAX = 32
+M.redundant = { emissive = 0, visible = 0, lastObj = nil, lastKind = nil, lastFrame = 0 }
+M.writeCount = { app = 0, ac = 0, jammer = 0 }
+
+-- the ring is made in full when the object is created, so logging never allocates inside a measured frame
+local function newLog()
+  local log = { n = 0 }
+  for i = 1, M.LOG_MAX do log[i] = { frame = 0, kind = '', writer = '', r = 0, g = 0, b = 0 } end
+  return log
+end
+M.newLog = newLog
+
+local function logWrite(obj, kind, writer, r, g, b)
+  local log = obj.log
+  if not log then log = newLog(); obj.log = log end
+  local slot = log.n % M.LOG_MAX + 1
+  local prev = log.n > 0 and log[(log.n - 1) % M.LOG_MAX + 1] or nil
+  if writer == 'app' and prev and prev.writer == 'app' and prev.kind == kind and prev.r == r and prev.g == g
+    and prev.b == b then
+    local key = kind == 'visible' and 'visible' or 'emissive'
+    M.redundant[key] = M.redundant[key] + 1
+    M.redundant.lastObj, M.redundant.lastKind, M.redundant.lastFrame = obj, kind, M.frameNo
+  end
+  log.n = log.n + 1
+  local e = log[slot]
+  if not e then e = {}; log[slot] = e end
+  e.frame, e.kind, e.writer, e.r, e.g, e.b = M.frameNo, kind, writer, r, g, b
+  M.writeCount[writer] = (M.writeCount[writer] or 0) + 1
+end
+M.logWrite = logWrite
+
+-- The last logged write on a material or mesh (nil when none).
+function M.lastWrite(obj)
+  local log = obj and obj.log
+  if not log or log.n == 0 then return nil end
+  return log[(log.n - 1) % M.LOG_MAX + 1]
+end
+
+function M.writeEmissive(mat, r, g, b, writer)
+  local e = mat.ksEmissive
+  e.r, e.g, e.b = r, g, b
+  logWrite(mat, 'ksEmissive', writer or 'ac', r, g, b)
+end
+
+function M.writeVisible(mesh, v, writer)
+  mesh.visible = v == true
+  logWrite(mesh, 'visible', writer or 'ac', v and 1 or 0, 0, 0)
+end
+
 -- ---------------------------------------------------------------- scene
 
 local refmt = {}
@@ -82,7 +137,8 @@ M.ref = ref
 local materialCounter = 0
 function M.material(name, r, g, b)
   materialCounter = materialCounter + 1
-  return { name = name or ('mat' .. materialCounter), id = materialCounter, ksEmissive = { r = r or 0, g = g or 0, b = b or 0 } }
+  return { name = name or ('mat' .. materialCounter), id = materialCounter, ksEmissive = { r = r or 0, g = g or 0, b = b or 0 },
+    log = newLog() }
 end
 
 function M.node(name, parent, x, y, z)
@@ -96,7 +152,7 @@ function M.mesh(name, parent, opts)
   local c = opts.centre or { 0, 0, 0 }
   local m = { kind = 'mesh', name = name, parent = parent, material = opts.material or M.material(), visible = opts.visible ~= false,
     centre = { x = c[1], y = c[2], z = c[3] }, radius = opts.radius or 0.004, lod = opts.lod or 'A',
-    actsAsLED = opts.actsAsLED or false, shadows = false, transparent = false, created = false }
+    actsAsLED = opts.actsAsLED or false, shadows = false, transparent = false, created = false, log = newLog() }
   parent.children[#parent.children + 1] = m
   return m
 end
@@ -185,7 +241,10 @@ function refmt:boundingSphere(i, out)
   return out, o.radius
 end
 function refmt:setVisible(v)
-  for i = 1, #self do if self[i].kind == 'mesh' then self[i].visible = v == true end end
+  for i = 1, #self do
+    local o = self[i]
+    if o.kind == 'mesh' then o.visible = v == true; logWrite(o, 'visible', 'app', v and 1 or 0, 0, 0) end
+  end
   return self
 end
 function refmt:isVisible(i) local o = self[i or 1]; return o ~= nil and o.kind == 'mesh' and o.visible and not o.disposed end
@@ -241,6 +300,7 @@ function refmt:setMaterialProperty(prop, value)
     local t = mat[prop]
     if not t then t = {}; mat[prop] = t end
     t.r, t.g, t.b = value.r or value.x, value.g or value.y, value.b or value.z
+    logWrite(mat, prop, 'app', t.r, t.g, t.b)
   end
   M.materialWrites = (M.materialWrites or 0) + 1
   return self
@@ -306,8 +366,8 @@ function M.acStep()
     local lit = rpm >= a.rpm
     for k = 1, #a.meshes do
       local mesh = a.meshes[k]
-      local e = (M.acWrites == 'mesh' and mesh.material or a.materials[k]).ksEmissive
-      e.r, e.g, e.b = lit and a.r or 0, lit and a.g or 0, lit and a.b or 0
+      M.writeEmissive(M.acWrites == 'mesh' and mesh.material or a.materials[k], lit and a.r or 0, lit and a.g or 0,
+        lit and a.b or 0, 'ac')
     end
   end
 end

@@ -26,9 +26,13 @@ local M = {
   n = 0,
   fallback = nil,      -- Czech reason when another method than the wanted one runs
   fightMode = false,   -- direct: AC writes back, colours are re-asserted every frame
+  acDriven = false,    -- the LEDs come from AC's / CSP's own RPM lights, which write them every frame
+  frameNo = 0,         -- counted in frameBegin
+  lost = 0,            -- render checks in a row that saw the game's value instead of ours
   version = 0,         -- bumped when anything shown in the diagnostics changes
   stats = { copies = 0, instances = 0, reShows = 0, fights = 0, copyWrites = 0, writes = 0,
-    materialsBefore = 0, materialsAfter = 0, split = false, drawErrors = 0 },
+    materialsBefore = 0, materialsAfter = 0, split = false, drawErrors = 0, renderChecks = 0, renderLost = 0,
+    switched = 0 },
 }
 
 M.SHADOW, M.REDRAW, M.DIRECT = 1, 2, 3
@@ -66,6 +70,13 @@ local carId = ''
 local guardTimer = 0
 local sampleIndex = 0
 local pendingFallback = 0
+local pendingReason = nil
+local renderIndex = 0
+local RENDER_CHECK_EVERY = 15   -- frames between two render checks (one LED each; visibility only, no allocation)
+local READBACK_EVERY = 60       -- frames between two material read-backs (getMaterialPropertyValue returns a new value)
+local READBACK_SUSPECT = 15     -- ... while the last check lost
+local hiddenByGame = 0          -- direct: frames in which the game hid a taken LED it had shown (blink by visibility)
+local LOST_LIMIT = 2            -- render checks in a row lost to the game before switching to the redraw
 
 local function bump() M.version = M.version + 1 end
 
@@ -115,7 +126,9 @@ end
 -- ---------------------------------------------------------------- per method setup
 
 local function newItem(led)
-  local it = { led = led, cur = UNSET, taken = false, col = rgb(0, 0, 0), draw = rgbm(0, 0, 0, 1), inst = {} }
+  -- fight: direct method, this LED's material is written by the game too, so it is put back every frame
+  local it = { led = led, cur = UNSET, taken = false, col = rgb(0, 0, 0), draw = rgbm(0, 0, 0, 1), inst = {},
+    fight = false }
   for k = 1, #led.inst do
     local src = led.inst[k]
     it.inst[k] = { ref = src.ref, parent = src.parent, name = led.name, centre = src.centre, radius = src.radius,
@@ -255,7 +268,7 @@ local function showOriginal(it)
     for k = 1, #it.inst do
       local inst = it.inst[k]
       if inst.hidden then inst.ref:setVisible(inst.wasVisible); inst.hidden = false end
-      if inst.copy then inst.copy:setVisible(false) end
+      if inst.copy and inst.copyShown then inst.copy:setVisible(false); inst.copyShown = false end
     end
   elseif m == M.DIRECT then
     for k = 1, #it.inst do
@@ -278,6 +291,7 @@ local function showColour(it, p)
       setEmissive(inst.copy, it.col)
       if not it.taken then
         inst.copy:setVisible(true)
+        inst.copyShown = true
         if not inst.hidden then
           inst.wasVisible = inst.ref:isVisible()
           inst.ref:setVisible(false)
@@ -291,6 +305,7 @@ local function showColour(it, p)
       if not it.taken and inst.ownHold then inst.ref:assignMaterialFrom(inst.ownHold) end
       setEmissive(inst.ref, it.col)
     end
+    it.setFrame = M.frameNo        -- frameBegin of this frame does not write the same value again
   else
     -- redraw: shader colour in display units (1 = white reference); an unlit LED is drawn dark to cover AC's light
     if p == 0 then it.draw.r, it.draw.g, it.draw.b = 0.025, 0.025, 0.03
@@ -334,7 +349,11 @@ function M.dispose()
     for k = 1, #inst do
       local x = inst[k]
       local c = x.copy
-      if c then pcall(c.setVisible, c, false); pcall(c.dispose, c); x.copy = nil end
+      if c then
+        if x.copyShown then pcall(c.setVisible, c, false) end
+        pcall(c.dispose, c)
+        x.copy, x.copyShown = nil, false
+      end
       if x.acHold then pcall(x.ref.assignMaterialFrom, x.ref, x.acHold); pcall(x.acHold.dispose, x.acHold) end
       if x.ownHold then pcall(x.ownHold.dispose, x.ownHold) end
       x.acHold, x.ownHold = nil, nil
@@ -354,8 +373,17 @@ function M.attach(layout, wanted, id)
   layoutRef, carId = layout, id or ''
   M.wanted = wanted
   M.fallback = nil
+  M.lost = 0
   local s = M.stats
   s.copies, s.reShows, s.fights, s.copyWrites, s.writes, s.drawErrors = 0, 0, 0, 0, 0, 0
+  s.renderChecks, s.renderLost = 0, 0
+  -- AC's digital instruments and CSP's RPM emissives write these LEDs every frame (the direct method fights them
+  -- from the first frame instead of waiting to notice it)
+  M.acDriven = false
+  for i = 1, #layout.leds do
+    local src = layout.leds[i].source
+    if src == 'digital_instruments' or src == 'csp_rpm' then M.acDriven = true end
+  end
   s.materialsBefore, s.materialsAfter, s.split, s.noHolders = 0, 0, false, false
   local reasons = {}
   for step = 0, 2 do
@@ -375,6 +403,18 @@ function M.attach(layout, wanted, id)
       if m == M.DIRECT and s.noHolders then
         M.fallback = (M.fallback and (M.fallback .. ' ') or '') .. 'Přímý zápis musel rozdělit sdílené materiály diod:'
           .. ' po vypnutí je auto znovu ovládá až po restartu jízdy.'
+      end
+      if m == M.DIRECT then
+        -- LEDs AC / CSP light by RPM are fought from the first frame; the others only once a check sees the game
+        -- write them (UNSURE: AC may also write the LEDs of its digital instruments that never light)
+        for i = 1, M.n do
+          local led = M.items[i].led
+          local r = tonumber(led.rpm)
+          if (led.source == 'digital_instruments' or led.source == 'csp_rpm') and (r == nil or r < 50000) then
+            M.items[i].fight = true
+            M.fightMode = true
+          end
+        end
       end
       bump()
       return m
@@ -403,11 +443,13 @@ function M.guard(dt)
   if M.method == 0 or M.n == 0 then return end
   guardTimer = guardTimer + dt
   if pendingFallback ~= 0 then
-    local m = pendingFallback
-    pendingFallback = 0
+    local m, why = pendingFallback, pendingReason
+    pendingFallback, pendingReason = 0, nil
     local layout = layoutRef
+    local switched = M.stats.switched + 1
     M.attach(layout, m, carId)
-    M.fallback = 'Překreslení selhalo při kreslení, běží ' .. M.NAMES[M.method] .. '.'
+    M.stats.switched = switched
+    M.fallback = (why or 'Překreslení selhalo při kreslení') .. ', běží ' .. (M.NAMES[M.method] or 'nic') .. '.'
     return
   end
   if guardTimer < 0.5 then return end
@@ -442,19 +484,57 @@ function M.guard(dt)
     local ok, v = pcall(ref.getMaterialPropertyValue, ref, 1, 'ksEmissive')
     if ok and not sameColour(v, it.col) then
       M.stats.fights = M.stats.fights + 1
-      M.fightMode = true
+      M.fightMode, it.fight = true, true
       bump()
     end
   end
 end
 
--- script.frameBegin: right before rendering, after AC's own update of the LEDs.
+-- script.frameBegin: right before rendering, after AC's own update of the LEDs (UNSURE: the order is not documented;
+-- the render check in draw3D notices when the game still wins and switches to the redraw).
+--  shadow: an original the game showed again (LOD system, AC blinking its LEDs by visibility, session reset) is hidden
+--          in the same frame (one isVisible per instance, setVisible only when it is shown);
+--  direct: the colours are put back every frame while AC writes them (fightMode).
 function M.frameBegin()
-  if M.method ~= M.DIRECT or not M.fightMode then return end
-  for i = 1, M.n do
-    local it = M.items[i]
-    if it.taken then
-      for k = 1, #it.inst do setEmissive(it.inst[k].ref, it.col) end
+  M.frameNo = M.frameNo + 1
+  local m = M.method
+  if m == M.SHADOW then
+    for i = 1, M.n do
+      local it = M.items[i]
+      if it.taken then
+        for k = 1, #it.inst do
+          local inst = it.inst[k]
+          if inst.hidden and inst.ref:isVisible() then
+            inst.ref:setVisible(false)
+            M.stats.reShows = M.stats.reShows + 1
+          end
+        end
+      end
+    end
+  elseif m == M.DIRECT then
+    local fight = M.fightMode
+    for i = 1, M.n do
+      local it = M.items[i]
+      if it.taken then
+        for k = 1, #it.inst do
+          local inst = it.inst[k]
+          if fight and it.fight and it.setFrame ~= M.frameNo - 1 then setEmissive(inst.ref, it.col) end
+          -- the direct method cannot keep an LED the game hides: counted for the render check
+          if inst.ref:isVisible() then inst.seenFrame = M.frameNo
+          elseif (inst.seenFrame or -1000) + 60 >= M.frameNo then hiddenByGame = hiddenByGame + 1 end
+        end
+      end
+    end
+  elseif m == M.REDRAW then
+    -- remember which instances the game shows, so a blink that hides the original does not stop the redraw
+    for i = 1, M.n do
+      local it = M.items[i]
+      if it.taken then
+        for k = 1, #it.inst do
+          local inst = it.inst[k]
+          if inst.ref:isVisible() then inst.seenFrame = M.frameNo end
+        end
+      end
     end
   end
 end
@@ -517,15 +597,67 @@ local function drawAll()
     if it.taken then
       for k = 1, #it.inst do
         local inst = it.inst[k]
-        if inst.ref:isVisible() and chainActive(inst) then drawInstance(inst, it.draw) end
+        -- drawn while its node chain is active and the game showed it within the last second
+        if (inst.seenFrame or 0) + 60 >= M.frameNo and chainActive(inst) then drawInstance(inst, it.draw) end
       end
     end
   end
 end
 
--- render.on('main.root.transparent'): draws the taken LEDs for the redraw method.
+-- Render check (shadow and direct, every RENDER_CHECK_EVERY frames, one LED in turn): what the opaque pass used is
+-- read back here, after everything else of the frame ran. A wrong colour or an original shown again means the game
+-- writes after the app; after LOST_LIMIT checks in a row the takeover switches to the redraw (it does not depend on
+-- the LED's material or visibility).
+local function renderCheck()
+  if M.frameNo % RENDER_CHECK_EVERY ~= 0 then return end
+  renderIndex = renderIndex % M.n + 1
+  local it = M.items[renderIndex]
+  if not it.taken then return end
+  M.stats.renderChecks = M.stats.renderChecks + 1
+  local lost = false
+  local inst = it.inst[1]
+  local readback = M.frameNo % (M.lost > 0 and READBACK_SUSPECT or READBACK_EVERY) == 0
+  if M.method == M.SHADOW then
+    for k = 1, #it.inst do
+      local x = it.inst[k]
+      if x.hidden and x.ref:isVisible() then lost = true end
+    end
+    if readback and inst.copy then
+      local ok, v = pcall(inst.copy.getMaterialPropertyValue, inst.copy, 1, 'ksEmissive')
+      if ok and not sameColour(v, it.col) then lost = true; M.stats.copyWrites = M.stats.copyWrites + 1 end
+    end
+  else
+    if hiddenByGame >= 3 then lost = true end
+    hiddenByGame = 0
+    if readback then
+      local ok, v = pcall(inst.ref.getMaterialPropertyValue, inst.ref, 1, 'ksEmissive')
+      if ok and not sameColour(v, it.col) then
+        if it.fight then lost = true
+        else it.fight, M.fightMode = true, true; M.stats.fights = M.stats.fights + 1 end
+      end
+    end
+  end
+  if lost then
+    M.lost = M.lost + 1
+    M.stats.renderLost = M.stats.renderLost + 1
+    -- (at most 3 switches per attach chain: a redraw that fails falls back again and must not loop)
+    if M.lost >= LOST_LIMIT and pendingFallback == 0 and M.stats.switched < 3 then
+      pendingFallback = M.REDRAW
+      pendingReason = 'Hra přepisuje diody i přes ' .. M.NAMES[M.method]
+      bump()
+    end
+  elseif readback then
+    M.lost = 0     -- only a full check (with the read-back) clears the count; a visibility-only one cannot
+  end
+end
+
+-- render.on('main.root.transparent'): draws the taken LEDs for the redraw method, checks the others.
 function M.draw3D()
-  if M.method ~= M.REDRAW or M.n == 0 then return end
+  if M.n == 0 or M.method == 0 then return end
+  if M.method ~= M.REDRAW then
+    renderCheck()
+    return
+  end
   local ok = pcall(drawAll)
   if not ok and useOwnMatrix then
     useOwnMatrix = false

@@ -210,7 +210,12 @@ apps/lua/LedControl/
                           hidden), 2 redraw (render.mesh, grow 8 % x live chain x 3 mm lift), 3 direct ksEmissive
                           (materials split only when shared, re-assert in frameBegin when AC writes back); fallback
                           1 -> 2 -> 3; change-only set(i, packed); guard every 0.5 s (re-shows, AC writes); self-heal
-                          marker hiddenGuard written before hiding, cleared only by the run that wrote it
+                          marker hiddenGuard written before hiding, cleared only by the run that wrote it; frameBegin
+                          re-hides an original the game showed again (A), re-asserts LEDs AC lights by RPM (C, per
+                          LED it.fight, not in the frame it was written), remembers shown instances (B draws while
+                          shown within 1 s); render check in draw3D (every 15 frames, read-back once a second, every
+                          15 frames after a lost one): 2 lost in a row switch to B (max 3 switches). Proven against
+                          tests/ledcontrol/jammer.lua in test_jammer.lua (part A: red on the limiter with A, B, C)
   src/color.lua           packed 0xRRGGBB, ORIGINAL = -1 (car's own logic), OFF = 0, hsv, mix, parse '#RRGGBB'
   src/patterns.lua        compiled looks: solid, blink, alternate, pulse, run, fill (left/right/edges/centre, zones,
                           car thresholds), frames ('.' transparent, '0' off, '1'..'9' palette; nearest-centre rescale),
@@ -255,9 +260,13 @@ apps/lua/LedControl/
                           Pořadí a skupiny (led_map.lua), Způsob převzetí, Diagnostika; tab_rpm.lua (Otáčky: live bar,
                           Auto / manual start, shift, limiter, learned limiter, RPM per LED), tab_scenarios.lua,
                           tab_editor.lua, tab_lights.lua, tab_settings.lua
-tests/ledcontrol/         mock_csp.lua (scene graph, shared materials, AC LED writer, JSON, ui), helpers.lua (test
+tests/ledcontrol/         mock_csp.lua (scene graph, shared materials, AC LED writer, write log per material / mesh
+                          with writer + frame, redundant app writes counted, JSON, ui), jammer.lua (the game fighting the
+                          app: every frame, after N, limiter blink by visibility, by material name before the picture,
+                          LOD switch, session reset), fake_csp.lua (fake adapter), sdk_signatures.txt, helpers.lua (test
                           cars: formula 15+3+3 with HR/LR/LOD B instances, GT3 10 LEDs one material, actsAsLED, names,
-                          empty), test_*.lua each in its own LuaJIT runtime
+                          empty, display texture, two displays; seenLed / ledMatches), test_*.lua each in its own
+                          LuaJIT runtime
 ```
 
 Adapter: `src/csp.lua` is the only LedControl file that reads the CSP globals (ac, ui, render, io, os, JSON, stringify,

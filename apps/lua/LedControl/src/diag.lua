@@ -7,7 +7,7 @@ local safety = require('src/safety')
 local lights = require('src/lights')
 
 local S = config.S
-local M = { VERSION = '0.4.1' }
+local M = { VERSION = '0.4.2' }
 
 local function join(list)
   if type(list) ~= 'table' then return tostring(list) end
@@ -88,6 +88,8 @@ function M.text()
   end
   add('Převzetí: kopií %d, instancí %d, zápisů %d, znovu zobrazené originály %d, AC přepsal kopii %d, boje (C) %d%s',
     st.copies, st.instances, st.writes, st.reShows, st.copyWrites, st.fights, takeover.fightMode and ' (zapisuji každý snímek)' or '')
+  add('Kontrola při vykreslení: %d, prohraných %d, přepnutí metody %d | LuaJIT: %s', st.renderChecks or 0,
+    st.renderLost or 0, st.switched or 0, tostring(require('src/csp').jitVersion))
   add('Materiály (C): před %d, po %d, rozděleno %s | chyby kreslení (B) %d | uzdraveno meshů %d', st.materialsBefore,
     st.materialsAfter, tostring(st.split), st.drawErrors, runtime.healed)
   local okL, lines = pcall(lights.diagLines)
