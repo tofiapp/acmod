@@ -121,6 +121,12 @@ extension/lua/joypad-assist/KeyDrive/
                                the memory (0.3 floor after 0.4 s), hold between 80-100 % of the target, quick return
                                to 92 %, memory creeps 0.08/s with spare grip. Target must stay <= 1. Memory survives
                                teleports (reset only on script reload).
+  core/traction.lua MODE 2     (v0.10 default, TRACTION_MODE = 2) regulator: cap A follows the slip (prediction PRED x
+                               rising slip rate, K_DOWN proportional, FALL_MAX), anti-windup (A <= request + AW), tracks
+                               the request with plenty of grip (TRACK), LAT_SPLIT = regulates load-weighted |slipRatio| /
+                               learned peak ratio against sqrt(target^2 - lateral^2) (corners), guard: combined ndSlip
+                               over the target always cuts (lateral slide), optional low-speed reference V_REF, memory.
+  core/tuned.lua               optimizer result used by MODE 2 (data only)
   core/steer_assist.lua        grip window in road wheel degrees: delta from wheels[0..1].look, betaF / betaR from
                                wheels[i].velocity (car.look/side, sign of side voted against the output); window
                                betaF +- alphaPeak * target only reduces the request; countersteer = wheels along betaF
@@ -226,4 +232,10 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
   v0.9.2: STEER_RATE (% of AC's keyboard rates) and STEER_SPEED_SLOWDOWN (% of AC's slowdown with speed) for the AC copy;
   KeyDriveKeyboardTest app. Next: user runs the keyboard test + v0.9.1/0.9.2 throttle.
 - Phase 2 (v0.9.3): pure cores in core/ (see layout). Refactor verified bit-exact against v0.9.2 with a differential
-  test (6 settings x 12 random traces x 20000 steps, max diff 0). Next: phase 3 simulator in sim/.
+  test (6 settings x 12 random traces x 20000 steps, max diff 0).
+- Phases 3-7: simulator (reviewed twice, calibrated to the logs: clutch slips in 1st to 50-60 km/h, tyre tail, inside
+  wheel spins first, upshift kick), metrics with USER/PROPOSAL thresholds, optimizer, bridge export, subagents.
+  Findings: at a 1st-gear launch 1 % throttle takes the slip from 1.0 to 2.3 (clutch slipping, low inertia), so the
+  regulator must slow down BEFORE the peak; in corners the combined ndSlip is high without throttle (LAT_SPLIT).
+- v0.10.0: TRACTION_MODE 2 (tuned regulator) default. Sim: tuning 100/210 runs pass (v0.9.3: 71), hidden 61/135
+  (v0.9.3: 33); runs over 1.5x peak slip 35 vs 131 (tuning), 20 vs 95 (hidden). TRACTION_MODE 1 = old foot.

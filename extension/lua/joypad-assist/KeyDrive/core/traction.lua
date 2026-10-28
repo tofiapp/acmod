@@ -61,6 +61,8 @@ M.DEFAULTS = {
                         -- what the friction ellipse leaves: sqrt(target^2 - lateral^2). In a corner the tyres already
                         -- use part of the combined ndSlip sideways; without this the cap never rises there.
   KAPPA_PEAK = 0.12,    -- slip ratio at the tyre's peak (start value; learned from straight-running driven wheels)
+  TRACK = 0.5,          -- MODE 2: with plenty of grip (regulated slip below TRACK x the hold band) the cap follows
+                        -- the requested throttle (+ AW) at once, so the driver's own key ramp is never slowed down
 }
 
 local RPM_BAND = 500
@@ -230,7 +232,12 @@ local function update2(self, dt, carState, requested, target, response)
 
   local slip, ratio = measure(self, carState)
   if slip == nil then
+    -- driven wheels in the air: no slip information, the cap follows the request (landing is caught by the
+    -- regulator and by the final slew of the throttle)
     self.airborne = true
+    local follow = requested + P.AW
+    if follow > T then follow = T end
+    if A < follow then A = follow end
   else
     self.airborne = false
     if P.V_REF > 0 then
@@ -268,10 +275,15 @@ local function update2(self, dt, carState, requested, target, response)
     local rate = (reg - s0) / dt
     self.slipRate = self.slipRate + (rate - self.slipRate) * math.min(1, dt / P.D_TAU)
     local sp = reg + P.PRED * (self.slipRate > 0 and self.slipRate or 0)
+    local fullTarget = target
     target = tgt
     if A > requested + P.AW then A = requested + P.AW end
     local out = requested < A and requested or A
     local e = sp / target - 1
+    -- guard: the tyres past their combined peak (e.g. the rear sliding sideways with little wheelspin) always take
+    -- throttle away, whatever the longitudinal part says (v0.9 log: a long slide with the throttle left on)
+    local eC = self.slip / fullTarget - 1
+    if eC > e then e = eC end
     if e > 0 and requested > 0.05 then
       if self.overTime == 0 and useMem and out > P.LEARN_MIN and reg > target then
         local m = (out < mem and out or mem) * P.LEARN_MARGIN
@@ -300,6 +312,12 @@ local function update2(self, dt, carState, requested, target, response)
       self.crossBand = -1
       self.overTime = 0
       local hold = target * P.HOLD_BAND
+      if reg < hold * P.TRACK then
+        -- plenty of grip: follow the driver's request
+        local follow = requested + P.AW
+        if follow > T then follow = T end
+        if A < follow then A = follow end
+      end
       if reg < hold then
         local spare = 1 - reg / hold
         if A < T then

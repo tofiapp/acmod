@@ -14,6 +14,7 @@ local Steering = require('core/steering')
 local keys = require('src/keys')
 local shared = require('src/shared')
 local brakeLimiter = require('src/brake')
+local tuned = require('core/tuned')
 
 local function loadSettings()
   local defaults = {
@@ -21,6 +22,7 @@ local function loadSettings()
     THROTTLE_FALL_RATE = 400,
     MAX_THROTTLE = 100,
     TRACTION = true,
+    TRACTION_MODE = 2,
     TARGET_SLIP = 100,
     TRACTION_RESPONSE = 100,
     CORNER_THROTTLE_REDUCTION = 0,
@@ -57,6 +59,7 @@ local P = {
   throttleFall = math.max(S.THROTTLE_FALL_RATE, 1) / 100,
   maxThrottle = math.clamp(S.MAX_THROTTLE / 100, 0, 1),
   traction = flag(S.TRACTION),
+  tractionMode = tonumber(S.TRACTION_MODE) == 1 and 1 or 2, -- 1 = remembering foot (v0.7-0.9), 2 = tuned regulator
   targetSlip = math.clamp(S.TARGET_SLIP / 100, 0.3, 3), -- in ndSlip units, 1 = tyre peak
   tractionResponse = math.clamp(S.TRACTION_RESPONSE / 100, 0.1, 5),
   cornerThrottleReduction = math.clamp(S.CORNER_THROTTLE_REDUCTION / 100, 0, 1),
@@ -87,10 +90,19 @@ live.recordLog = flag(S.RECORD_LOG)
 live.targetSlip = P.targetSlip
 live.brakeTargetSlip = P.brakeTargetSlip
 
-local throttleCore = Throttle.new({
+-- TRACTION_MODE 2 uses the optimizer's parameters (core/tuned.lua); TARGET_SLIP then scales the tuned target
+-- (100 % = as tuned), so the setting keeps its meaning "more or less slip than the default".
+local throttleParams = {
   RISE = P.throttleRise, FALL = P.throttleFall, MAX = P.maxThrottle, TRACTION = P.traction,
   TARGET_SLIP = P.targetSlip, RESPONSE = P.tractionResponse, CORNER_REDUCTION = P.cornerThrottleReduction,
-})
+}
+local tractionParams = nil
+if P.tractionMode == 2 then
+  for k, v in pairs(tuned.throttle) do throttleParams[k] = v end
+  throttleParams.TARGET_SLIP = tuned.throttle.TARGET_SLIP * P.targetSlip
+  tractionParams = tuned.traction
+end
+local throttleCore = Throttle.new(throttleParams, tractionParams)
 local traction = throttleCore.traction
 local steerCore = Steering.new({
   STYLE_AC = P.steerStyleAC, RATE = P.steerRate, SLOWDOWN = P.steerSlowdown, CURVE = P.steerCurve,

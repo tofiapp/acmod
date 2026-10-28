@@ -220,7 +220,8 @@ local function launch(dt, settings, seconds)
     end
     for i = 2, 3 do
       c.wheels[i].angularSpeed = w
-      c.wheels[i].ndSlip = math.abs((w * r - v) / math.max(v, 3)) / 0.166 -- 1 at the model's peak
+      c.wheels[i].slipRatio = (w * r - v) / math.max(v, 3)
+      c.wheels[i].ndSlip = math.abs(c.wheels[i].slipRatio) / 0.166 -- 1 at the model's peak
     end
     for i = 0, 1 do c.wheels[i].angularSpeed = v / r end
     c.localVelocity.z = v
@@ -659,8 +660,9 @@ do
         w = w + (g * torque(rpm) / 2 - F * r) / J * 0.00015
         if w < 0 then w = 0 end
       end
-      local nd = math.abs((w * r - v) / math.max(v, 3)) / 0.166
-      for i = 2, 3 do c.wheels[i].angularSpeed = w; c.wheels[i].ndSlip = nd end
+      local srNow = (w * r - v) / math.max(v, 3)
+      local nd = math.abs(srNow) / 0.166
+      for i = 2, 3 do c.wheels[i].angularSpeed = w; c.wheels[i].ndSlip = nd; c.wheels[i].slipRatio = srNow end
       for i = 0, 1 do c.wheels[i].angularSpeed = v / r end
       n = n + 1
       if nd > 1.3 then spin = spin + 1 end
@@ -678,7 +680,7 @@ do
   if os.getenv('KD_VERBOSE') then
     print(string.format('rpm launch 1: spin %.2f max %.1f v %.1f | 2: spin %.2f max %.1f v %.1f', s1, m1, v1, s2, m2, v2))
   end
-  check('second launch spins less (memory per rpm band)', s2 < s1 * 0.7, string.format('%.2f vs %.2f', s2, s1))
+  check('second launch spins no more than the first (memory per rpm band; mode 2 may not spin at all)', s2 <= s1 * 0.7 + 0.005, string.format('%.2f vs %.2f', s2, s1))
   check('second launch not slower', v2 > v1 * 0.97, string.format('%.1f vs %.1f', v2, v1))
 end
 

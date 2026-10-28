@@ -144,8 +144,16 @@ function M.evaluate(scn, tr, ref)
         if d > worst then worst = d end
       end
     end
+    -- at render-frame rate a key edge is seen up to one frame late: allow the ramp of the longest frame gap
+    local gap, last = 0, 0
+    for i = 1, tr.n do
+      if tr.called[i] then
+        if tr.t[i] - last > gap then gap = tr.t[i] - last end
+        last = tr.t[i]
+      end
+    end
     val.reverseFollow = worst
-    chk.reverseFollow = worst <= T.reverseFollow
+    chk.reverseFollow = worst <= T.reverseFollow + math.max(rise, fall) * gap
   else
     local c = raw(tr, dt)
     local o = ref.oracle and (ref.oracle.dist and ref.oracle or M.summarize(ref.oracle)) or nil

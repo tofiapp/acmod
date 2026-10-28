@@ -34,7 +34,8 @@ tě pustit nemusí. Respektuj pravidla ligy (KeyDrive hlídá prokluz podobně j
 | --- | --- | --- |
 | THROTTLE_RISE_RATE / FALL_RATE | 120 / 400 | Náběh / pokles plynu v % za sekundu |
 | MAX_THROTTLE | 100 | Strop plynu v % |
-| TRACTION, TARGET_SLIP, TRACTION_RESPONSE | 1, 100, 100 | Hlídání prokluzu, povolený prokluz v % vrcholu pneumatiky, rychlost reakce |
+| TRACTION, TARGET_SLIP, TRACTION_RESPONSE | 1, 100, 100 | Hlídání prokluzu, povolený prokluz (v %; u režimu 2 vůči vyladěné hodnotě), rychlost reakce |
+| **TRACTION_MODE** | 2 | 2 = regulace vyladěná v simulátoru (v0.10), 1 = předchozí „pamatující noha“ (v0.9), pro srovnání |
 | BRAKE_* , MAX_BRAKE, TRAIL_BRAKE_RELEASE | | Náběh a strop brzdy, hlídání zablokování, povolení brzdy při zatáčení |
 | STEER_STYLE | 0 | 0 = kopie řízení AC z klávesnice, 1 = vlastní křivka STEER_SPEED_CURVE |
 | **STEER_RATE** | 100 | Rychlost řízení v % klávesnicového řízení AC (30–300) |
