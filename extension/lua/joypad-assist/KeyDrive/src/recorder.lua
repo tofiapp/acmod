@@ -55,6 +55,8 @@ local NC = #COLUMNS
 local EVENTS_COL = NC
 
 local header, rowFormat
+local carId = '?'
+local lastLive = nil
 do
   local names, fmts = {}, {}
   for i, c in ipairs(COLUMNS) do names[i], fmts[i] = c[1], c[2] end
@@ -93,6 +95,8 @@ function M.init(scriptFolder)
     M.folderLabel = 'složka skriptu KeyDrive'
   end
   M.statusText = 'záznam běží: keydrive-log.csv v ' .. M.folderLabel
+  local okC, id = pcall(ac.getCarID, 0)
+  carId = okC and type(id) == 'string' and id or '?'
 end
 
 local function bit(x, b) return math.floor(x / b) % 2 == 1 end
@@ -159,7 +163,10 @@ end
 local row = {}
 local function write(path)
   if not dir or count == 0 then return end
-  local lines = { header }
+  -- first line: '#' meta (which car, traction mode and target), like ac-reference.csv
+  local L = lastLive
+  local lines = { string.format('# car=%s tc_mode=%d slip_target=%.3f', carId, L and L.tractionMode or 0,
+    L and L.targetSlip or 0), header }
   local start = count < SIZE and 1 or head % SIZE + 1
   for n = 0, count - 1 do
     local i = (start - 1 + n) % SIZE + 1
@@ -184,6 +191,7 @@ end
 
 -- Call every render frame. Nothing is recorded while the car stands still with no keys pressed.
 function M.update(dt, live, carState)
+  lastLive = live
   if M.error then return end
   time = time + dt
   if incidentTimer >= 0 then

@@ -345,7 +345,8 @@ do
   local log = mock.saved['cfg/keydrive/keydrive-log.csv']
   check('log written', log ~= nil)
   if log then
-    local header = log:match('^[^\n]+')
+    check('log meta line names the car', log:match('^# car=test_car') ~= nil, log:match('^[^\n]+'))
+    local header = log:match('^#[^\n]*\n([^\n]+)')
     check('log header', header:find('key_gas', 1, true) and header:find('nd_rl', 1, true) and header:find('events', 1, true))
     local _, rows = log:gsub('\n', '')
     check('log has ~40 Hz rows (10 s)', rows > 380 and rows < 420, rows)
