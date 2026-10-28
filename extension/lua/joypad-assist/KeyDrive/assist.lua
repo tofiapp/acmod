@@ -99,10 +99,11 @@ local throttleParams = {
 local tractionParams = nil
 if P.tractionMode == 2 then
   for k, v in pairs(tuned.throttle) do throttleParams[k] = v end
-  throttleParams.TARGET_SLIP = tuned.throttle.TARGET_SLIP * P.targetSlip
+  throttleParams.TARGET_SLIP = math.min(1, tuned.throttle.TARGET_SLIP * P.targetSlip) -- past the peak it runs away
   tractionParams = tuned.traction
 end
 local throttleCore = Throttle.new(throttleParams, tractionParams)
+live.targetSlip = throttleParams.TARGET_SLIP -- the target really used (overlay, recorder's wheelspin flag)
 local traction = throttleCore.traction
 local steerCore = Steering.new({
   STYLE_AC = P.steerStyleAC, RATE = P.steerRate, SLOWDOWN = P.steerSlowdown, CURVE = P.steerCurve,

@@ -27,7 +27,7 @@ def main():
     ap.add_argument("--procs", type=int, default=4)
     ap.add_argument("--rand", type=int, default=30)
     ap.add_argument("--nm", type=int, default=60)
-    ap.add_argument("--start", default="")
+    ap.add_argument("--start", default="", help="start parameter file(s), comma separated: one per process")
     ap.add_argument("--seed0", type=int, default=1)
     a = ap.parse_args()
     (ROOT / "sim" / "out").mkdir(exist_ok=True)
@@ -41,8 +41,9 @@ def main():
     print("references ready")
     modes = [m.strip() for m in a.mode.split(",")]
     jobs = []
+    starts = a.start.split(",") if a.start else [""]
     for i in range(a.procs):
-        jobs.append((modes[i % len(modes)], a.seed0 + i, a.rand, a.nm, a.start))
+        jobs.append((modes[i % len(modes)], a.seed0 + i, a.rand, a.nm, starts[i % len(starts)]))
     with mp.Pool(a.procs) as pool:
         for out in pool.imap_unordered(worker, jobs):
             print("finished", out)

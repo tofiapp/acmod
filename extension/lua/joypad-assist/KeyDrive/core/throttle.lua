@@ -25,6 +25,7 @@ M.DEFAULTS = {
   CORNER_REDUCTION = 0,    -- cap reduction at full lateral load or full steering (CORNER_THROTTLE_REDUCTION)
   ASSIST_FALL = 1.5,       -- per second: fastest throttle reduction an assist may make
   ASSIST_FALL_SEVERE = 4,  -- per second while the wheels really spin
+  RISE_REF = 1.2,          -- the key ramp MODE 2 traction was tuned with: its recovery rates scale with RISE / RISE_REF
   CORNER_G_FULL = 1.5,     -- lateral g at which the corner cap reduction is complete
   CORNER_TAU = 0.15,       -- s, smoothing of the corner factor
 }
@@ -38,9 +39,12 @@ end
 
 -- `params` overrides DEFAULTS, `tractionParams` overrides core/traction.lua DEFAULTS.
 function M.new(params, tractionParams)
+  local p = merged(M.DEFAULTS, params)
+  local traction = Traction.new(tractionParams)
+  traction.rampScale = p.RISE / p.RISE_REF
   return setmetatable({
-    p = merged(M.DEFAULTS, params),
-    traction = Traction.new(tractionParams),
+    p = p,
+    traction = traction,
     request = 0, -- ramped key throttle (the "foot" before limits)
     out = 0,     -- last output
     corner = 0,  -- smoothed 0..1 corner load factor
@@ -52,6 +56,7 @@ end
 -- Replaces parameters (e.g. a driving mode); keys not in DEFAULTS are ignored.
 function M:setParams(params)
   for k, v in pairs(params) do if M.DEFAULTS[k] ~= nil then self.p[k] = v end end
+  self.traction.rampScale = self.p.RISE / self.p.RISE_REF
 end
 
 function M:configure(carState)
@@ -65,6 +70,7 @@ function M:reset(carState)
 end
 
 function M:update(dt, keyGas, carState, latG, steer)
+  if not (dt > 0) then return self.out end -- no time passed (or NaN): nothing to do
   local P = self.p
   local g = math.abs(latG) / P.CORNER_G_FULL
   local st = math.abs(steer)
@@ -90,7 +96,9 @@ function M:update(dt, keyGas, carState, latG, steer)
     target = request
   end
   local out = self.out
-  local fall = request < out and P.FALL or (traction.severe and on) and P.ASSIST_FALL_SEVERE or P.ASSIST_FALL
+  -- a real spin may always be caught at least as fast as an ordinary assist correction
+  local severeFall = P.ASSIST_FALL_SEVERE > P.ASSIST_FALL and P.ASSIST_FALL_SEVERE or P.ASSIST_FALL
+  local fall = request < out and P.FALL or (traction.severe and on) and severeFall or P.ASSIST_FALL
   local rise = P.RISE * (on and traction.riseScale or 1)
   out = ramp.step(out, target, rise, fall, dt)
   self.out = out

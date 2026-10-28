@@ -61,8 +61,9 @@ M.DEFAULTS = {
                         -- what the friction ellipse leaves: sqrt(target^2 - lateral^2). In a corner the tyres already
                         -- use part of the combined ndSlip sideways; without this the cap never rises there.
   KAPPA_PEAK = 0.12,    -- slip ratio at the tyre's peak (start value; learned from straight-running driven wheels)
-  TRACK = 0.5,          -- MODE 2: with plenty of grip (regulated slip below TRACK x the hold band) the cap follows
+  TRACK = 0,            -- MODE 2 (0 = off until tuned): with plenty of grip (regulated slip below TRACK x the hold band) the cap follows
                         -- the requested throttle (+ AW) at once, so the driver's own key ramp is never slowed down
+  GUARD = 1,            -- MODE 2: combined ndSlip over the target always cuts (lateral slide); 0 only for experiments
 }
 
 local RPM_BAND = 500
@@ -103,6 +104,7 @@ function M.new(params)
     crossOut = 1,       -- throttle when the current spin started
     slipRate = 0, prevSlip = 0,
     sx = 0, kappaPeak = p.KAPPA_PEAK, hasRatio = false, lateral = 0, targetX = 1,
+    rampScale = 1,      -- MODE 2: cap recovery rates scale with the driver's key ramp (set by core/throttle.lua)
   }, M)
   for g = 1, GEARS do
     o.memory[g], o.stamp[g], o.known[g] = {}, {}, {}
@@ -245,7 +247,8 @@ local function update2(self, dt, carState, requested, target, response)
       v = v < 0 and -v or v
       if v < P.V_REF then slip = slip * math.max(v, 2) / P.V_REF end
     end
-    local a = math.min(1, dt / P.SLIP_TAU)
+    -- exact first-order filters (1 - e^(-dt/tau)): the same behaviour at 333 Hz and at 50 fps
+    local a = 1 - math.exp(-dt / P.SLIP_TAU)
     self.slip = self.slip + (slip - self.slip) * a
     self.ratio = self.ratio + (ratio - self.ratio) * a
     -- regulated quantity: the combined slip, or (LAT_SPLIT) its longitudinal part against what the ellipse leaves
@@ -273,7 +276,7 @@ local function update2(self, dt, carState, requested, target, response)
     local s0 = self.prevSlip
     self.prevSlip = reg
     local rate = (reg - s0) / dt
-    self.slipRate = self.slipRate + (rate - self.slipRate) * math.min(1, dt / P.D_TAU)
+    self.slipRate = self.slipRate + (rate - self.slipRate) * (1 - math.exp(-dt / P.D_TAU))
     local sp = reg + P.PRED * (self.slipRate > 0 and self.slipRate or 0)
     local fullTarget = target
     target = tgt
@@ -282,8 +285,10 @@ local function update2(self, dt, carState, requested, target, response)
     local e = sp / target - 1
     -- guard: the tyres past their combined peak (e.g. the rear sliding sideways with little wheelspin) always take
     -- throttle away, whatever the longitudinal part says (v0.9 log: a long slide with the throttle left on)
-    local eC = self.slip / fullTarget - 1
-    if eC > e then e = eC end
+    if P.GUARD ~= 0 then
+      local eC = self.slip / fullTarget - 1
+      if eC > e then e = eC end
+    end
     if e > 0 and requested > 0.05 then
       if self.overTime == 0 and useMem and out > P.LEARN_MIN and reg > target then
         local m = (out < mem and out or mem) * P.LEARN_MARGIN
@@ -312,7 +317,7 @@ local function update2(self, dt, carState, requested, target, response)
       self.crossBand = -1
       self.overTime = 0
       local hold = target * P.HOLD_BAND
-      if reg < hold * P.TRACK then
+      if reg < hold * P.TRACK and self.slip < fullTarget * P.HOLD_BAND * P.TRACK then
         -- plenty of grip: follow the driver's request
         local follow = requested + P.AW
         if follow > T then follow = T end
@@ -320,11 +325,12 @@ local function update2(self, dt, carState, requested, target, response)
       end
       if reg < hold then
         local spare = 1 - reg / hold
+        local rs = self.rampScale
         if A < T then
-          A = A + P.K_BACK * response * dt
+          A = A + P.K_BACK * rs * response * dt
           if A > T then A = T end
         else
-          A = A + P.K_UP * spare * response * dt
+          A = A + P.K_UP * rs * spare * response * dt
           if useMem and mem < 1 and A > T then
             setLevel(self, gear, band, math.min(1, mem + P.CREEP * response * dt))
           end

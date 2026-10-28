@@ -939,7 +939,8 @@ do
     end
     local carState = { gear = 2, rpm = 5200, speedKmh = 72, localVelocity = v3(0, 0, 20), tractionType = 0,
       wheels = wheels, look = v3(0, 0, 1), side = v3(1, 0, 0) }
-    local th = Throttle.new()
+    local tuned = env.require('core/tuned')
+    local th = Throttle.new(tuned.throttle, tuned.traction) -- mode 2, the default the user drives
     local st = Steering.new({ LIMIT_STRENGTH = 1, COUNTERSTEER = 1 })
     th:configure(carState)
     st:configure(carState, 540, 18)

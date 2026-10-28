@@ -109,7 +109,8 @@ extension/lua/joypad-assist/KeyDrive/
   core/                        PURE Lua 5.1/LuaJIT (no CSP API, no CSP globals like math.clamp; test 27 runs them in a
                                bare env). Instances with params tables (DEFAULTS) so sim/ and the optimizer can run many.
   core/throttle.lua            Throttle.new(params, tractionParams):update(dt, keyGas, car, latG, steer) -> 0..1: corner
-                               cap (off) -> key ramp -> traction cap -> final slew (assists fall <= 1.5 /s, 4 /s in a spin)
+                               cap (off) -> key ramp -> traction cap -> final slew (assists fall <= ASSIST_FALL /s: 1.5 mode 1, 3.3 tuned mode 2;
+                               a spin never slower); MODE 2 cap recovery scales with RISE / RISE_REF (1.2)
   core/steering.lua            Steering.new(params):update(dt, kLeft, kRight, car) -> -1..1: AC keyboard copy (KB_* rates
                                from controls.ini, RATE, SLOWDOWN) or CURVE style, then the optional assist; :follow(v)
   core/ramp.lua, curve.lua     rate limiters (units/s), "x:y x:y" curves (STEER_SPEED_CURVE; spaces, not commas)
@@ -123,7 +124,7 @@ extension/lua/joypad-assist/KeyDrive/
                                teleports (reset only on script reload).
   core/traction.lua MODE 2     (v0.10 default, TRACTION_MODE = 2) regulator: cap A follows the slip (prediction PRED x
                                rising slip rate, K_DOWN proportional, FALL_MAX), anti-windup (A <= request + AW), tracks
-                               the request with plenty of grip (TRACK), LAT_SPLIT = regulates load-weighted |slipRatio| /
+                               the request with plenty of grip (TRACK, 0 = off: 0.5 untuned caused spins), LAT_SPLIT = regulates load-weighted |slipRatio| /
                                learned peak ratio against sqrt(target^2 - lateral^2) (corners), guard: combined ndSlip
                                over the target always cuts (lateral slide), optional low-speed reference V_REF, memory.
   core/tuned.lua               optimizer result used by MODE 2 (data only)

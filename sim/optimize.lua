@@ -36,6 +36,7 @@ if MODE == 2 then
     { 'V_REF', 'traction', 0, 8 },
     { 'MEM', 'traction', 0, 1 },
     { 'LAT_SPLIT', 'traction', 0, 1 },
+    { 'TRACK', 'traction', 0, 1 },
   }) do SPACE[#SPACE + 1] = p end
 else
   for _, p in ipairs({
