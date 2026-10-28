@@ -117,7 +117,6 @@ end
 -- (a display whose texture is squeezed on the screen: every y is multiplied by it, here and not by a ui scale call,
 -- because ui.endPivotScale over the whole page zoomed it around another point in the game and cut it off).
 local sy, textStretch = 1, true
-local TEXT_STRETCH = vec2(1, 1)
 function M.origin(x, y, scale, stretch) ox, oy, sc, sy = x, y, scale, stretch or 1 end
 -- false: texts are not stretched with the page (they then look lower on the display, but nothing is scaled)
 function M.setTextStretch(on) textStretch = on ~= false end
@@ -132,21 +131,33 @@ M.rect = rect
 
 -- text fitted into the box x, y, w, h; align 0 start, 0.5 centre, 1 end. Placed by its measured size and drawn
 -- without a clip rect (ui.dwriteDrawText, as CSP's Android Auto touchscreen and VHS filter draw; a clip rect would
--- not follow a turn or a stretch). The fitting keeps it inside its box. With a vertical stretch the text alone is
--- stretched around its own centre: ui.beginScale + ui.endScale(vec2(1, sy)) (CSP's RallyCopilot stretches circles
--- into ellipses in place this way).
+-- not follow a turn or a stretch). The fitting keeps it inside its box.
+-- Big text: DirectWrite glyphs come from a font atlas, and in the game a gear digit of ~400 px was cut off half way
+-- (the speed of ~250 px next to it was whole), so the font size is capped at MAX_FONT and the text scaled up in place
+-- with ui.beginScale + ui.endScale(vec2) ("to animate font size, consider using ui.beginScale()/ui.endScale()",
+-- acc-lua-sdk ac_ui.d.lua; CSP's RallyCopilot stretches a circle in place this way). The same call stretches it by
+-- the page's vertical stretch.
+local MAX_FONT = 200
+M.MAX_FONT = MAX_FONT
+local TEXT_SCALE = vec2(1, 1)
 local function text(s, x, y, w, h, size, align, p)
   if not s or s == '' then return end
   local fs = M.fit(s, size, w, h)
-  local tw, th = width100(s) * fs / 100, height100(s) * fs / 100
-  P1.x = ox + (x + (w - tw) * (align or 0.5)) * sc
-  P1.y = oy + (y + h / 2) * sc * sy - th * sc / 2
-  local k = textStretch and sy or 1
-  if k ~= 1 then ui.beginScale() end
-  ui.dwriteDrawText(s, fs * sc, P1, col(p))
-  if k ~= 1 then
-    TEXT_STRETCH.y = k
-    ui.endScale(TEXT_STRETCH)
+  local w100, h100 = width100(s), height100(s)
+  local tw = w100 * fs / 100                       -- width in page units at the fitted size
+  local cx = ox + (x + (w - tw) * (align or 0.5) + tw / 2) * sc
+  local cy = oy + (y + h / 2) * sc * sy
+  local drawFs, up = fs * sc, 1
+  if drawFs > MAX_FONT then up = drawFs / MAX_FONT; drawFs = MAX_FONT end
+  local ky = up * (textStretch and sy or 1)
+  P1.x = cx - w100 * drawFs / 200
+  P1.y = cy - h100 * drawFs / 200
+  local scaled = up ~= 1 or ky ~= 1
+  if scaled then ui.beginScale() end
+  ui.dwriteDrawText(s, drawFs, P1, col(p))
+  if scaled then
+    TEXT_SCALE.x, TEXT_SCALE.y = up, ky
+    ui.endScale(TEXT_SCALE)
   end
 end
 M.text = text

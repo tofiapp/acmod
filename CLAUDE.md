@@ -280,7 +280,9 @@ apps/lua/LedControl/
                           margin from the style; labels at most half of their value; text fitted with measureDWriteText
                           (width + height per string cached), placed by hand and drawn with ui.dwriteDrawText (no clip
                           rect: endPivotScale / endPivotRotation move vertices but not clip rects, so clipped text was
-                          cut away on the stretched display) / drawRectFilled; also the tab preview
+                          cut away on the stretched display) / drawRectFilled; font size capped at MAX_FONT 200 px,
+                          bigger text scaled up in place by beginScale + endScale(vec2) (a ~400 px gear digit was cut
+                          half way in game, font atlas); also the tab preview
   src/online.lua          online state, banner and the optional block of real controls online
   src/hotkeys.lua         ac.ControlButton master / next preset / flash, polled in script.update
   src/diag.lua            "Kopírovat diagnostiku" text

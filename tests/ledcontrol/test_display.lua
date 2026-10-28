@@ -557,10 +557,22 @@ bounds(sq, 1024, 1024, 'stretched page inside the 1024 x 1024 region')
 local stretched, covers = true, false
 for i = 1, sq.n do
   local e = sq.cmds[i]
-  if e[1] == 'text' and math.abs(e[17] - 1.6) > 0.001 then stretched = false end
+  if e[1] == 'text' and math.abs(e[17] / e[16] - 1.6) > 0.001 then stretched = false end
   if e[1] == 'rect' and e[2] < 0.5 and e[3] < 0.5 and e[4] > 1023.5 and e[5] > 1023.5 then covers = true end
 end
 check(stretched and covers, 'every text stretched 1.6 x vertically, the background covers the whole region')
+-- the gear digit was cut half way in the game (font atlas): no text is drawn with a font above MAX_FONT, a bigger one
+-- is scaled up in place to the same size it would have had
+local maxFont, gearSize = 0, 0
+for i = 1, sq.n do
+  local e = sq.cmds[i]
+  if e[1] == 'text' then
+    maxFont = math.max(maxFont, e[11])
+    if e[10] == '4' then gearSize = e[11] * e[16] end
+  end
+end
+check(maxFont <= pages.MAX_FONT + 1e-6 and gearSize > pages.MAX_FONT,
+  string.format('big text: font at most %d px (%.0f), the gear scaled up to %.0f px', pages.MAX_FONT, maxFont, gearSize))
 dump(sq, 1024, 1024, 'aspect_race_1024x1024')
 -- the game zoomed a page stretched as a whole with ui.endPivotScale around another point and cut it off (0.6.3/0.6.4):
 -- the y coordinates are now stretched by the app itself, only each text is stretched in place
