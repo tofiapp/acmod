@@ -132,6 +132,7 @@ function M.install(core)
     getCar = function () return M.car end,
     getUI = function () return M.uiState end,
     getCarID = function () return 'test_car' end,
+    getTrackID = function () return 'test_track' end,
     setDrawUIActive = function (v) M.drawUIActive = v end,
     setMessage = function (title, text) M.messages[#M.messages + 1] = text end,
     onRelease = function (cb) table.insert(M.callbacks.release, cb) end,

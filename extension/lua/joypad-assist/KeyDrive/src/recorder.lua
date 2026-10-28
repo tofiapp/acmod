@@ -55,7 +55,7 @@ local NC = #COLUMNS
 local EVENTS_COL = NC
 
 local header, rowFormat
-local carId = '?'
+local carId, trackId = '?', '?'
 local lastLive = nil
 do
   local names, fmts = {}, {}
@@ -97,6 +97,8 @@ function M.init(scriptFolder)
   M.statusText = 'záznam běží: keydrive-log.csv v ' .. M.folderLabel
   local okC, id = pcall(ac.getCarID, 0)
   carId = okC and type(id) == 'string' and id or '?'
+  local okT, tid = pcall(ac.getTrackID)
+  trackId = okT and type(tid) == 'string' and tid or '?'
 end
 
 local function bit(x, b) return math.floor(x / b) % 2 == 1 end
@@ -163,9 +165,9 @@ end
 local row = {}
 local function write(path)
   if not dir or count == 0 then return end
-  -- first line: '#' meta (which car, traction mode and target), like ac-reference.csv
+  -- first line: '#' meta (which car and track, traction mode and target), like ac-reference.csv
   local L = lastLive
-  local lines = { string.format('# car=%s tc_mode=%d slip_target=%.3f', carId, L and L.tractionMode or 0,
+  local lines = { string.format('# car=%s track=%s tc_mode=%d slip_target=%.3f', carId, trackId, L and L.tractionMode or 0,
     L and L.targetSlip or 0), header }
   local start = count < SIZE and 1 or head % SIZE + 1
   for n = 0, count - 1 do
