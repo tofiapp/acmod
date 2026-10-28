@@ -244,6 +244,9 @@ function script.update(dt)
   live.usesNdSlip = traction.usesNdSlip
   live.tcLimit = traction.limit
   live.tcMemory = traction.memoryNow
+  live.tractionMode = P.tractionMode
+  live.tcSx, live.tcLateral, live.tcTargetX = traction.sx, traction.lateral, traction.targetX
+  live.tcSlipRate, live.tcKappaPeak = traction.slipRate, traction.kappaPeak
   live.tcState = not traction.available and 0 or not P.traction and 1 or traction.airborne and 2
     or traction.active and 4 or 3
   live.brakeRequest = brakeRequest

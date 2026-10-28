@@ -5,7 +5,7 @@ local M = {}
 
 function M.connect()
   return ac.connect({
-    ac.StructItem.key('KeyDrive.Live.v8'),
+    ac.StructItem.key('KeyDrive.Live.v9'),
     alive = ac.StructItem.int32(),      -- physics update counter, wraps at 1e6
     keyMask = ac.StructItem.int32(),    -- bit 0 gas, 1 brake, 2 left, 3 right, 4 gear up, 5 gear down
     inGas = ac.StructItem.double(),     -- joypad state as it arrived, before KeyDrive
@@ -52,6 +52,12 @@ function M.connect()
     bindRight = ac.StructItem.int32(),
     bindGearUp = ac.StructItem.int32(),
     bindGearDown = ac.StructItem.int32(),
+    tractionMode = ac.StructItem.int32(), -- 1 remembering foot, 2 regulator (v0.10)
+    tcSx = ac.StructItem.double(),       -- mode 2: longitudinal slip of the driven wheels (slipRatio / learned peak)
+    tcLateral = ac.StructItem.double(),  -- mode 2: lateral part of the combined slip
+    tcTargetX = ac.StructItem.double(),  -- mode 2: longitudinal target left by the friction ellipse
+    tcSlipRate = ac.StructItem.double(), -- mode 2: filtered rate of the regulated slip, 1/s
+    tcKappaPeak = ac.StructItem.double(), -- mode 2: learned slip ratio at the tyre's peak
   })
 end
 

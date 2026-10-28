@@ -47,6 +47,8 @@ local COLUMNS = {
   { 'angle_fl', '%.1f' }, { 'angle_fr', '%.1f' }, { 'angle_rl', '%.1f' }, { 'angle_rr', '%.1f' },
   { 'collision_depth', '%.3f' }, { 'wheels_out', '%d' },
   { 'in_gas', '%.3f' }, { 'in_brake', '%.3f' }, { 'in_steer', '%.3f' }, { 'steer_from_ac', '%d' }, { 'ac_votes', '%d' },
+  { 'tc_mode', '%d' }, { 'tc_sx', '%.3f' }, { 'tc_lateral', '%.3f' }, { 'tc_target_x', '%.3f' }, { 'tc_slip_rate', '%.2f' },
+  { 'tc_kappa_peak', '%.4f' },
   { 'events', '%d' },
 }
 local NC = #COLUMNS
@@ -148,6 +150,8 @@ local function sample(live, c)
   v[52][head] = c.collisionDepth; v[53][head] = out
   v[54][head] = live.inGas; v[55][head] = live.inBrake; v[56][head] = live.inSteer
   v[57][head] = live.steerFromAC and 1 or 0; v[58][head] = live.acSteerVotes
+  v[59][head] = live.tractionMode; v[60][head] = live.tcSx; v[61][head] = live.tcLateral
+  v[62][head] = live.tcTargetX; v[63][head] = live.tcSlipRate; v[64][head] = live.tcKappaPeak
   v[EVENTS_COL][head] = flags
   return flags
 end
