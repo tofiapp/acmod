@@ -165,7 +165,12 @@ Fungují i se zavřeným oknem.
 
 ## Když něco nefunguje
 
-V kartě Diody (sekce Diagnostika) je **Kopírovat diagnostiku**, diagnostika světel je v kartě Světla. Text obsahuje nalezené diody a jejich polohu,
+V kartě Diody (sekce Diagnostika) je **Self-test**: projde všechny scénáře presetu a stránky displeje, každý na pár
+sekund, přečte zpět skutečnou barvu diod a vypíše protokol OK / FAIL / SKIP s verzemi (LedControl, LuaJIT, CSP).
+**Kopírovat protokol** ho dá do schránky. Auto může stát v boxech, trvá asi minutu. U způsobu B barvu přečíst nejde
+(kreslí se až při vykreslení) a obsah displeje taky ne: to protokol označí a je potřeba se podívat.
+
+Dál je tam **Kopírovat diagnostiku**, diagnostika světel je v kartě Světla. Text obsahuje nalezené diody a jejich polohu,
 odmítnuté kandidáty s důvodem, sekce `[LED_n]` z auta, stav převzetí a scénářů. Pošlete ho autorovi.
 
 Uložená data jsou ve složce `Documents/Assetto Corsa/cfg/extension/state/lua/app/LedControl` (CSP `ScriptConfig`): `car_<auto>.lon`

@@ -651,6 +651,38 @@ local function renderCheck()
   end
 end
 
+-- Self-test: what LED i really holds. Returns status, detail:
+--   'ok'       the material the driver sees has the wanted emissive (shadow: the copy, and the original is hidden;
+--              direct: the LED's material)
+--   'wrong'    detail says what differs
+--   'unread'   the redraw method draws in the render pass, nothing to read back
+--   'free'     the LED is given back to the car (the car's own logic)
+function M.readback(i)
+  local it = M.items[i]
+  if not it then return 'wrong', 'dioda neexistuje' end
+  if not it.taken then return 'free', nil end
+  if M.method == M.REDRAW then return 'unread', nil end
+  local inst = it.inst[1]
+  if M.method == M.SHADOW then
+    for k = 1, #it.inst do
+      local x = it.inst[k]
+      if x.hidden and x.ref:isVisible() then return 'wrong', 'původní dioda je vidět přes kopii' end
+    end
+    if not inst.copy then return 'wrong', 'chybí kopie' end
+    if not inst.copy:isVisible() then return 'wrong', 'kopie je schovaná' end
+  end
+  local ref = M.method == M.SHADOW and inst.copy or inst.ref
+  local ok, v = pcall(ref.getMaterialPropertyValue, ref, 1, 'ksEmissive')
+  if not ok or v == nil or type(v) == 'number' then return 'wrong', 'barvu nejde přečíst' end
+  local x, y, z = v.x or v.r or 0, v.y or v.g or 0, v.z or v.b or 0
+  local c = it.col
+  local tol = 0.05 * math.max(1, c.r, c.g, c.b)
+  if math.abs(x - c.r) > tol or math.abs(y - c.g) > tol or math.abs(z - c.b) > tol then
+    return 'wrong', string.format('čteno %.1f %.1f %.1f, čekáno %.1f %.1f %.1f', x, y, z, c.r, c.g, c.b)
+  end
+  return 'ok', nil
+end
+
 -- render.on('main.root.transparent'): draws the taken LEDs for the redraw method, checks the others.
 function M.draw3D()
   if M.n == 0 or M.method == 0 then return end

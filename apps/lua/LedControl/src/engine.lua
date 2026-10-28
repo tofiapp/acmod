@@ -128,7 +128,8 @@ function M.step(C, ST, fb)
   for i = 1, #scen do
     local sc = scen[i]
     local on = false
-    if sc.forceUntil > t then on = true
+    if C.solo and sc.id ~= C.solo then on = false       -- self-test: only the scenario under test
+    elseif sc.forceUntil > t then on = true
     elseif sc.on and ST.ready then
       on = testOf(sc, ST)
       if not on and sc.carStart and ST.rpm >= sc.carStart then on = true end

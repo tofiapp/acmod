@@ -17,6 +17,8 @@ ac.getCarID | official app-csp-defaults/DynamicReturn/DynamicReturn.lua:21 | loc
 ac.getCarName | official app-csp-defaults/SetupExchange/SetupExchange.lua:57 | carName = ac.getCarName(0),
 ac.getExtraSwitchName | official app-csp-defaults/Unbound/Unbound.lua:14 | local r = ac.getExtraSwitchName(index - 1) or false
 ac.getFolder | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:13 | local aiFolder = ac.getFolder(ac.FolderID.CurrentTrackLayout)..'/ai'
+ac.getPatchVersion | official app-csp-defaults/ext_controls/src/csp.lua:3 | local cspVersion = ac.getPatchVersion()
+ac.getPatchVersionCode | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:1119 | if ac.getPatchVersionCode() > 2554 then
 ac.getSim | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:6 | local sim = ac.getSim()
 ac.isExtraSwitchAvailable | official app-csp-defaults/Unbound/Unbound.lua:258 | local a = ac.isExtraSwitchAvailable(i - 1, false)
 ac.onRelease | common/common.lua:20 | function ac.onRelease(callback, item)

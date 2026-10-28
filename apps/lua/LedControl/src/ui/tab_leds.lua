@@ -12,6 +12,7 @@ local takeover = require('src/takeover')
 local color = require('src/color')
 local detect = require('src/detect')
 local diag = require('src/diag')
+local selftest = require('src/selftest')
 local safety = require('src/safety')
 local ledMap = require('src/ui/led_map')
 
@@ -262,7 +263,39 @@ local function methodContent()
 end
 
 local copyInDiag = true
+-- Self-test: start / stop, progress, the protocol (lines kept by selftest.lua) and a copy button
+local SELFTEST_HELP = 'Projde všechny scénáře presetu a stránky displeje, každý na pár sekund, a zkontroluje skutečnou '
+  .. 'barvu diod (čte ji zpět z materiálu). Protokol jde zkopírovat a poslat. Trvá asi minutu; auto může stát v boxech.'
+local selftestProgress, seenSelftest = '', -1
+local function selftestRows()
+  if selftest.running then
+    if seenSelftest ~= selftest.version then
+      seenSelftest = selftest.version
+      selftestProgress = string.format('Self-test: krok %d / %d – %s', selftest.step, selftest.total, selftest.current)
+    end
+    ui.text(selftestProgress)
+    if ui.button('Zastavit##selftestStop') then selftest.stop() end
+    return
+  end
+  if ui.button('Self-test##selftest') then selftest.start() end
+  K.help(SELFTEST_HELP)
+  if selftest.done then
+    ui.sameLine()
+    if ui.button('Kopírovat protokol##selftestCopy') then selftest.copy() end
+    local lines = selftest.lines
+    for i = 1, #lines do
+      local l = lines[i]
+      local b = l:byte(1)
+      if b == 70 then ui.textColored(l, K.RED)          -- 'FAIL'
+      elseif b == 79 and l:byte(2) == 75 then ui.textColored(l, K.GREEN)   -- 'OK'
+      elseif b == 83 and l:byte(2) == 75 then K.dim(l)  -- 'SKIP'
+      else ui.text(l) end
+    end
+  end
+end
+
 local function diagContent()
+  selftestRows()
   ui.text(summaryLine)
   for i = 1, #ledLines do ui.text(ledLines[i]) end
   if #rejectedLines > 0 then

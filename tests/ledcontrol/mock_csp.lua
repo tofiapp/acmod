@@ -490,6 +490,8 @@ ac = {
   onRelease = function (cb) M.callbacks.release = cb end,
   onSessionStart = function (cb) M.callbacks.session = cb end,
   setClipboardText = function (t) M.clipboard = t end,
+  getPatchVersion = function () return '0.2.11-mock' end,
+  getPatchVersionCode = function () return 3400 end,
   ControlButton = function (id)
     return { id = id, pressed = function ()
         local p = M.hotkeys and M.hotkeys[id]

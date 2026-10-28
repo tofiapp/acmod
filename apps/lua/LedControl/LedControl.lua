@@ -11,6 +11,7 @@ local takeover = require('src/takeover')
 local lights = require('src/lights')
 local hotkeys = require('src/hotkeys')
 local mainWindow = require('src/ui/main')
+local selftest = require('src/selftest')
 
 local S = config.S
 
@@ -33,6 +34,7 @@ hotkeys.on('displayPage', function () require('src/display').nextPage() end)
 local function draw3D()
   takeover.draw3D()
   lights.draw3D()
+  selftest.render()
 end
 render.on('main.root.transparent', function ()
   safety.run('kreslení', draw3D)
@@ -41,6 +43,7 @@ end)
 local function update(dt)
   hotkeys.update()
   runtime.update(dt)
+  selftest.update(dt)
 end
 
 local function frameBegin()

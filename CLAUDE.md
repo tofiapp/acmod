@@ -262,6 +262,11 @@ apps/lua/LedControl/
   src/online.lua          online state, banner and the optional block of real controls online
   src/hotkeys.lua         ac.ControlButton master / next preset / flash, polled in script.update
   src/diag.lua            "Kopírovat diagnostiku" text
+  src/selftest.lua        Self-test (Diody → Diagnostika): every scenario of the preset forced alone (engine C.solo +
+                          Test) for 2 s, LEDs of the groups it wins read back in the render pass (takeover.readback:
+                          copy / material, original hidden; B unreadable = SKIP), then every display page and overlay
+                          (paints counted); protocol OK / FAIL / SKIP with LedControl / LuaJIT / CSP versions, copied
+                          with ac.setClipboardText; called from LedControl.lua update + render callback
   src/ui/kit.lua          UI building blocks (label column, (?) help, sections, choice, dot, colour + safe quick picks);
                           the design rules are docs/ledcontrol-ui.md; tests/ledcontrol/dump_ui.py prints a tab as text
   src/ui/main.lua         header (master, status, preset combo, errors, online / test pattern notes) + tabs loaded
