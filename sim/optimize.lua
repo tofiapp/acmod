@@ -39,6 +39,9 @@ if MODE == 2 then
     { 'SPARE', 'traction', 0.3, 1.0 },
     { 'FORGET_DELAY', 'traction', 0.05, 1.0, true },
     { 'FORGET_RATE', 'traction', 0.2, 5, true },
+    { 'LEARN_LAT', 'traction', 0.2, 1.0 },
+    { 'FLOOR_LAT', 'traction', 0.05, 0.4 },
+    { 'HOLD_RISE', 'traction', 0, 0.6 },
   }) do SPACE[#SPACE + 1] = p end
 else
   for _, p in ipairs({
