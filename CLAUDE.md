@@ -276,7 +276,9 @@ apps/lua/LedControl/
   src/display_pages.lua   pages Závod / Otáčky / Kola / Vlastní + OVERLAYS, THEMES, FONTS, FIELDS; arrangement by
                           shapeOf(W, H): 'wide' (W >= 2.4 H, a strip), 'tall' (H > 1.1 W), 'normal'; text scale and
                           margin from the style; labels at most half of their value; text fitted with measureDWriteText
-                          (width per string cached), ui.dwriteDrawTextClipped / drawRectFilled; also the tab preview
+                          (width + height per string cached), placed by hand and drawn with ui.dwriteDrawText (no clip
+                          rect: endPivotScale / endPivotRotation move vertices but not clip rects, so clipped text was
+                          cut away on the stretched display) / drawRectFilled; also the tab preview
   src/online.lua          online state, banner and the optional block of real controls online
   src/hotkeys.lua         ac.ControlButton master / next preset / flash, polled in script.update
   src/diag.lua            "Kopírovat diagnostiku" text

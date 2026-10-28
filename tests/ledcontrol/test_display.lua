@@ -49,8 +49,16 @@ local function bounds(cv, W, H, what)
   for i = 1, cv.n do
     local c = cv.cmds[i]
     local x1, y1, x2, y2 = c[2], c[3], c[4], c[5]
-    if x1 < -0.5 or y1 < -0.5 or x2 > W + 0.5 or y2 > H + 0.5 then
-      problems[#problems + 1] = string.format('%s outside the screen (%.0f,%.0f – %.0f,%.0f)', c[1], x1, y1, x2, y2)
+    local ix1, iy1, ix2, iy2 = x1, y1, x2, y2
+    if c[1] == 'text' then
+      -- a text's line box is 1.2 x its size; the glyphs (what must stay on the screen) about 0.9 x, centred in it
+      -- (e[17] = the stretch along the text's height, which a turn by 90 / 270 lays along x)
+      local ink = c[11] * 0.45 * (c[17] or 1)
+      if c[15] == 90 or c[15] == 270 then local m = (x1 + x2) / 2; ix1, ix2 = m - ink, m + ink
+      else local m = (y1 + y2) / 2; iy1, iy2 = m - ink, m + ink end
+    end
+    if ix1 < -0.5 or iy1 < -0.5 or ix2 > W + 0.5 or iy2 > H + 0.5 then
+      problems[#problems + 1] = string.format('%s outside the screen (%.0f,%.0f – %.0f,%.0f)', c[1], ix1, iy1, ix2, iy2)
     end
     if c[1] == 'text' then
       local w, size = c[14] * (c[16] or 1), c[11] * (c[17] or 1)

@@ -2,9 +2,9 @@
 -- Displej tab draws the same into the window as a preview). Every layout works in its own W x H box, positions and
 -- sizes relative to it, so one page fits 800 x 480, 480 x 272 and square screens alike.
 --
--- Drawing: ui.drawRectFilled(p1, p2, colour, rounding) and ui.dwriteDrawTextClipped(text, size, p1, p2, hAlign,
--- vAlign, wrap, colour) (both as official CSP apps call them); text is clipped to its box by the game and sized here
--- to fit it: the width of a string is measured once at size 100 with ui.measureDWriteText (official Navigator app)
+-- Drawing: ui.drawRectFilled(p1, p2, colour, rounding) and ui.dwriteDrawText(text, size, pos, colour) (both as
+-- official CSP code calls them); text is placed in its box by its measured size (no clip rect) and sized here to fit
+-- it: the width of a string is measured once at size 100 with ui.measureDWriteText (official Navigator app)
 -- and scaled, so a long text shrinks instead of running over the edge.
 -- Style (M.setStyle, from the Displej tab settings): colours (theme or own), font, rounding, brightness, the LED row
 -- (shown, number of cells, height, gap) and the zones of the page Vlastní.
@@ -88,18 +88,22 @@ local P1, P2 = vec2(), vec2()
 local ox, oy, sc = 0, 0, 1
 
 -- width of a string at size 100 (cleared when it grows large: lap times keep producing new strings)
-local widths, nWidths = {}, 0
+local widths, heights, nWidths = {}, {}, 0
 local function width100(s)
   local w = widths[s]
   if not w then
     local m = ui.measureDWriteText(s, 100)
     w = m and m.x or #s * 55
-    if nWidths > 400 then widths, nWidths = {}, 0 end
-    widths[s], nWidths = w, nWidths + 1
+    if nWidths > 400 then widths, heights, nWidths = {}, {}, 0 end
+    widths[s], heights[s], nWidths = w, m and m.y or 120, nWidths + 1
   end
   return w
 end
-function M.clearWidths() widths, nWidths = {}, 0 end       -- (the font changed)
+local function height100(s)
+  if not heights[s] then width100(s) end
+  return heights[s] or 120
+end
+function M.clearWidths() widths, heights, nWidths = {}, {}, 0 end       -- (the font changed)
 
 -- font size so s fits a w x h box: at most `size`, at most 92 % of the height, at most 96 % of the width
 function M.fit(s, size, w, h)
@@ -120,15 +124,17 @@ local function rect(x, y, w, h, p, r)
 end
 M.rect = rect
 
--- text fitted into the box x, y, w, h; align 0 start, 0.5 centre, 1 end
-local ALIGN = nil
+-- text fitted into the box x, y, w, h; align 0 start, 0.5 centre, 1 end. Placed by its measured size and drawn
+-- without a clip rect (ui.dwriteDrawText, as CSP's Android Auto touchscreen and VHS filter draw): the page may be
+-- scaled or turned afterwards (ui.endPivotScale / endPivotRotation move the vertices, not the clip rects, so a clipped
+-- text would be cut away in the texture). The fitting keeps it inside its box.
 local function text(s, x, y, w, h, size, align, p)
   if not s or s == '' then return end
-  if not ALIGN then ALIGN = { [0] = ui.Alignment.Start, [0.5] = ui.Alignment.Center, [1] = ui.Alignment.End } end
   local fs = M.fit(s, size, w, h)
-  P1.x, P1.y = ox + x * sc, oy + y * sc
-  P2.x, P2.y = ox + (x + w) * sc, oy + (y + h) * sc
-  ui.dwriteDrawTextClipped(s, fs * sc, P1, P2, ALIGN[align] or ALIGN[0.5], ALIGN[0.5], false, col(p))
+  local tw, th = width100(s) * fs / 100, height100(s) * fs / 100
+  P1.x = ox + (x + (w - tw) * (align or 0.5)) * sc
+  P1.y = oy + (y + (h - th) / 2) * sc
+  ui.dwriteDrawText(s, fs * sc, P1, col(p))
 end
 M.text = text
 

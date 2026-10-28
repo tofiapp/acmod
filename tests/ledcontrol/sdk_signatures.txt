@@ -44,9 +44,6 @@ render.on | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:119 | re
 render.setBlendMode | official app-csp-defaults/DynamicReturn/DynamicReturn.lua:179 | render.setBlendMode(render.BlendMode.AlphaBlend)
 render.setCullMode | official app-csp-defaults/DynamicReturn/DynamicReturn.lua:180 | render.setCullMode(render.CullMode.None)
 render.setDepthMode | official app-csp-defaults/AISplineEditor/AISplineEditor.lua:124 | render.setDepthMode(render.DepthMode.Off)
-ui.Alignment.Center | common/ac_ui_enums.lua:93 | Center = 0,
-ui.Alignment.End | common/ac_ui_enums.lua:94 | End = 1
-ui.Alignment.Start | common/ac_ui_enums.lua:92 | Start = -1,
 ui.ButtonFlags | common/ac_ui_enums.lua:208 | ui.ButtonFlags = __enum({ cpp = 'ImGuiButtonFlags' }, {
 ui.ButtonFlags.Disabled | common/ac_ui_enums.lua:218 | Disabled                  = 0x100,     -- Disable interactions
 ui.ButtonFlags.None | common/ac_game_enums.lua:2 | None = 0,
@@ -90,7 +87,7 @@ ui.drawCircleFilled | official app-csp-defaults/InternetRadio/InternetRadio.lua:
 ui.drawRect | official app-csp-defaults/RGBControl/RGBControl.lua:261 | ui.drawRect(p1, p2, rgbm.colors.gray)
 ui.drawRectFilled | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:228 | ui.drawRectFilled(from, from + range, rgbm(0, 0, 0, 0.5))
 ui.dummy | official app-csp-defaults/ControllerTweaks/ControllerTweaks.lua:217 | ui.dummy(range)
-ui.dwriteDrawTextClipped | official app-csp-defaults/SetupExchange/IconCounter.lua:11 | ui.dwriteDrawTextClipped(c > 99 and '99+' or c, c > 99 and 18 or 22, vec2(15, 6), 64, ui.Alignment.Center, ui.Alignment.Center)
+ui.dwriteDrawText | official acc-lua-internal/included-pp-filters/vhs/filter.lua:107 | ui.dwriteDrawText(paused and 'PAUSE' or 'PLAY',
 ui.endPivotRotation | official acc-lua-internal/included-apps/Mumble/src/MumbleWrapper.lua:1121 | ui.endPivotRotation(math.round(os.preciseClock() * -10) * 45, cur + overlayIconPosR)
 ui.endPivotScale | official acc-lua-internal/included-cars/android_auto/apps/youtube/app.lua:379 | ui.endPivotScale(vec2(0.65, 1), p)
 ui.getClipboardText | official app-csp-defaults/WebBrowser/src/Controls.lua:523 | clipboardContent = ui.getClipboardText():trim()

@@ -790,6 +790,19 @@ ui = {
   measureDWriteText = function (t, size)
     return vec2(M.textWidth(t, size), size * 1.2)
   end,
+  -- unclipped text at pos (top left): recorded with the box it covers in the mock metric
+  dwriteDrawText = function (t, size, pos, c)
+    local cv = M.recording
+    if cv then
+      cv.n = cv.n + 1
+      local e = cv.cmds[cv.n]
+      if not e then e = {}; cv.cmds[cv.n] = e end
+      local w = M.textWidth(t, size)
+      e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9] = 'text', pos.x, pos.y, pos.x + w, pos.y + size * 1.2, c.r, c.g,
+        c.b, c.mult or 1
+      e[10], e[11], e[12], e[13], e[14], e[15], e[16], e[17] = t, size, -1, 0, w, 0, 1, 1
+    end
+  end,
   dwriteDrawTextClipped = function (t, size, p1, p2, ha, va, wrap, c)
     local cv = M.recording
     if cv then
