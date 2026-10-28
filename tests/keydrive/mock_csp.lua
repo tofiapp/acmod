@@ -59,6 +59,7 @@ function M.reset()
   M.saved = {}
   M.renderModules = {}
   M.calls = {}
+  M.messages = {}
 end
 
 local function count(name) M.calls[name] = (M.calls[name] or 0) + 1 end
@@ -130,6 +131,7 @@ function M.install(core)
     getCar = function () return M.car end,
     getCarID = function () return 'test_car' end,
     setDrawUIActive = function (v) M.drawUIActive = v end,
+    setMessage = function (title, text) M.messages[#M.messages + 1] = text end,
     onRelease = function (cb) table.insert(M.callbacks.release, cb) end,
     StructItem = {
       key = function (k) return { __key = k } end,
@@ -152,6 +154,7 @@ function M.install(core)
   ui = {
     Font = { Small = 1 },
     windowHeight = function () return 1080 end,
+    windowWidth = function () return 1920 end,
     drawRectFilled = function () count('drawRectFilled') end,
     setCursor = function () end,
     text = function (t) count('text'); M.texts[#M.texts + 1] = t end,

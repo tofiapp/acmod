@@ -136,6 +136,10 @@ extension/lua/joypad-assist/KeyDrive/
   src/keys.lua                 AC keyboard binds and keyboard steering rates from cfg/controls.ini ([KEYBOARD] GAS/BRAKE/LEFT/RIGHT, [GEARUP]/[GEARDN]/
                                [HANDBRAKE] KEY; CM writes hex "0x53"), ac.isKeyDown. In gamepad mode AC does not
                                forward keyboard gear keys (user report), so assist.lua sets state.gearUp/gearDown/handbrake
+                               + TRACTION_KEY (settings.ini, default X; letter/digit, F1-F12 or key code): own switch,
+                               edge-triggered in assist.lua, ignored with Ctrl/Alt held or when it equals a driving
+                               key; throttleCore:setParams({TRACTION=false}); ac.setMessage; tcState 5 (badge in
+                               module_render even with diagnostics hidden; sim/replay.lua skips tc_state 5 rows)
   src/brake.lua                brake lock limiter on LONGITUDINAL slip only: max -slipRatio / peakRatio over grounded wheels
                                (peakRatio learned from straight-running wheels: |slipRatio| / ndSlip, default 0.13),
                                predicted 0.04 s; multiplier k on the ramped brake (K_UP 4, K_DOWN 15, floor 0.15);

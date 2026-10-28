@@ -35,6 +35,7 @@ tě pustit nemusí. Respektuj pravidla ligy (KeyDrive hlídá prokluz podobně j
 | THROTTLE_RISE_RATE / FALL_RATE | 120 / 400 | Náběh / pokles plynu v % za sekundu |
 | MAX_THROTTLE | 100 | Strop plynu v % |
 | TRACTION, TARGET_SLIP, TRACTION_RESPONSE | 1, 100, 100 | Hlídání prokluzu, povolený prokluz (v %; u režimu 2 vůči vyladěné hodnotě), rychlost reakce |
+| **TRACTION_KEY** | X | Klávesa, která za jízdy vypne a dalším stiskem zase zapne hlídání prokluzu (gumování, schválné roztočení auta). Písmeno nebo číslice, F1–F12 nebo kód klávesy (např. 0x58); 0 = bez klávesy |
 | **TRACTION_MODE** | 2 | 2 = regulace vyladěná v simulátoru (v0.10), 1 = předchozí „pamatující noha“ (v0.9), pro srovnání |
 | BRAKE_* , MAX_BRAKE, TRAIL_BRAKE_RELEASE | | Náběh a strop brzdy, hlídání zablokování, povolení brzdy při zatáčení |
 | STEER_STYLE | 0 | 0 = kopie řízení AC z klávesnice, 1 = vlastní křivka STEER_SPEED_CURVE |
@@ -42,6 +43,15 @@ tě pustit nemusí. Respektuj pravidla ligy (KeyDrive hlídá prokluz podobně j
 | **STEER_SPEED_SLOWDOWN** | 100 | Jak moc se řízení s rychlostí zpomaluje, v % zpomalení AC; 0 = ve všech rychlostech stejně rychle jako na místě |
 | STEER_LIMIT_STRENGTH, COUNTERSTEER_ASSIST | 0, 0 | Asistence řízení (vypnuté) |
 | SHOW_DIAGNOSTICS, RECORD_LOG | 1, 1 | Diagnostický panel, záznam jízdy |
+
+## Vypnutí hlídání prokluzu za jízdy
+
+Klávesa **X** (nastavení TRACTION_KEY) hlídání prokluzu vypne – plyn pak jde na klávesu jen s plynulým náběhem, kola se
+můžou protáčet (gumování, otočka). Ve hře se ukáže hláška a nahoře uprostřed zůstane nápis **KeyDrive: hlídání prokluzu
+VYP**, i když je diagnostika skrytá. Dalším stiskem se hlídání zapne; plyn se pak plynule (ne skokem) stáhne, pokud
+kola pořád hrabou. Po restartu skriptu (nová jízda) je hlídání vždy zapnuté, teleport do boxů ho nemění. Ctrl+X
+a Alt+X se ignorují (jiné zkratky). Když je TRACTION_KEY stejná klávesa jako plyn, brzda, řízení, řazení nebo ruční
+brzda, vypínač se nepoužije a hra ukáže hlášku.
 
 ## Logy pro ladění
 

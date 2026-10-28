@@ -52,6 +52,11 @@ function M.caution(path, throttleParams, tractionParams)
   local RA = { c.ratio_fl, c.ratio_fr, c.ratio_rl, c.ratio_rr }
   local AN = { c.angle_fl, c.angle_fr, c.angle_rl, c.angle_rr }
   local held, cut, needless = 0, 0, 0
+  -- tc_state 5: the driver switched the traction off with TRACTION_KEY (burnout, spin on purpose): replayed with
+  -- traction off as in the game and not counted
+  local TC = c.tc_state
+  local userOff = false
+  local ON, OFF = { TRACTION = th.p.TRACTION }, { TRACTION = false }
   local prevT
   for _, r in ipairs(rows) do
     local t = r[c.t]
@@ -64,11 +69,13 @@ function M.caution(path, throttleParams, tractionParams)
       wi.ndSlip, wi.slipRatio, wi.slipAngle = r[ND[i + 1]], r[RA[i + 1]], r[AN[i + 1]]
       wi.angularSpeed = kmh / 3.6 / 0.33
     end
+    local off = TC ~= nil and r[TC] == 5
+    if off ~= userOff then userOff = off; th:setParams(off and OFF or ON) end
     local key = r[c.key_gas] > 0
     local n = math.max(1, math.floor(dt / 0.003 + 0.5))
     local g
     for _ = 1, n do g = th:update(dt / n, key, car, r[c.lat_g], 0) end
-    if key then
+    if key and not off then
       held = held + dt
       if th.request - g > M.CUT then
         cut = cut + dt

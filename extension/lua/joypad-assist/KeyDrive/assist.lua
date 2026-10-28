@@ -22,6 +22,7 @@ local function loadSettings()
     THROTTLE_FALL_RATE = 400,
     MAX_THROTTLE = 100,
     TRACTION = true,
+    TRACTION_KEY = 'X',
     TRACTION_MODE = 2,
     TRACTION_RECOVERY = 100,
     TRACTION_MEMORY = true,
@@ -61,6 +62,7 @@ local P = {
   throttleFall = math.max(S.THROTTLE_FALL_RATE, 1) / 100,
   maxThrottle = math.clamp(S.MAX_THROTTLE / 100, 0, 1),
   traction = flag(S.TRACTION),
+  tractionKey = keys.parseKey(S.TRACTION_KEY), -- switches the traction control off and on while driving
   tractionMode = tonumber(S.TRACTION_MODE) == 1 and 1 or 2, -- 1 = remembering foot (v0.7-0.9), 2 = tuned regulator
   tractionRecovery = math.clamp(S.TRACTION_RECOVERY / 100, 0.5, 3), -- mode 2: how fast the throttle comes back
   tractionMemory = flag(S.TRACTION_MEMORY),                         -- mode 2: remember limits per gear and rpm
@@ -128,7 +130,18 @@ local trail = 0       -- smoothed |steer| for the trail-brake release
 local lastWritten, leakTime = 0, 0
 local hz = 0
 
+-- Traction switch key (TRACTION_KEY): off for a burnout or a spin on purpose, on again with the next press.
+-- Starts on with every script start; a teleport does not change it. tcState 5 = switched off with the key.
+local tractionUserOff = false
+local tractionKeyWasDown = false
+local TRACTION_ON, TRACTION_OFF = { TRACTION = P.traction }, { TRACTION = false }
+
 local function applyKeys()
+  keys.tractionKey = P.tractionKey
+  if P.tractionKey > 0 and keys.isDrivingKey(P.tractionKey) then
+    keys.tractionKey = -1
+    pcall(ac.setMessage, 'KeyDrive', 'TRACTION_KEY je stejná klávesa jako jedna z kláves pro jízdu: vypínač hlídání prokluzu nefunguje')
+  end
   live.bindGas, live.bindBrake, live.bindLeft, live.bindRight = keys.gas, keys.brake, keys.left, keys.right
   live.bindGearUp, live.bindGearDown = keys.gearUp, keys.gearDown
   keyRates.KB_SPEED, keyRates.KB_OPPOSITE, keyRates.KB_RESET = keys.steerSpeed, keys.steerOppositeSpeed,
@@ -204,6 +217,14 @@ function script.update(dt)
 
   local kGas, kBrake, kLeft, kRight = keys.gasDown(), keys.brakeDown(), keys.leftDown(), keys.rightDown()
 
+  local kTc = keys.tractionKeyDown()
+  if kTc and not tractionKeyWasDown and P.traction then
+    tractionUserOff = not tractionUserOff
+    throttleCore:setParams(tractionUserOff and TRACTION_OFF or TRACTION_ON)
+    pcall(ac.setMessage, 'KeyDrive', tractionUserOff and 'Hlídání prokluzu VYPNUTO' or 'Hlídání prokluzu zapnuto')
+  end
+  tractionKeyWasDown = kTc
+
   live.gx = state.gForces.x
   gas = throttleCore:update(dt, kGas, car, state.gForces.x, steer)
   live.cap = throttleCore.cap
@@ -256,7 +277,7 @@ function script.update(dt)
   live.tractionMode = P.tractionMode
   live.tcSx, live.tcLateral, live.tcTargetX = traction.sx, traction.lateral, traction.targetX
   live.tcSlipRate, live.tcKappaPeak = traction.slipRate, traction.kappaPeak
-  live.tcState = not traction.available and 0 or not P.traction and 1 or traction.airborne and 2
+  live.tcState = not traction.available and 0 or not P.traction and 1 or tractionUserOff and 5 or traction.airborne and 2
     or traction.active and 4 or 3
   live.brakeRequest = brakeRequest
   live.brakeK = brakeLimiter.k

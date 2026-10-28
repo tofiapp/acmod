@@ -36,6 +36,31 @@ local function down(k)
   return k > 0 and ac.isKeyDown(k)
 end
 
+-- KeyDrive's own key from settings.ini: a letter or digit ("X"), F1-F12, or a key code ("0x58", "88").
+-- Returns the VK code, or -1 for empty / "0" / unknown text (no key).
+function M.parseKey(v)
+  if type(v) == 'number' then return v > 0 and math.floor(v) or -1 end
+  if type(v) ~= 'string' then return -1 end
+  local s = v:match('^%s*(%S*)'):upper()
+  if s:match('^[A-Z0-9]$') then return s:byte() end
+  local f = tonumber(s:match('^F(%d%d?)$'))
+  if f and f >= 1 and f <= 12 then return 111 + f end
+  local n = tonumber(s)
+  return n and n > 0 and math.floor(n) or -1
+end
+
+-- The traction switch key, pressed on its own (Ctrl or Alt held: some other shortcut, ignored).
+M.tractionKey = -1
+function M.tractionKeyDown()
+  return down(M.tractionKey) and not ac.isKeyDown(17) and not ac.isKeyDown(18)
+end
+
+-- True when `k` is one of AC's driving or button keys read above (a switch there would fire while driving).
+function M.isDrivingKey(k)
+  return k == M.gas or k == M.brake or k == M.left or k == M.right or k == M.gearUp or k == M.gearDown
+    or k == M.handbrake
+end
+
 function M.gasDown() return down(M.gas) end
 function M.brakeDown() return down(M.brake) end
 function M.leftDown() return down(M.left) end

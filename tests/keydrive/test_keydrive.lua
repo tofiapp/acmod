@@ -999,5 +999,87 @@ do
   check('mode 2: corner cut keeps at least the corner floor', th2.traction.limit >= 0.19, th2.traction.limit)
 end
 
+-- 29. TRACTION_KEY (default X) switches the traction control off and on while driving (burnout, spin on purpose).
+do
+  local VK_X = 88
+  local function spinning()
+    local c = mock.car
+    c.gear, c.speedKmh, c.localVelocity.z = 1, 40, 11
+    for i = 2, 3 do c.wheels[i].ndSlip = 8; c.wheels[i].slipRatio = 1; c.wheels[i].angularSpeed = 60 end
+  end
+  local s = fresh()
+  spinning()
+  mock.keys[VK_UP] = true
+  run(s, 1.5, 0.003)
+  local live = mock.connected['KeyDrive.Live.v9']
+  check('switch: traction holds a spin back first', mock.joypad.gas < 0.45 and live.tcState ~= 5, mock.joypad.gas)
+  mock.keys[VK_X] = true
+  run(s, 0.3, 0.003) -- held: toggles once, not every step
+  mock.keys[VK_X] = nil
+  check('switch: off after one press', live.tcState == 5, live.tcState)
+  check('switch: message shown', mock.messages[#mock.messages] == 'Hlídání prokluzu VYPNUTO', mock.messages[#mock.messages])
+  local prev, maxRise = mock.joypad.gas, 0
+  for _ = 1, 500 do s.update(0.003); maxRise = math.max(maxRise, mock.joypad.gas - prev); prev = mock.joypad.gas end
+  check('switch off: full throttle into the spin', mock.joypad.gas > 0.95, mock.joypad.gas)
+  check('switch off: throttle rises at the key ramp, no step', maxRise <= 1.2 * 0.003 + 1e-9, maxRise)
+  mock.jump()
+  run(s, 0.1, 0.003)
+  check('switch: a teleport keeps it off', live.tcState == 5, live.tcState)
+  run(s, 1.0, 0.003)
+  mock.keys[17], mock.keys[VK_X] = true, true -- Ctrl+X is some other shortcut
+  run(s, 0.1, 0.003)
+  mock.keys[17], mock.keys[VK_X] = nil, nil
+  check('switch: Ctrl+X ignored', live.tcState == 5, live.tcState)
+  mock.keys[VK_X] = true
+  s.update(0.003)
+  mock.keys[VK_X] = nil
+  check('switch: on again with the next press', live.tcState ~= 5 and mock.messages[#mock.messages] == 'Hlídání prokluzu zapnuto',
+    live.tcState)
+  prev = mock.joypad.gas
+  local maxFall = 0
+  for _ = 1, 500 do s.update(0.003); maxFall = math.max(maxFall, prev - mock.joypad.gas); prev = mock.joypad.gas end
+  check('switch on: the spin is caught again', mock.joypad.gas < 0.5, mock.joypad.gas)
+  check('switch on: smooth cut, no step', maxFall <= 4.05 * 0.003, maxFall)
+  mock.keys[VK_UP] = nil
+
+  -- the badge shows even with the diagnostics hidden
+  s = fresh({ SHOW_DIAGNOSTICS = 0 })
+  mock.keys[VK_X] = true
+  s.update(0.003)
+  mock.keys[VK_X] = nil
+  live = mock.connected['KeyDrive.Live.v9']
+  local r = mock.load(CORE, 'module_render.lua')
+  mock.connected['KeyDrive.Live.v9'] = live
+  mock.texts = {}
+  r.update(0.016)
+  r.drawUI()
+  check('switch: badge drawn with the diagnostics hidden', mock.drawUIActive == true
+    and mock.texts[1] == 'KeyDrive: hlídání prokluzu VYP' and #mock.texts == 1, tostring(mock.texts[1]))
+
+  -- TRACTION = 0 in the settings: the key does nothing
+  s = fresh({ TRACTION = 0 })
+  mock.keys[VK_X] = true
+  s.update(0.003)
+  check('switch: no effect with TRACTION off', mock.connected['KeyDrive.Live.v9'].tcState == 1)
+  mock.keys[VK_X] = nil
+
+  -- a driving key is refused; other key formats
+  s = fresh({ TRACTION_KEY = '0x26' })
+  check('switch: a driving key is refused with a message', #mock.messages == 1)
+  mock.keys[VK_UP] = true
+  run(s, 0.1, 0.003)
+  check('switch: gas key does not toggle', mock.connected['KeyDrive.Live.v9'].tcState ~= 5)
+  mock.keys[VK_UP] = nil
+  s = fresh({ TRACTION_KEY = '0' })
+  mock.keys[VK_X] = true
+  s.update(0.003)
+  check('switch: 0 = no key', mock.connected['KeyDrive.Live.v9'].tcState ~= 5)
+  mock.keys[VK_X] = nil
+  local keys = require('src/keys')
+  check('key parse', keys.parseKey('x') == 88 and keys.parseKey('F5') == 116 and keys.parseKey('0x58') == 88
+    and keys.parseKey('88') == 88 and keys.parseKey('7') == 55 and keys.parseKey('') == -1 and keys.parseKey('F13') == -1
+    and keys.parseKey(88) == 88)
+end
+
 print(string.format('KeyDrive: %d passed, %d failed', passed, failed))
 return failed > 0

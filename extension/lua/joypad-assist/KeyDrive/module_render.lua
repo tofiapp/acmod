@@ -29,7 +29,7 @@ local C = {
   bad = rgbm(1, 0.35, 0.3, 1),
 }
 
-local TC_TEXT = { [0] = 'bez dat o kolech', 'vypnutá', 'kola ve vzduchu', 'připravena', 'OMEZUJE' }
+local TC_TEXT = { [0] = 'bez dat o kolech', 'vypnutá', 'kola ve vzduchu', 'připravena', 'OMEZUJE', 'VYPNUTÁ klávesou' }
 local BRAKE_TEXT = { [0] = 'bez dat o kolech', 'hlídání vypnuto', 'reguluje ABS auta', 'připravena', 'POVOLUJE' }
 local STEER_TEXT = { [0] = 'bez dat o kolech', 'nízká rychlost', 'volné', 'OMEZUJE', 'PROTIPOHYB' }
 
@@ -42,7 +42,8 @@ local function gearText(g)
 end
 
 function script.update(dt)
-  ac.setDrawUIActive(live.showDiagnostics)
+  -- the badge for traction switched off with TRACTION_KEY shows even with the diagnostics hidden
+  ac.setDrawUIActive(live.showDiagnostics or live.tcState == 5)
   if live.recordLog then recorder.update(dt, live, carState) end
   if live.alive ~= lastAlive then
     lastAlive = live.alive
@@ -103,7 +104,21 @@ local function label(x, y, s, color)
   if color then ui.textColored(s, color) else ui.text(s) end
 end
 
+-- Small badge at the top centre while the driver has the traction control switched off (tcState 5).
+local function tractionOffBadge()
+  local x = math.floor(ui.windowWidth() / 2) - 110
+  P.a:set(x, 56); P.b:set(x + 220, 82)
+  ui.drawRectFilled(P.a, P.b, C.bg, 4)
+  P.a:set(x, 56); P.b:set(x + 4, 82)
+  ui.drawRectFilled(P.a, P.b, C.bad, 2)
+  ui.pushFont(ui.Font.Small)
+  label(x + 14, 61, 'KeyDrive: hlídání prokluzu VYP', C.bad)
+  ui.popFont()
+end
+
 function script.drawUI()
+  if live.tcState == 5 then tractionOffBadge() end
+  if not live.showDiagnostics then return end
   local o = P.origin
   o.y = math.floor(ui.windowHeight() * 0.3)
   P.a:set(o.x, o.y); P.b:set(o.x + W, o.y + H)
@@ -151,7 +166,7 @@ function script.drawUI()
   marker(mid + math.clamp(live.steerRequest, -1, 1) * BAR_W * 0.5, o.y + 100, C.request, 1)
 
   label(o.x + 10, o.y + 124, lines[1])
-  label(o.x + 10, o.y + 142, lines[2], live.tcState == 4 and C.warn or nil)
+  label(o.x + 10, o.y + 142, lines[2], live.tcState == 5 and C.bad or live.tcState == 4 and C.warn or nil)
   label(o.x + 10, o.y + 160, lines[7], live.brakeState == 4 and C.warn or nil)
   label(o.x + 10, o.y + 178, lines[8], live.steerState >= 3 and C.warn or nil)
   label(o.x + 10, o.y + 196, lines[3])
