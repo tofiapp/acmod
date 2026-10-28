@@ -256,3 +256,11 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
   Supra refit, per-axle lateral grip, real slip noise (5 Hz band, 3-4x before), new scenarios kerb_straight,
   corner_then_straight; sim/replay.lua = open-loop replay of the real logs (sim/data/real) as a CAUTION measure
   (needless cut share) added to the optimizer cost. Replay of the Supra log: needless cut 55 s (0.10.0) -> 35 s.
+- v0.10.1 user: "improvement, but still work ahead". Mustang logs (d1-d3): needless cuts 11-14 %, the rest in fast corners
+  (LAT_SPLIT left 0.34 for the throttle at 0.75 lateral) -> ELLIPSE, GUARD_LEVEL; replay LOW 0.75.
+- v0.11.0: optimizer round 5 (all new parameters + 11 real datasets in the cost), core/tuned.lua = seed 63: needless
+  cuts in the real logs 29 % -> 4.2 %, sim passes up (tuning 92 -> 114/320, hidden 45 -> 61/200), but more short slip
+  spikes over 1.5x on the user's cars (tuning 20 -> 37/160, hidden 6 -> 21/100; peak max about the same, rear slides
+  unchanged, more power-on understeer at low grip: front axle slide in hidden h_kerb_corner_2nd at grip 0.8). MEM 0 in the tuned set; TRACTION_MEMORY now defaults to 0 and 1 really turns the memory on.
+  TRACTION_KEY (default X) switches the traction off/on while driving (user: burnouts, spinning on purpose).
+  If the user reports spins: TARGET_SLIP below 100 or TRACTION_MEMORY 1 first, then retune with a spike penalty.

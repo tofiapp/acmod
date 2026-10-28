@@ -980,6 +980,7 @@ do
   local tp = {}
   for k, v in pairs(tuned.traction) do tp[k] = v end
   tp.FORGET_RATE = 0 -- isolate the return path from the forgetting
+  tp.MEM = 1         -- memory on (TRACTION_MEMORY = 1; the tuned v0.11 set runs without it)
   local th = Throttle.new(tuned.throttle, tp)
   local c = newCar()
   th:configure(c)
@@ -990,7 +991,10 @@ do
   check('mode 2: a limit was learned on the straight spin', learned < 0.99, learned)
   check('mode 2: throttle back to full 1.5 s after grip returned (no pin)', th.out > 0.97, th.out)
   -- corner: high lateral slip, the longitudinal part crosses its small target -> cut, but nothing learned
-  local th2 = Throttle.new(tuned.throttle, tuned.traction)
+  local tp2 = {}
+  for k, v in pairs(tuned.traction) do tp2[k] = v end
+  tp2.MEM = 1
+  local th2 = Throttle.new(tuned.throttle, tp2)
   local c2 = newCar()
   th2:configure(c2)
   for _ = 1, 400 do setRear(c2, 0.7, 0.03, 4); th2:update(0.003, true, c2, 1.5, 0) end

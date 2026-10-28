@@ -25,7 +25,7 @@ local function loadSettings()
     TRACTION_KEY = 'X',
     TRACTION_MODE = 2,
     TRACTION_RECOVERY = 100,
-    TRACTION_MEMORY = true,
+    TRACTION_MEMORY = false,
     TARGET_SLIP = 100,
     TRACTION_RESPONSE = 100,
     CORNER_THROTTLE_REDUCTION = 0,
@@ -111,7 +111,7 @@ if P.tractionMode == 2 then
   tractionParams.K_BACK = tuned.traction.K_BACK * P.tractionRecovery
   tractionParams.K_UP = tuned.traction.K_UP * P.tractionRecovery
   tractionParams.FORGET_RATE = (tuned.traction.FORGET_RATE or 1.5) * P.tractionRecovery
-  tractionParams.MEM = P.tractionMemory and (tuned.traction.MEM or 1) or 0
+  tractionParams.MEM = P.tractionMemory and 1 or 0 -- v0.11: the tuned set runs without the memory (MEM 0)
 end
 local throttleCore = Throttle.new(throttleParams, tractionParams)
 live.targetSlip = throttleParams.TARGET_SLIP -- the target really used (overlay, recorder's wheelspin flag)
