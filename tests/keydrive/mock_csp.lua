@@ -90,12 +90,12 @@ function M.install(core)
     storage = function (defaults, prefix)
       local t = {}
       for k, v in pairs(defaults) do
-        local saved = M.storage[(prefix or '') .. k]
+        local saved = M.storage[prefix and (prefix .. '_' .. k) or k] -- like CSP: prefix .. '_' .. key
         if saved == nil then t[k] = v else t[k] = saved end
       end
       return setmetatable({}, {
         __index = t,
-        __newindex = function (_, k, v) t[k] = v; M.storage[(prefix or '') .. k] = v end,
+        __newindex = function (_, k, v) t[k] = v; M.storage[prefix and (prefix .. '_' .. k) or k] = v end,
       })
     end,
     overrideCarControls = function ()

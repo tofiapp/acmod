@@ -150,14 +150,14 @@ extension/lua/joypad-assist/KeyDrive/
                                after SPIN/CRASH/OFF, in Documents/Assetto Corsa/logs/keydrive (fallback: script folder;
                                v0.6 and older wrote into the script folder, which a reinstall wipes). Ask the user for
                                these files instead of guessing.
-  src/shared.lua               ac.connect layout 'KeyDrive.Live.v11' (v10: + keyboardCaptured from the render module; v11: + cfgSet/cfgShowDiag/cfgStrength from the KeyDriveConfig app, strength) (same layout on every side)
+  src/shared.lua               ac.connect layout 'KeyDrive.Live.v11' (v10: + keyboardCaptured from the render module; v11: + cfg* fields from the KeyDriveConfig app, strength; recorder column 'strength') (same layout on every side)
 apps/lua/KeyDriveKeyboardTest/ input method test, variant A (LAZY = FULL): with Input method = Keyboard drives gas/brake/
                                steer via ac.overrideCarControls (combineAxis = false), compares car.gas/brake/steer with
                                what it wrote (SEDÍ/NESEDÍ per channel), logs/keydrive/kb-test.csv; writeSafe() hands the car
                                back (steer math.huge, combineAxis true, kers Skip) on off, input change and onRelease
 apps/lua/KeyDriveConfig/       companion app. Window "KeyDrive" (src/settings.lua, v0.12.1): "Zobrazit diagnostiku" and
-                               "Síla zásahu" 0..100 (50 = as tuned) -> live.cfgSet/cfgShowDiag/cfgStrength (ac.storage
-                               'keydrive_', nothing sent until touched); assist.lua strengthScales: target x1.07..0.8,
+                               "Síla zásahu" 0..100 (50 = as tuned) -> live.cfgDiagSet/cfgShowDiag, cfgStrengthSet/cfgStrength (ac.storage
+                               'keydrive', each control sent only once touched); assist.lua strengthScales: target x1.07..0.8,
                                recovery x1.5..0.6; src/shared.lua is a COPY of the core's (test 32 compares them).
                                Window "KeyDrive Reference" + src/reference.lua, records
                                in NORMAL keyboard mode (KeyDrive inactive) keys, car.steer, front wheel angle, pedals,

@@ -1333,19 +1333,20 @@ do
   mock.connected['KeyDrive.Live.v11'] = live
   for _ = 1, 10 do app.update(1 / 60); s.update(0.003) end
   app.windowSettings(1 / 60)
-  check('app: untouched sends nothing', live.cfgSet == false and live.targetSlip == target50 and live.strength == 50)
+  check('app: untouched sends nothing', live.cfgDiagSet == false and live.cfgStrengthSet == false and live.targetSlip == target50
+    and live.strength == 50)
   check('app: checkbox shows the settings.ini value', mock.checkboxState == true)
 
   -- hide the diagnostics
   mock.click['Zobrazit diagnostiku'] = true
   app.windowSettings(1 / 60)
   app.update(1 / 60)
-  check('app: diagnostics switched off', live.cfgSet == true and live.cfgShowDiag == false)
+  check('app: diagnostics switched off', live.cfgDiagSet == true and live.cfgShowDiag == false and live.cfgStrengthSet == false)
   local r = mock.load(CORE, 'module_render.lua')
   mock.connected['KeyDrive.Live.v11'] = live
   r.update(0.016)
   check('render: overlay hidden by the app', mock.drawUIActive == false)
-  check('app: setting remembered', mock.storage['keydrive_touched'] == true and mock.storage['keydrive_showDiag'] == false)
+  check('app: setting remembered', mock.storage['keydrive_diagSet'] == true and mock.storage['keydrive_showDiag'] == false)
 
   -- strength 100: less allowed slip; 0: up to the tyre peak at most; back to 50: as tuned
   mock.sliderSet = { ['##strength'] = 100 }
@@ -1368,9 +1369,20 @@ do
   -- the remembered values come back with the next session
   local app2 = mock.load(APP, 'KeyDriveConfig.lua')
   mock.connected['KeyDrive.Live.v11'] = live
-  live.cfgSet = false
+  live.cfgDiagSet, live.cfgStrengthSet = false, false
   app2.update(1 / 60)
-  check('app: remembered settings sent again', live.cfgSet == true and live.cfgShowDiag == false)
+  check('app: remembered settings sent again', live.cfgDiagSet == true and live.cfgShowDiag == false and live.cfgStrengthSet)
+
+  -- moving only the slider while KeyDrive is not running must not touch the diagnostics (review v0.12.1)
+  mock.reset()
+  mock.settings = { KEYDRIVE = { SHOW_DIAGNOSTICS = 1 } }
+  local app3 = mock.load(APP, 'KeyDriveConfig.lua')
+  local live3 = mock.connected['KeyDrive.Live.v11']
+  mock.sliderSet = { ['##strength'] = 70 }
+  app3.windowSettings(1 / 60)
+  app3.update(1 / 60)
+  check('slider alone leaves the diagnostics to settings.ini', live3.cfgDiagSet == false and live3.cfgStrengthSet == true
+    and live3.cfgStrength == 70)
 end
 
 print(string.format('KeyDrive: %d passed, %d failed', passed, failed))

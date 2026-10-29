@@ -140,7 +140,10 @@ local function applyStrength(st)
     tp.K_UP = tuned.traction.K_UP * P.tractionRecovery * rs
     tp.FORGET_RATE = (tuned.traction.FORGET_RATE or 1.5) * P.tractionRecovery * rs
   else
-    strengthParams.TARGET_SLIP = P.targetSlip * ts
+    -- mode 1: the strength may not push the target past the tyre peak (unless TARGET_SLIP itself does)
+    local t = P.targetSlip * ts
+    local limit = P.targetSlip > 1 and P.targetSlip or 1
+    strengthParams.TARGET_SLIP = t < limit and t or limit
   end
   throttleCore:setParams(strengthParams)
   live.targetSlip = throttleCore.p.TARGET_SLIP
@@ -258,7 +261,7 @@ function script.update(dt)
 
   -- press edge of the raw key; ignored with Ctrl/Alt held, while typing in a text field (chat; flag from the render
   -- module) or with AC in the background
-  local wantStrength = live.cfgSet and math.clamp(live.cfgStrength, 0, 100) or 50
+  local wantStrength = live.cfgStrengthSet and math.clamp(live.cfgStrength, 0, 100) or 50
   if wantStrength ~= strengthNow then applyStrength(wantStrength) end
 
   local kTc = keys.tractionKeyDown()

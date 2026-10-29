@@ -60,10 +60,11 @@ function M.connect()
     tcSlipRate = ac.StructItem.double(), -- mode 2: filtered rate of the regulated slip, 1/s
     tcKappaPeak = ac.StructItem.double(), -- mode 2: learned slip ratio at the tyre's peak
     keyboardCaptured = ac.StructItem.boolean(), -- written by the render module: a text field has the keyboard (v10)
-    -- v11, written by the KeyDriveConfig app (window "KeyDrive"); cfgSet false = the app has not set anything yet, the
-    -- settings.ini values apply
-    cfgSet = ac.StructItem.boolean(),
+    -- v11, written by the KeyDriveConfig app (window "KeyDrive"); a *Set flag false = the user has not changed that
+    -- control yet, the settings.ini value applies
+    cfgDiagSet = ac.StructItem.boolean(),
     cfgShowDiag = ac.StructItem.boolean(), -- show the diagnostic overlay
+    cfgStrengthSet = ac.StructItem.boolean(),
     cfgStrength = ac.StructItem.double(),  -- traction intervention 0..100, 50 = as tuned
     strength = ac.StructItem.double(),     -- written by the core: the strength in effect (the app shows it)
   })

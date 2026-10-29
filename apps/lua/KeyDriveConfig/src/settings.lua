@@ -10,7 +10,9 @@ local shared = require('src/shared')
 local M = {}
 
 local live = shared.connect()
-local stored = ac.storage({ touched = false, showDiag = true, strength = 50 }, 'keydrive_')
+-- (real keys: 'keydrive_' .. name; each control has its own *Set flag: moving the slider while KeyDrive was not running
+-- used to copy the zeroed live.showDiagnostics and hide the overlay for good)
+local stored = ac.storage({ diagSet = false, showDiag = true, strengthSet = false, strength = 50 }, 'keydrive')
 
 local lastAlive, staleTime = -1, 0
 local WARN = rgbm(1, 0.6, 0.3, 1)
@@ -20,19 +22,8 @@ local textTarget, textTargetFor = '', -1
 
 function M.update(dt)
   if live.alive ~= lastAlive then lastAlive, staleTime = live.alive, 0 else staleTime = staleTime + dt end
-  if stored.touched then
-    live.cfgShowDiag = stored.showDiag
-    live.cfgStrength = stored.strength
-    live.cfgSet = true
-  end
-end
-
-local function touch()
-  if not stored.touched then
-    -- first change: start from what is in effect now (settings.ini)
-    stored.showDiag = live.showDiagnostics
-    stored.touched = true
-  end
+  if stored.diagSet then live.cfgShowDiag, live.cfgDiagSet = stored.showDiag, true end
+  if stored.strengthSet then live.cfgStrength, live.cfgStrengthSet = stored.strength, true end
 end
 
 local function strengthText(s)
@@ -49,19 +40,18 @@ function M.window()
     ui.separator()
   end
 
-  local show = stored.touched and stored.showDiag or (not stored.touched and live.showDiagnostics)
+  local show
+  if stored.diagSet then show = stored.showDiag else show = live.showDiagnostics end
   if ui.checkbox('Zobrazit diagnostiku', show) then
-    touch()
-    stored.showDiag = not show
+    stored.showDiag, stored.diagSet = not show, true
   end
 
   ui.text('Síla zásahu (hlídání prokluzu):')
   ui.setNextItemWidth(ui.windowWidth() - 24)
-  local s = stored.touched and stored.strength or 50
+  local s = stored.strengthSet and stored.strength or 50
   local value, changed = ui.slider('##strength', s, 0, 100, '%.0f', true)
   if changed then
-    touch()
-    stored.strength = math.floor(value + 0.5)
+    stored.strength, stored.strengthSet = math.floor(value + 0.5), true
   end
   local si = math.floor(s + 0.5)
   if si ~= textStrengthFor then
@@ -78,8 +68,7 @@ function M.window()
     ui.text(textTarget)
   end
   if ui.button('Výchozí (50)') then
-    touch()
-    stored.strength = 50
+    stored.strength, stored.strengthSet = 50, true
   end
   ui.separator()
   ui.textWrapped('Méně zásahu = víc plynu, kola se víc protáčí. Víc zásahu = klidnější, ale pomalejší. Klávesa X hlídání úplně vypne a zase zapne.')

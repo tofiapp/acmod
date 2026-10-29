@@ -41,7 +41,7 @@ local lastAlive, staleTime = -1, 0
 
 -- the KeyDriveConfig app's "Zobrazit diagnostiku" wins over SHOW_DIAGNOSTICS in settings.ini once it has been set
 local function showDiagnostics()
-  if live.cfgSet then return live.cfgShowDiag end
+  if live.cfgDiagSet then return live.cfgShowDiag end
   return live.showDiagnostics
 end
 local textTimer = 0
