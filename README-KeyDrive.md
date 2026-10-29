@@ -46,6 +46,20 @@ tě pustit nemusí. Respektuj pravidla ligy (KeyDrive hlídá prokluz podobně j
 | STEER_LIMIT_STRENGTH, COUNTERSTEER_ASSIST | 0, 0 | Asistence řízení (vypnuté) |
 | SHOW_DIAGNOSTICS, RECORD_LOG | 1, 1 | Diagnostický panel, záznam jízdy |
 
+## Okno KeyDrive ve hře (nastavení za jízdy)
+
+Aplikace **KeyDrive Config** (instaluje se se ZIPem) má ve hře okno **KeyDrive** (lišta aplikací vpravo):
+
+- **Zobrazit diagnostiku** – skryje nebo ukáže diagnostický panel (nápis „hlídání prokluzu VYP“ se ukáže vždy).
+- **Síla zásahu** (0–100, výchozí 50 = vyladěné nastavení) – kolik hlídání prokluzu ubírá: méně = víc plynu a víc
+  protáčení, víc = klidnější a opatrnější. Mění povolený prokluz (0: až na vrchol pneumatiky, 100: o 20 % méně)
+  a rychlost návratu plynu po ubrání (0: 1,5×, 100: 0,6×). Platí hned, bez restartu.
+- Obojí si okno pamatuje. Dokud v okně nic nezměníš, platí hodnoty z Content Manageru (SHOW_DIAGNOSTICS,
+  TARGET_SLIP, TRACTION_RECOVERY); posuvník se násobí s nimi.
+
+Simulátor (v0.12): síla 0 → víc protáčení (běhy nad 1,5× vrcholu 163 → 205 ze 380), síla 100 → zbytečné
+ubírání plynu na tvých jízdách 10 % → 37 % a pomalejší návrat po obrubníku.
+
 ## Vypnutí hlídání prokluzu za jízdy
 
 Klávesa **X** (nastavení TRACTION_KEY) hlídání prokluzu vypne – plyn pak jde na klávesu jen s plynulým náběhem, kola se

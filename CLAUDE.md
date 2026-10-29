@@ -150,12 +150,16 @@ extension/lua/joypad-assist/KeyDrive/
                                after SPIN/CRASH/OFF, in Documents/Assetto Corsa/logs/keydrive (fallback: script folder;
                                v0.6 and older wrote into the script folder, which a reinstall wipes). Ask the user for
                                these files instead of guessing.
-  src/shared.lua               ac.connect layout 'KeyDrive.Live.v10' (v9: + traction mode 2 state; v10: + keyboardCaptured from the render module) (same layout on every side)
+  src/shared.lua               ac.connect layout 'KeyDrive.Live.v11' (v10: + keyboardCaptured from the render module; v11: + cfgSet/cfgShowDiag/cfgStrength from the KeyDriveConfig app, strength) (same layout on every side)
 apps/lua/KeyDriveKeyboardTest/ input method test, variant A (LAZY = FULL): with Input method = Keyboard drives gas/brake/
                                steer via ac.overrideCarControls (combineAxis = false), compares car.gas/brake/steer with
                                what it wrote (SEDÍ/NESEDÍ per channel), logs/keydrive/kb-test.csv; writeSafe() hands the car
                                back (steer math.huge, combineAxis true, kers Skip) on off, input change and onRelease
-apps/lua/KeyDriveConfig/       companion app (phase 8 later). Now: window "KeyDrive Reference" + src/reference.lua, records
+apps/lua/KeyDriveConfig/       companion app. Window "KeyDrive" (src/settings.lua, v0.12.1): "Zobrazit diagnostiku" and
+                               "Síla zásahu" 0..100 (50 = as tuned) -> live.cfgSet/cfgShowDiag/cfgStrength (ac.storage
+                               'keydrive_', nothing sent until touched); assist.lua strengthScales: target x1.07..0.8,
+                               recovery x1.5..0.6; src/shared.lua is a COPY of the core's (test 32 compares them).
+                               Window "KeyDrive Reference" + src/reference.lua, records
                                in NORMAL keyboard mode (KeyDrive inactive) keys, car.steer, front wheel angle, pedals,
                                speed, slip -> Documents/Assetto Corsa/logs/keydrive/ac-reference.csv (first line '#' meta:
                                input method, AC keyboard rates, car). Use it to copy AC's own keyboard filter.
@@ -293,3 +297,6 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
 - v0.12.0: optimizer round 6 seed 74 + HOLD_BAND 0.70 by hand (0.6 brought back 1-3 s kerb recovery). Sim low-gear
   pulse 3.7 -> 1.5 /s, replay: low-gear pulse 2.79 -> 1.91, needless 12.3 -> 9.8 %, risk 0.14 -> 0.64 %; tuning passes
   98 -> 127/380, but runs over 1.5x peak slip 146 -> 163 (hidden 79 -> 90). Watch for spins in the next logs.
+- v0.12.1 (user: hide the KeyDrive window, a slider for the intervention): KeyDriveConfig window "KeyDrive" (see layout).
+  Sim, strength 0 / 25 / 50 / 75 / 100: runs over 1.5x peak 205 / 189 / 163 / 137 / 116 of 380, real-log needless
+  cuts 6 / 7 / 10 / 25 / 37 %, recovery fails 0 / 0 / 1 / 6 / 19.

@@ -116,6 +116,37 @@ end
 local throttleCore = Throttle.new(throttleParams, tractionParams)
 live.targetSlip = throttleParams.TARGET_SLIP -- the target really used (overlay, recorder's wheelspin flag)
 local traction = throttleCore.traction
+
+-- Intervention strength (slider "Síla zásahu" in the KeyDriveConfig app, 0..100, 50 = as set in settings.ini): scales
+-- the allowed slip (0: 1.07x, up to the tyre peak at most; 100: 0.8x) and how fast the cap comes back after a cut
+-- (0: 1.5x; 100: 0.6x), on top of TARGET_SLIP / TRACTION_RECOVERY. Applied while driving, without a script reload.
+local function strengthScales(st)
+  if st <= 50 then
+    local f = st / 50
+    return 1.07 - 0.07 * f, 1.5 - 0.5 * f
+  end
+  local f = (st - 50) / 50
+  return 1 - 0.2 * f, 1 - 0.4 * f
+end
+local strengthNow = -1
+local strengthParams = {} -- reused for setParams
+local function applyStrength(st)
+  strengthNow = st
+  local ts, rs = strengthScales(st)
+  if tractionParams then
+    strengthParams.TARGET_SLIP = math.min(1, tuned.throttle.TARGET_SLIP * P.targetSlip * ts)
+    local tp = traction.p
+    tp.K_BACK = tuned.traction.K_BACK * P.tractionRecovery * rs
+    tp.K_UP = tuned.traction.K_UP * P.tractionRecovery * rs
+    tp.FORGET_RATE = (tuned.traction.FORGET_RATE or 1.5) * P.tractionRecovery * rs
+  else
+    strengthParams.TARGET_SLIP = P.targetSlip * ts
+  end
+  throttleCore:setParams(strengthParams)
+  live.targetSlip = throttleCore.p.TARGET_SLIP
+  live.strength = st
+end
+applyStrength(50)
 local steerCore = Steering.new({
   STYLE_AC = P.steerStyleAC, RATE = P.steerRate, SLOWDOWN = P.steerSlowdown, CURVE = P.steerCurve,
   RETURN = P.steerReturn, BOTH_RETURN = P.steerBothReturn, LIMIT_STRENGTH = P.steerLimitStrength,
@@ -227,6 +258,9 @@ function script.update(dt)
 
   -- press edge of the raw key; ignored with Ctrl/Alt held, while typing in a text field (chat; flag from the render
   -- module) or with AC in the background
+  local wantStrength = live.cfgSet and math.clamp(live.cfgStrength, 0, 100) or 50
+  if wantStrength ~= strengthNow then applyStrength(wantStrength) end
+
   local kTc = keys.tractionKeyDown()
   if kTc and not tractionKeyWasDown and P.traction and not keys.modifierDown() and not live.keyboardCaptured
     and (not hasForeground or sim.isWindowForeground ~= false) then

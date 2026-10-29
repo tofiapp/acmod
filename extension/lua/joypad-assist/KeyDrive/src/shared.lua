@@ -5,7 +5,7 @@ local M = {}
 
 function M.connect()
   return ac.connect({
-    ac.StructItem.key('KeyDrive.Live.v10'),
+    ac.StructItem.key('KeyDrive.Live.v11'),
     alive = ac.StructItem.int32(),      -- physics update counter, wraps at 1e6
     keyMask = ac.StructItem.int32(),    -- bit 0 gas, 1 brake, 2 left, 3 right, 4 gear up, 5 gear down
     inGas = ac.StructItem.double(),     -- joypad state as it arrived, before KeyDrive
@@ -60,6 +60,12 @@ function M.connect()
     tcSlipRate = ac.StructItem.double(), -- mode 2: filtered rate of the regulated slip, 1/s
     tcKappaPeak = ac.StructItem.double(), -- mode 2: learned slip ratio at the tyre's peak
     keyboardCaptured = ac.StructItem.boolean(), -- written by the render module: a text field has the keyboard (v10)
+    -- v11, written by the KeyDriveConfig app (window "KeyDrive"); cfgSet false = the app has not set anything yet, the
+    -- settings.ini values apply
+    cfgSet = ac.StructItem.boolean(),
+    cfgShowDiag = ac.StructItem.boolean(), -- show the diagnostic overlay
+    cfgStrength = ac.StructItem.double(),  -- traction intervention 0..100, 50 = as tuned
+    strength = ac.StructItem.double(),     -- written by the core: the strength in effect (the app shows it)
   })
 end
 

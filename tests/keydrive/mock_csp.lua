@@ -165,7 +165,14 @@ function M.install(core)
     button = function (label) local c = M.click[label]; M.click[label] = nil; return c == true end,
     sameLine = function () end,
     separator = function () end,
-    slider = function (_, value) return value end,
+    slider = function (label, value)
+      local v = M.sliderSet and M.sliderSet[label]
+      if v ~= nil then M.sliderSet[label] = nil; return v, true end
+      return value, false
+    end,
+    checkbox = function (label, checked) count('checkbox'); local c = M.click[label]; M.click[label] = nil; M.checkboxState = checked; return c == true end,
+    setNextItemWidth = function () end,
+    textWrapped = function (t) count('text'); M.texts[#M.texts + 1] = t end,
     pushFont = function () end,
     popFont = function () end,
   }

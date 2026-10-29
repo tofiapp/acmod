@@ -115,7 +115,7 @@ do
   mock.keys[87] = true
   run(s, 0.2, 0.003)
   check('rebound gas key', mock.joypad.gas > 0.2, mock.joypad.gas)
-  check('binds published', mock.connected['KeyDrive.Live.v10'].bindGas == 87)
+  check('binds published', mock.connected['KeyDrive.Live.v11'].bindGas == 87)
 end
 
 -- 7b. Gear and handbrake keys from their own sections, hex values as Content Manager writes them.
@@ -143,7 +143,7 @@ do
   mock.keys[0x57] = true
   run(s, 0.1, 0.003)
   check('hex GAS bind', mock.joypad.gas > 0.1, mock.joypad.gas)
-  local live = mock.connected['KeyDrive.Live.v10']
+  local live = mock.connected['KeyDrive.Live.v11']
   check('gear binds published', live.bindGearUp == 0x53 and live.bindGearDown == 0x46)
 end
 
@@ -161,13 +161,13 @@ do
   mock.keys[VK_UP] = true
   mock.joypad.gas = 1 -- pretend AC sent raw keyboard gas
   s.update(0.003)
-  local live = mock.connected['KeyDrive.Live.v10']
+  local live = mock.connected['KeyDrive.Live.v11']
   check('incoming value published', live.inGas == 1, live.inGas)
   check('key mask', live.keyMask == 1, live.keyMask)
   check('render module requested', mock.renderModules[1] == 'module_render')
   local core = CORE
   local r = mock.load(core, 'module_render.lua')
-  mock.connected['KeyDrive.Live.v10'] = live
+  mock.connected['KeyDrive.Live.v11'] = live
   r.update(0.016)
   r.drawUI()
   check('render module draws', (mock.calls.drawRectFilled or 0) > 5 and (mock.calls.text or 0) >= 6)
@@ -274,7 +274,7 @@ do
   mock.keys[VK_UP] = true
   run(s, 0.5, 0.003)
   check('reverse: no traction limit', near(mock.joypad.gas, 0.6, 0.01), mock.joypad.gas)
-  check('reverse: traction state ready/off', mock.connected['KeyDrive.Live.v10'].tcState ~= 4)
+  check('reverse: traction state ready/off', mock.connected['KeyDrive.Live.v11'].tcState ~= 4)
 
   s = fresh()
   for i = 0, 3 do mock.car.wheels[i].tyreRadius = 0 end
@@ -282,14 +282,14 @@ do
   mock.keys[VK_UP] = true
   run(s, 0.5, 0.003)
   check('no wheel data: plain ramp', near(mock.joypad.gas, 0.6, 0.01), mock.joypad.gas)
-  check('no wheel data: state 0', mock.connected['KeyDrive.Live.v10'].tcState == 0)
+  check('no wheel data: state 0', mock.connected['KeyDrive.Live.v11'].tcState == 0)
 
   s = fresh()
   mock.keys[VK_UP] = true
   run(s, 0.3, 0.003)
   for i = 2, 3 do mock.car.wheels[i].load = 0; mock.car.wheels[i].angularSpeed = 200 end
   run(s, 0.2, 0.003)
-  check('airborne: state 2', mock.connected['KeyDrive.Live.v10'].tcState == 2)
+  check('airborne: state 2', mock.connected['KeyDrive.Live.v11'].tcState == 2)
   check('airborne: throttle not cut', mock.joypad.gas > 0.4, mock.joypad.gas)
 
   s = fresh({ CORNER_THROTTLE_REDUCTION = 25 })
@@ -302,11 +302,11 @@ do
   mock.keys[VK_UP] = true
   s.update(0.003)
   for _ = 1, 200 do mock.car.gas = 1; s.update(0.003) end
-  check('leak detected', mock.connected['KeyDrive.Live.v10'].leak == true)
+  check('leak detected', mock.connected['KeyDrive.Live.v11'].leak == true)
   s = fresh()
   mock.keys[VK_UP] = true
   for _ = 1, 200 do s.update(0.003); mock.car.gas = mock.joypad.gas end
-  check('no false leak', mock.connected['KeyDrive.Live.v10'].leak == false)
+  check('no false leak', mock.connected['KeyDrive.Live.v11'].leak == false)
 end
 
 -- 13. Fast corner: 200 km/h, rear axle already at the limit sideways (ndSlip from cornering, wheels turning at road
@@ -435,7 +435,7 @@ local function stop(dt, settings, seconds, abs)
   mock.keys[VK_DOWN] = nil
   local sum = 0
   for _, x in ipairs(slips) do sum = sum + x end
-  local live = mock.connected['KeyDrive.Live.v10']
+  local live = mock.connected['KeyDrive.Live.v11']
   return { t = t, dist = dist, slipMean = sum / math.max(1, #slips), lockedShare = locked / math.max(1, #slips),
     memory = live.brakeMemory, state = live.brakeState, peak = live.brakePeakRatio }
 end
@@ -539,7 +539,7 @@ local function corner(settings, seconds, init, keys)
   local sum = 0
   for _, x in ipairs(fronts) do sum = sum + x end
   return { front = sum / #fronts, lat = latSum / n, r = r, vy = vy, maxR = maxR,
-    live = mock.connected['KeyDrive.Live.v10'] }
+    live = mock.connected['KeyDrive.Live.v11'] }
 end
 
 do
@@ -680,7 +680,7 @@ do
       if nd > 1.3 then spin = spin + 1 end
       if nd > maxNd then maxNd = nd end
       if os.getenv('KD_TRACE') and n % 25 == 0 then
-        local l = mock.connected['KeyDrive.Live.v10']
+        local l = mock.connected['KeyDrive.Live.v11']
         print(string.format('  t %.2f rpm %4.0f gas %.2f cap %.2f mem %.2f nd %.2f', n * 0.003, c.rpm, g, l.tcLimit, l.tcMemory, nd))
       end
     end
@@ -710,7 +710,7 @@ do
     mock.joypad.steer = acSteer              -- AC fills the joypad state before the script runs
     s.update(0.003)
   end
-  local live = mock.connected['KeyDrive.Live.v10']
+  local live = mock.connected['KeyDrive.Live.v11']
   check('AC steering detected', live.steerFromAC == true, live.acSteerVotes)
   check('AC steering passed through untouched', mock.joypad.steer == acSteer, mock.joypad.steer)
   mock.keys[VK_RIGHT] = nil
@@ -720,7 +720,7 @@ do
   mock.car.speedKmh, mock.car.localVelocity.z = 100, 28
   mock.keys[VK_RIGHT] = true
   run(s, 0.6, 0.003)
-  check('no AC steering: KeyDrive steers', mock.connected['KeyDrive.Live.v10'].steerFromAC == false and mock.joypad.steer > 0.3,
+  check('no AC steering: KeyDrive steers', mock.connected['KeyDrive.Live.v11'].steerFromAC == false and mock.joypad.steer > 0.3,
     mock.joypad.steer)
   mock.keys[VK_RIGHT] = nil
 end
@@ -1084,7 +1084,7 @@ do
   spinning()
   mock.keys[VK_UP] = true
   run(s, 1.5, 0.003)
-  local live = mock.connected['KeyDrive.Live.v10']
+  local live = mock.connected['KeyDrive.Live.v11']
   check('switch: traction holds a spin back first', mock.joypad.gas < 0.45 and live.tcState ~= 5, mock.joypad.gas)
   mock.keys[VK_X] = true
   run(s, 0.3, 0.003) -- held: toggles once, not every step
@@ -1139,9 +1139,9 @@ do
   mock.keys[VK_X] = true
   s.update(0.003)
   mock.keys[VK_X] = nil
-  live = mock.connected['KeyDrive.Live.v10']
+  live = mock.connected['KeyDrive.Live.v11']
   local r = mock.load(CORE, 'module_render.lua')
-  mock.connected['KeyDrive.Live.v10'] = live
+  mock.connected['KeyDrive.Live.v11'] = live
   mock.texts = {}
   r.update(0.016)
   r.drawUI()
@@ -1152,7 +1152,7 @@ do
   s = fresh({ TRACTION = 0 })
   mock.keys[VK_X] = true
   s.update(0.003)
-  check('switch: no effect with TRACTION off', mock.connected['KeyDrive.Live.v10'].tcState == 1 and #mock.messages == 0)
+  check('switch: no effect with TRACTION off', mock.connected['KeyDrive.Live.v11'].tcState == 1 and #mock.messages == 0)
   mock.keys[VK_X] = nil
 
   -- a driving key is refused; other key formats
@@ -1160,12 +1160,12 @@ do
   check('switch: a driving key is refused with a message', #mock.messages == 1)
   mock.keys[VK_UP] = true
   run(s, 0.1, 0.003)
-  check('switch: gas key does not toggle', mock.connected['KeyDrive.Live.v10'].tcState ~= 5)
+  check('switch: gas key does not toggle', mock.connected['KeyDrive.Live.v11'].tcState ~= 5)
   mock.keys[VK_UP] = nil
   s = fresh({ TRACTION_KEY = '0' })
   mock.keys[VK_X], mock.keys[48] = true, true
   s.update(0.003)
-  check('switch: 0 = no key (neither X nor the digit 0)', mock.connected['KeyDrive.Live.v10'].tcState ~= 5)
+  check('switch: 0 = no key (neither X nor the digit 0)', mock.connected['KeyDrive.Live.v11'].tcState ~= 5)
   mock.keys[VK_X], mock.keys[48] = nil, nil
 
   -- a controls change that makes the switch key a driving key while traction is off: back on, never stuck off
@@ -1173,17 +1173,17 @@ do
   mock.keys[VK_X] = true
   s.update(0.003)
   mock.keys[VK_X] = nil
-  check('switch: off before the controls change', mock.connected['KeyDrive.Live.v10'].tcState == 5)
+  check('switch: off before the controls change', mock.connected['KeyDrive.Live.v11'].tcState == 5)
   mock.controls.GEARUP = { KEY = '0x58' }
   for _, cb in ipairs(mock.callbacks.controls) do cb() end
   s.update(0.003)
-  check('switch: key taken by a driving bind turns traction back on', mock.connected['KeyDrive.Live.v10'].tcState ~= 5)
+  check('switch: key taken by a driving bind turns traction back on', mock.connected['KeyDrive.Live.v11'].tcState ~= 5)
 
   -- the render module publishes text input focus
   s = fresh()
-  live = mock.connected['KeyDrive.Live.v10']
+  live = mock.connected['KeyDrive.Live.v11']
   r = mock.load(CORE, 'module_render.lua')
-  mock.connected['KeyDrive.Live.v10'] = live
+  mock.connected['KeyDrive.Live.v11'] = live
   mock.uiState.wantCaptureKeyboard = true
   r.update(0.016)
   check('render module: text input focus published', live.keyboardCaptured == true)
@@ -1303,6 +1303,74 @@ do
   end
   check('PRED_KD 0.3: a real overshoot cut is unchanged', same(r1.over, r3.over), #r1.over .. '/' .. #r3.over)
   check('PRED_KD 0.3: a guard (lateral slide) cut is unchanged', same(r1.guard, r3.guard), #r1.guard .. '/' .. #r3.guard)
+end
+
+-- 32. KeyDriveConfig window "KeyDrive" (v0.12.1): diagnostics on/off and the intervention strength slider, sent to the
+-- core and the render module through the shared struct; nothing changes until the user touches a control.
+do
+  -- the app's copy of the shared layout must equal the core's
+  local function layout(dir)
+    mock.reset()
+    mock.install(dir)
+    local captured
+    ac.connect = function (l) captured = l; return {} end
+    dofile(dir .. '/src/shared.lua').connect()
+    local key, fields = captured[1].__key, {}
+    for k in pairs(captured) do if type(k) == 'string' then fields[#fields + 1] = k end end
+    table.sort(fields)
+    return key .. ':' .. table.concat(fields, ',')
+  end
+  check('app and core share the same live layout', layout(APP) == layout(CORE))
+
+  mock.reset()
+  mock.settings = { KEYDRIVE = { SHOW_DIAGNOSTICS = 1 } }
+  local s = mock.load(CORE, 'assist.lua')
+  local live = mock.connected['KeyDrive.Live.v11']
+  s.update(0.003)
+  local target50 = live.targetSlip
+  local kBack50 = nil
+  local app = mock.load(APP, 'KeyDriveConfig.lua')
+  mock.connected['KeyDrive.Live.v11'] = live
+  for _ = 1, 10 do app.update(1 / 60); s.update(0.003) end
+  app.windowSettings(1 / 60)
+  check('app: untouched sends nothing', live.cfgSet == false and live.targetSlip == target50 and live.strength == 50)
+  check('app: checkbox shows the settings.ini value', mock.checkboxState == true)
+
+  -- hide the diagnostics
+  mock.click['Zobrazit diagnostiku'] = true
+  app.windowSettings(1 / 60)
+  app.update(1 / 60)
+  check('app: diagnostics switched off', live.cfgSet == true and live.cfgShowDiag == false)
+  local r = mock.load(CORE, 'module_render.lua')
+  mock.connected['KeyDrive.Live.v11'] = live
+  r.update(0.016)
+  check('render: overlay hidden by the app', mock.drawUIActive == false)
+  check('app: setting remembered', mock.storage['keydrive_touched'] == true and mock.storage['keydrive_showDiag'] == false)
+
+  -- strength 100: less allowed slip; 0: up to the tyre peak at most; back to 50: as tuned
+  mock.sliderSet = { ['##strength'] = 100 }
+  app.windowSettings(1 / 60)
+  app.update(1 / 60)
+  s.update(0.003)
+  check('strength 100: allowed slip 0.8x', math.abs(live.targetSlip - target50 * 0.8) < 1e-9 and live.strength == 100,
+    live.targetSlip)
+  mock.sliderSet = { ['##strength'] = 0 }
+  app.windowSettings(1 / 60)
+  app.update(1 / 60)
+  s.update(0.003)
+  check('strength 0: more slip, never past the tyre peak', live.targetSlip > target50 and live.targetSlip <= 1, live.targetSlip)
+  mock.click['Výchozí (50)'] = true
+  app.windowSettings(1 / 60)
+  app.update(1 / 60)
+  s.update(0.003)
+  check('strength back to 50 = as tuned', live.targetSlip == target50 and live.strength == 50)
+
+  -- the remembered values come back with the next session
+  local app2 = mock.load(APP, 'KeyDriveConfig.lua')
+  mock.connected['KeyDrive.Live.v11'] = live
+  live.cfgSet = false
+  app2.update(1 / 60)
+  check('app: remembered settings sent again', live.cfgSet == true and live.cfgShowDiag == false)
 end
 
 print(string.format('KeyDrive: %d passed, %d failed', passed, failed))

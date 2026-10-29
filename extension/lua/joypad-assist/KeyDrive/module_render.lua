@@ -38,6 +38,12 @@ local BRAKE_TEXT = { [0] = 'bez dat o kolech', 'hlídání vypnuto', 'reguluje A
 local STEER_TEXT = { [0] = 'bez dat o kolech', 'nízká rychlost', 'volné', 'OMEZUJE', 'PROTIPOHYB' }
 
 local lastAlive, staleTime = -1, 0
+
+-- the KeyDriveConfig app's "Zobrazit diagnostiku" wins over SHOW_DIAGNOSTICS in settings.ini once it has been set
+local function showDiagnostics()
+  if live.cfgSet then return live.cfgShowDiag end
+  return live.showDiagnostics
+end
 local textTimer = 0
 local lines = { '', '', '', '', '', '', '', '' }
 
@@ -48,7 +54,7 @@ end
 function script.update(dt)
   live.keyboardCaptured = okCapture and uiState.wantCaptureKeyboard == true
   -- the badge for traction switched off with TRACTION_KEY shows even with the diagnostics hidden
-  ac.setDrawUIActive(live.showDiagnostics or live.tcState == 5)
+  ac.setDrawUIActive(showDiagnostics() or live.tcState == 5)
   if live.recordLog then recorder.update(dt, live, carState) end
   if live.alive ~= lastAlive then
     lastAlive = live.alive
@@ -123,7 +129,7 @@ end
 
 function script.drawUI()
   if live.tcState == 5 then tractionOffBadge() end
-  if not live.showDiagnostics then return end
+  if not showDiagnostics() then return end
   local o = P.origin
   o.y = math.floor(ui.windowHeight() * 0.3)
   P.a:set(o.x, o.y); P.b:set(o.x + W, o.y + H)
