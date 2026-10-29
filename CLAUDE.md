@@ -300,3 +300,9 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
 - v0.12.1 (user: hide the KeyDrive window, a slider for the intervention): KeyDriveConfig window "KeyDrive" (see layout).
   Sim, strength 0 / 25 / 50 / 75 / 100: runs over 1.5x peak 205 / 189 / 163 / 137 / 116 of 380, real-log needless
   cuts 6 / 7 / 10 / 25 / 37 %, recovery fails 0 / 0 / 1 / 6 / 19.
+- v0.12.1 logs (Road America, Mustang; sim/data/real h1-h4): strength 100 for 3 sessions, 50 for one. Strength 50:
+  low-gear pulse 1.38 /s (0.11.1: 2.2-3.0), needless 14 %, drive slip > 1.5x 0.7 % of held time (0.11.1: 3 %). Strength
+  100: needless 34 % (cuts to 0.2-0.45 in 3rd-gear corners at 1.3-1.9 g). Open issues: (a) launch after revving in
+  NEUTRAL (traction off in N by design): engaging 1st with 0.8+ request -> rear ndSlip up to 38, the cap reaches the
+  floor too late (clutch dump) -> a launch cap on N->1 at standstill; (b) second slide under trail braking (rear
+  combined slip 1.5-2.2 while the brake limiter only watches longitudinal slip) -> brake phase.

@@ -24,4 +24,8 @@ return {
   '2026-10-29g3-mustang.csv',
   '2026-10-29g4-mustang.csv',
   '2026-10-29g5-mustang.csv',
+  '2026-10-29h1-mustang.csv',
+  '2026-10-29h2-mustang.csv',
+  '2026-10-29h3-mustang.csv',
+  '2026-10-29h4-mustang.csv',
 }
