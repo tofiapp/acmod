@@ -92,6 +92,9 @@ M.DEFAULTS = {
                            -- cuts made by the prediction or by noise near the target (those re-armed it again and
                            -- again after a kerb in the sim: the throttle came back 1-2 s late)
   RET_EPISODE = 0,         -- 1: the window runs from the first arming cut; 0: every arming cut restarts it
+  PRED_KD = 1,             -- cut rate scale while only the PREDICTION is over the target (measured slip at or below
+                           -- it, guard not the cause); 1 = as v0.11.1. v0.11.1 logs: 52 of 63 low-gear cap falls began
+                           -- on the prediction alone (measured slip 0.78-0.89 of the target) and fed the pulsing
 }
 
 local RPM_BAND = 500
@@ -319,6 +322,7 @@ local function update2(self, dt, carState, requested, target, response)
     if A > requested + P.AW then A = requested + P.AW end
     local out = requested < A and requested or A
     local e = sp / target - 1
+    local eX = e
     -- guard: the tyres past their combined peak (e.g. the rear sliding sideways with little wheelspin) always take
     -- throttle away, whatever the longitudinal part says (v0.9 log: a long slide with the throttle left on)
     if P.GUARD ~= 0 then
@@ -342,6 +346,8 @@ local function update2(self, dt, carState, requested, target, response)
       end
       local kd = P.K_DOWN * e
       if e > 1 then kd = kd + P.K_DOWN_SEVERE * (e - 1) end
+      -- prediction-only cut (the measured slip is not over the target and the guard did not raise e): gentler
+      if reg <= target and e <= eX then kd = kd * P.PRED_KD end
       if kd > P.FALL_MAX then kd = P.FALL_MAX end
       local floor = corner and (P.FLOOR_LAT > P.FLOOR and P.FLOOR_LAT or P.FLOOR) or P.FLOOR
       if A > floor then

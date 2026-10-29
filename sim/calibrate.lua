@@ -7,9 +7,10 @@
 --    throttle, uncut, on a straight: steps between 40 Hz samples per gear (Mustang, 3rd-6th). Real values (REAL.noise)
 --    come from the Mustang logs of v0.10-v0.11.1 (17 sessions, ~6500 rows of steady full throttle, rows resampled to
 --    40 Hz like the sim; |lat_g| < 0.3, 0.3 s after the run starts).
--- 2. pulse: whole key-held throttle pulsing in 1st/2nd gear, the same measure as the analysis of the in-game logs:
---    throttle direction changes per second (1 % deadband) on 40 Hz samples of the sent throttle, key held, from 0.5 s
---    after the key press, per gear run (a shift starts a new run, its first 0.3 s skipped). Run for the three
+-- 2. pulse: whole key-held throttle pulsing in 1st/2nd gear, the same measure as the analysis of the in-game logs and
+--    the tuning cost (metrics.pulseStats): throttle direction changes per second (1 % deadband) on 40 Hz samples of the
+--    sent throttle, key held, from 0.5 s after the key press, per gear run (a shift starts a new run, its first 0.3 s
+--    skipped). Run for the three
 --    parameter sets the user drove: s12 (v0.10.x), r63 (v0.11.0) and r63 + RET_HOLD 0.5 (v0.11.1, core/tuned.lua).
 --    Real low-gear values (REAL.pulse) and their order s12 < r63+hold < r63 are the check.
 -- Deterministic (fixed seeds); pure LuaJIT, runs the game's own throttle core.
@@ -19,6 +20,7 @@ ROOT = ROOT or '.'
 package.path = ROOT .. '/sim/?.lua;' .. ROOT .. '/extension/lua/joypad-assist/KeyDrive/?.lua;' .. package.path
 
 local runner = require('runner')
+local metrics = require('metrics')
 local Throttle = require('core/throttle')
 
 local M = {}
@@ -202,46 +204,12 @@ function M.noise(car, P, nSeeds, opts)
   return out
 end
 
--- whole key-held low-gear throttle pulsing of one trace: returns held time (s) and direction changes in 1st/2nd
-local function lowGearPulse(tr)
-  local dt = tr.t[2] - tr.t[1]
-  local every = SAMPLE / dt
-  local dur, changes = 0, 0
-  local keySince, gearSince, lastGear = nil, nil, nil
-  local run = {}
-  local function flush()
-    if #run >= 10 then
-      local d, ref = 0, run[1]
-      for j = 2, #run do
-        local x = run[j]
-        if x > ref + 0.01 then
-          if d < 0 then changes = changes + 1 end
-          d, ref = 1, x
-        elseif x < ref - 0.01 then
-          if d > 0 then changes = changes + 1 end
-          d, ref = -1, x
-        end
-      end
-      dur = dur + (#run - 1) * SAMPLE
-    end
-    run = {}
-  end
-  local k = 1
-  while true do
-    local i = math.floor(k * every + 0.5)
-    if i > tr.n then break end
-    local t, g = tr.t[i], tr.gear[i]
-    if tr.key[i] then keySince = keySince or t else keySince = nil end
-    if g ~= lastGear then gearSince, lastGear = t, g; flush() end
-    if keySince and t - keySince >= 0.5 and (g == 1 or g == 2) and t - gearSince >= 0.3 then
-      run[#run + 1] = tr.thr[i]
-    else
-      flush()
-    end
-    k = k + 1
-  end
-  flush()
-  return dur, changes
+-- whole key-held low-gear throttle pulsing of one trace: returns held time (s) and direction changes in 1st/2nd,
+-- counted by metrics.pulseStats (via metrics.pulseOf: 40 Hz, the scenario's kerbs and grip steps left out), i.e. the
+-- same count the tuning cost and the real-log replay use
+local function lowGearPulse(tr, scn)
+  local _, acc = metrics.pulseOf(scn or {}, tr)
+  return acc.heldLow, acc.changesLow
 end
 M.lowGearPulse = lowGearPulse
 
@@ -269,7 +237,7 @@ function M.pulse(car, P, nSeeds, opts)
     for seed = 1, nSeeds do
       local tr = runner.run(sc.def, { car = car, rate = 'physics', seed = hash(sc.name .. car.name .. seed),
         controller = recording(P, {}), sensor = opts.sensor, dt = opts.dt })
-      local d, c = lowGearPulse(tr)
+      local d, c = lowGearPulse(tr, sc.def)
       d1, c1 = d1 + d, c1 + c
     end
     per[sc.name] = d1 > 0 and c1 / d1 or nil

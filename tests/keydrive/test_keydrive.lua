@@ -1190,5 +1190,111 @@ do
     and keys.parseKey(88) == 88)
 end
 
+-- 31. Mode 2 PRED_KD: a cut made by the prediction alone (measured slip at or below the target, predicted slip over
+-- it, guard not the cause) falls at PRED_KD x the normal rate (v0.11.1 logs: 52 of 63 low-gear cap falls began on the
+-- prediction alone and fed the pulsing). PRED_KD = 1 must be bit-exact with v0.11.1 (fixtures/traction_v0111.lua =
+-- core/traction.lua before PRED_KD; drop the fixture comparison once traction.lua changes behaviour on purpose).
+do
+  local Traction = dofile(CORE .. '/core/traction.lua')
+  local Old = dofile(here .. '/fixtures/traction_v0111.lua')
+  local tuned = dofile(CORE .. '/core/tuned.lua')
+  local function v3(x, y, z) return { x = x, y = y, z = z } end
+  local function newCar()
+    local wheels = {}
+    for i = 0, 3 do
+      wheels[i] = { ndSlip = 0.2, load = 3000, angularSpeed = 60, tyreRadius = 0.33, slipRatio = 0.02, slipAngle = 0.3 }
+    end
+    return { gear = 1, rpm = 4000, localVelocity = v3(0, 0, 10), tractionType = 0, wheels = wheels }
+  end
+  local function params(extra)
+    local tp = {}
+    for k, v in pairs(tuned.traction) do tp[k] = v end
+    for k, v in pairs(extra or {}) do tp[k] = v end
+    return tp
+  end
+  -- (a) bit-exact against v0.11.1 on a long pseudo-random trace (lifts, shifts, spins, slides, airborne, 333 Hz-50 fps)
+  local function trace(extra, steps)
+    local st = 12345
+    local function rnd() st = (st * 1103515245 + 12345) % 2147483648; return st / 2147483648 end
+    local a, b = Traction.new(params(extra)), Old.new(params(extra))
+    local ca, cb = newCar(), newCar()
+    a:configure(ca); b:configure(cb)
+    local nd, sr, sa, req, gear, maxd = 0.3, 0.04, 0.3, 0, 1, 0
+    for i = 1, steps do
+      if i % 97 == 0 then req = rnd() < 0.15 and 0 or rnd() end
+      if i % 1301 == 0 then gear = 1 + math.floor(rnd() * 5) end
+      local u = rnd()
+      if u < 0.02 then nd = 0.2 + rnd() * 2.5 elseif u < 0.1 then nd = nd + (rnd() - 0.5) * 0.4 end
+      if nd < 0 then nd = 0.05 end
+      sr = nd * (0.06 + rnd() * 0.12)
+      if i % 211 == 0 then sa = rnd() < 0.5 and 0.3 or rnd() * 8 end
+      local load = (i % 3001 < 15) and 10 or 3000
+      local dt = (i % 2000 < 1000) and 0.003 or (1 / (50 + (i % 7) * 18))
+      for _, c in ipairs({ ca, cb }) do
+        c.gear, c.rpm, c.localVelocity.z = gear, 1500 + (i % 900) * 7, 3 + (i % 5000) * 0.01
+        for w = 2, 3 do
+          local wh = c.wheels[w]
+          wh.ndSlip, wh.slipRatio, wh.slipAngle, wh.load = nd * (w == 2 and 1.05 or 0.95), sr, sa, load
+        end
+      end
+      local oa = a:update(dt, ca, req, 0.935, 1)
+      local ob = b:update(dt, cb, req, 0.935, 1)
+      local d = math.abs(oa - ob) + math.abs(a.A - b.A) + math.abs(a.slip - b.slip) + math.abs(a.sx - b.sx)
+      if d > maxd then maxd = d end
+    end
+    return maxd
+  end
+  check('PRED_KD 1: bit-exact with v0.11.1 (tuned set)', trace(nil, 30000) == 0)
+  check('PRED_KD 1: bit-exact with v0.11.1 (memory on, no RET_HOLD)', trace({ MEM = 1, RET_HOLD = 0 }, 30000) == 0)
+  check('PRED_KD default is 1', Traction.DEFAULTS.PRED_KD == 1 and Traction.new(tuned.traction).p.PRED_KD == 1)
+  -- (b) the same cut with PRED_KD 1 and 0.3: steady slip, then a fast rise that stays under the target
+  -- (prediction-only), then a real overshoot, then a lateral slide (guard). Per-step falls of the cap are compared.
+  local TGT = 0.935
+  local function cut(kdScale)
+    local t = Traction.new(params({ PRED_KD = kdScale }))
+    local c = newCar()
+    t:configure(c)
+    local function set(nd, sa, srScale)
+      for w = 2, 3 do c.wheels[w].ndSlip, c.wheels[w].slipRatio, c.wheels[w].slipAngle = nd, nd * 0.12 * (srScale or 1), sa end
+    end
+    local res = { pred = 0, over = {}, guard = {} }
+    for _ = 1, 400 do set(0.3, 0.3); t:update(0.003, c, 1, TGT, 1) end
+    local a0 = t.A
+    local nd = 0.3
+    for _ = 1, 60 do -- rise at 6 /s to 0.85 (0.91 of the target), then hold there
+      nd = nd + 6 * 0.003; if nd > 0.85 then nd = 0.85 end
+      set(nd, 0.3); t:update(0.003, c, 1, TGT, 1)
+      assert(t.sx <= t.targetX, 'measured slip stayed under the target')
+    end
+    res.pred = a0 - t.A
+    for _ = 1, 200 do set(0.3, 0.3); t:update(0.003, c, 1, TGT, 1) end
+    t.A = 0.9
+    for _ = 1, 40 do -- real overshoot
+      local before = t.A
+      set(1.6, 0.3); t:update(0.003, c, 1, TGT, 1)
+      if t.sx > t.targetX then res.over[#res.over + 1] = before - t.A end
+    end
+    for _ = 1, 200 do set(0.3, 0.3); t:update(0.003, c, 1, TGT, 1) end
+    t.A = 0.9
+    for _ = 1, 40 do -- lateral slide: combined slip over the guard level, little wheelspin
+      local before = t.A
+      set(1.4, 6, 0.15); t:update(0.003, c, 1, TGT, 1)
+      if t.slip > tuned.traction.GUARD_LEVEL then res.guard[#res.guard + 1] = before - t.A end
+    end
+    return res
+  end
+  local r1, r3 = cut(1), cut(0.3)
+  check('PRED_KD: the rise under the target is cut by the prediction', r1.pred > 0.02, r1.pred)
+  check('PRED_KD 0.3: prediction-only cut ~0.3 x as deep', math.abs(r3.pred / r1.pred - 0.3) < 0.03,
+    string.format('%.4f vs %.4f', r3.pred, r1.pred))
+  local function same(x, y)
+    if #x ~= #y or #x < 5 then return false end
+    for i = 1, #x do if math.abs(x[i] - y[i]) > 1e-12 then return false end end
+    return true
+  end
+  check('PRED_KD 0.3: a real overshoot cut is unchanged', same(r1.over, r3.over), #r1.over .. '/' .. #r3.over)
+  check('PRED_KD 0.3: a guard (lateral slide) cut is unchanged', same(r1.guard, r3.guard), #r1.guard .. '/' .. #r3.guard)
+end
+
 print(string.format('KeyDrive: %d passed, %d failed', passed, failed))
 return failed > 0

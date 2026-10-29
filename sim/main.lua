@@ -88,11 +88,13 @@ for _, name in ipairs(names) do
       report.runs[#report.runs + 1] = { scenario = name, car = carName, rate = rate, fps = tr.fps, pass = res.pass,
         checks = res.checks, values = res.values, notGraded = res.na, group = scn.group }
       local v = res.values
+      -- pulse: whole key-held direction changes /s, all gears / gears 1-2 (oracle in brackets)
       lines[#lines + 1] = string.format('%-21s %-12s %-7s %-4s slip %5s >1.3 %5s slide %5s loss %6s rate %4s ' ..
-        'jerk %5s dir/s %4s std %5s %s%s',
+        'jerk %5s dir/s %4s std %5s pulse %4s/%4s (%4s/%4s) %s%s',
         name, carName, rate, res.pass and 'OK' or 'FAIL', fmt(v.peakSlip, '%.2f'), fmt(v.over13Time, '%.2f'),
         fmt(v.slideTime, '%.2f'), fmt(v.loss and v.loss * 100, '%.1f%%'), fmt(v.maxRate, '%.1f'),
         fmt(v.maxJerk, '%.0f'), fmt(v.steadyDirChanges, '%.1f'), fmt(v.steadyStd, '%.3f'),
+        fmt(v.pulse, '%.1f'), fmt(v.pulseLow, '%.1f'), fmt(v.oraclePulse, '%.1f'), fmt(v.oraclePulseLow, '%.1f'),
         #failed > 0 and ('[' .. table.concat(failed, ',') .. ']') or '',
         #res.na > 0 and (' n/a:' .. table.concat(res.na, ',')) or '')
     end
@@ -110,9 +112,11 @@ local head = {
   string.format('KeyDrive simulator: set %s, grip x%.2f, power x%.2f: %d/%d runs pass', SET, scale.grip, scale.power,
     passed, total),
   string.format('Thresholds (user): peak slip <= %.1fx tyre peak, above 1.3x <= %.2f s, steady <= %d dir. changes/s ' ..
-    'and std < %.2f, loss vs oracle <= %d %% dry. Proposed: loss <= %d %% wet/cold/grip/tapping, axle slide <= %.2f s, ' ..
+    'and std < %.2f, whole key-held pulse <= %d dir. changes/s (all gears and 1st/2nd), loss vs oracle <= %d %% dry. ' ..
+    'Proposed: loss <= %d %% wet/cold/grip/tapping, axle slide <= %.2f s, ' ..
     'assist rate <= %.0f /s, reverse = plain ramp', metrics.THRESHOLDS.peakSlip, metrics.THRESHOLDS.over13Time,
-    metrics.THRESHOLDS.steadyDirChanges, metrics.THRESHOLDS.steadyStd, metrics.THRESHOLDS.lossDry * 100,
+    metrics.THRESHOLDS.steadyDirChanges, metrics.THRESHOLDS.steadyStd, metrics.THRESHOLDS.pulse,
+    metrics.THRESHOLDS.lossDry * 100,
     metrics.THRESHOLDS.lossOther * 100, metrics.THRESHOLDS.slideTime, metrics.THRESHOLDS.maxRate),
 }
 local fk = {}

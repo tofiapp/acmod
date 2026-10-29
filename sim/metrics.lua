@@ -238,11 +238,46 @@ local function windowStats(tr, every, t0, t1)
   return changes / (t1 - t0), cnt > 0 and math.sqrt(var / cnt) or 0
 end
 
+-- Whole key-held pulse of a trace (40 Hz like the in-game log; kerbs and grip steps of the scenario left out): rates
+-- (pulseRates) and the accumulator (pulseStats). Also used by sim/calibrate.lua.
+local function pulseOf(scn, tr)
+  local dt = tr.t[2] - tr.t[1]
+  local every = math.max(1, math.floor(SAMPLE / dt + 0.5))
+  local pt, px, pk, pg, pn = {}, {}, {}, {}, 0
+  for i = 1, tr.n, every do
+    pn = pn + 1
+    pt[pn], px[pn], pk[pn], pg[pn] = tr.t[i], tr.thr[i], tr.key[i], tr.gear[i]
+  end
+  local skip = {}
+  for _, k in ipairs(scn.kerbs or {}) do skip[#skip + 1] = { k.t, k.t + k.len + M.PULSE.SKIP_DIST } end
+  if scn.mu then
+    local prev
+    for x, y in tostring(scn.mu):gmatch('(-?[%d%.]+)%s*:%s*(-?[%d%.]+)') do
+      if prev and math.abs(tonumber(y) - prev[2]) > 0.05 and tonumber(x) - prev[1] <= 0.5 then -- a step, not a slow drift
+        skip[#skip + 1] = { prev[1], tonumber(x) + M.PULSE.SKIP_DIST }
+      end
+      prev = { tonumber(x), tonumber(y) }
+    end
+  end
+  local acc = M.pulseStats(pt, px, pk, pg, pn, nil, skip)
+  return M.pulseRates(acc), acc
+end
+M.pulseOf = pulseOf
+
 -- Summary of a reference trace (oracle or zero throttle) that evaluate() needs; lets the optimizer cache them.
-function M.summarize(tr)
+-- scn (optional): adds the whole key-held pulse (pulse, pulseLow: nil when held < PULSE_MIN_HELD; pulseHeld,
+-- pulseHeldLow), so the pulse can be graded against what the perfect foot itself does in the same run.
+function M.summarize(tr, scn)
   local dt = tr.t[2] - tr.t[1]
   local r = raw(tr, dt)
-  return { peakSlip = r.peakSlip, over13Time = r.over13Time, slideTime = r.slideTime, dist = distance(tr, dt) }
+  local s = { peakSlip = r.peakSlip, over13Time = r.over13Time, slideTime = r.slideTime, dist = distance(tr, dt) }
+  if scn then
+    local pr = pulseOf(scn, tr)
+    s.pulseHeld, s.pulseHeldLow = pr.held, pr.heldLow
+    if pr.held >= M.PULSE_MIN_HELD then s.pulse = pr.rate end
+    if pr.heldLow >= M.PULSE_MIN_HELD then s.pulseLow = pr.rateLow end
+  end
+  return s
 end
 
 -- ref: { oracle = trace or summary, zero = trace or summary (throttle 0), rise, fall (the controller's key ramp) }
@@ -279,7 +314,7 @@ function M.evaluate(scn, tr, ref)
     chk.reverseFollow = worst <= T.reverseFollow + math.max(rise, fall) * gap
   else
     local c = raw(tr, dt)
-    local o = ref.oracle and (ref.oracle.dist and ref.oracle or M.summarize(ref.oracle)) or nil
+    local o = ref.oracle and (ref.oracle.dist and ref.oracle or M.summarize(ref.oracle, scn)) or nil
     local z = ref.zero and (ref.zero.dist and ref.zero or M.summarize(ref.zero)) or nil
     val.peakSlip, val.over13Time, val.slideTime = c.peakSlip, c.over13Time, c.slideTime
     if o then val.oraclePeakSlip, val.oracleOver13Time, val.oracleSlideTime = o.peakSlip, o.over13Time, o.slideTime end
@@ -396,24 +431,9 @@ function M.evaluate(scn, tr, ref)
     end
 
     -- pulse over the whole key-held forward-gear time (40 Hz like the in-game log)
-    local pt, px, pk, pg, pn = {}, {}, {}, {}, 0
-    for i = 1, tr.n, every do
-      pn = pn + 1
-      pt[pn], px[pn], pk[pn], pg[pn] = tr.t[i], tr.thr[i], tr.key[i], tr.gear[i]
-    end
-    local skip = {}
-    for _, k in ipairs(scn.kerbs or {}) do skip[#skip + 1] = { k.t, k.t + k.len + M.PULSE.SKIP_DIST } end
-    if scn.mu then
-      local prev
-      for x, y in tostring(scn.mu):gmatch('(-?[%d%.]+)%s*:%s*(-?[%d%.]+)') do
-        if prev and math.abs(tonumber(y) - prev[2]) > 0.05 and tonumber(x) - prev[1] <= 0.5 then -- a step, not a slow drift
-          skip[#skip + 1] = { prev[1], tonumber(x) + M.PULSE.SKIP_DIST }
-        end
-        prev = { tonumber(x), tonumber(y) }
-      end
-    end
-    local pr = M.pulseRates(M.pulseStats(pt, px, pk, pg, pn, nil, skip))
+    local pr = pulseOf(scn, tr)
     val.pulseHeld, val.pulseHeldLow = pr.held, pr.heldLow
+    if o then val.oraclePulse, val.oraclePulseLow = o.pulse, o.pulseLow end
     if pr.held >= M.PULSE_MIN_HELD then
       val.pulse, val.pulseBig, val.pulseTravel = pr.rate, pr.big, pr.travel
       local worst = pr.rate
@@ -421,7 +441,10 @@ function M.evaluate(scn, tr, ref)
         val.pulseLow, val.pulseBigLow, val.pulseTravelLow = pr.rateLow, pr.bigLow, pr.travelLow
         if pr.rateLow > worst then worst = pr.rateLow end
       end
-      chk.pulse = worst <= T.pulse
+      -- like every other check: not graded where the perfect foot itself cannot meet the bound (it has to move the
+      -- throttle there: a slip limit that changes with the revs, a long slide)
+      local oWorst = o and math.max(o.pulse or 0, o.pulseLow or 0) or nil
+      graded('pulse', worst, T.pulse, oWorst)
     end
   end
 

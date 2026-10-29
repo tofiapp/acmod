@@ -15,6 +15,11 @@ local M = {}
 M.LOW = 0.75         -- drive slip (combined ndSlip of the driven wheels) under which a cut counts as needless
                      -- (0.6 missed the corner cuts at 0.6-0.75 the user felt as caution)
 M.CUT = 0.03         -- request - output above this counts as a cut
+M.MIN_HELD = 5       -- s of key-held time before a dataset counts in the caution mean
+M.RISK_SLIP = 1      -- RISK: the real tyres were past their peak (drive slip ndSlip above this) ...
+M.RISK_MARGIN = 0.05 -- ... and the replayed core sends more than the game did (logged gas_out + this): a core that
+                     -- cuts less where the real car was already over the limit. Without it a core that never cuts
+                     -- scored 0 caution and 0 pulse on the logs and won the cost despite its sim spins.
 
 local cache = {}
 
@@ -57,7 +62,8 @@ function M.caution(path, throttleParams, tractionParams, acc)
   local ND = { c.nd_fl, c.nd_fr, c.nd_rl, c.nd_rr }
   local RA = { c.ratio_fl, c.ratio_fr, c.ratio_rl, c.ratio_rr }
   local AN = { c.angle_fl, c.angle_fr, c.angle_rl, c.angle_rr }
-  local held, cut, needless = 0, 0, 0
+  local held, cut, needless, risk = 0, 0, 0, 0
+  local GO = c.gas_out
   -- tc_state 5: the driver switched the traction off with TRACTION_KEY (burnout, spin on purpose): replayed with
   -- traction off as in the game and not counted
   local TC = c.tc_state
@@ -89,10 +95,11 @@ function M.caution(path, throttleParams, tractionParams, acc)
         cut = cut + dt
         if r[c.drive_slip_nd] < M.LOW then needless = needless + dt end
       end
+      if GO and r[c.drive_slip_nd] > M.RISK_SLIP and g > r[GO] + M.RISK_MARGIN then risk = risk + dt end
     end
   end
   acc = metrics.pulseStats(pt, px, pk, pg, #rows, acc)
-  return needless, cut, held, acc
+  return needless, cut, held, acc, risk
 end
 
 -- All datasets in sim/data/real: the mean share of key-held time with a needless cut, and the pulse rates of the
@@ -102,15 +109,23 @@ end
 -- that answers it more calmly scores better here (the closed-loop check is the sim's pulse metric).
 function M.realAll(root, throttleParams, tractionParams)
   local files = dofile(root .. '/sim/data/real/index.lua')
-  local share, totalNeedless, totalHeld = 0, 0, 0
+  local share, counted, totalNeedless, totalHeld = 0, 0, 0, 0
+  local riskTime, riskHeld = 0, 0
   local acc = metrics.newPulseAcc()
   for _, name in ipairs(files) do
     local path = root .. '/sim/data/real/' .. name
-    local needless, _, held = M.caution(path, throttleParams, tractionParams, load(path).cols.gas_out and acc or nil)
-    share = share + (held > 0 and needless / held or 0)
+    local hasOut = load(path).cols.gas_out ~= nil
+    local needless, _, held, _, risk = M.caution(path, throttleParams, tractionParams, hasOut and acc or nil)
+    if hasOut then riskTime, riskHeld = riskTime + risk, riskHeld + held end
+    -- a dataset with (almost) no key-held time says nothing about caution (f3: 0 s held; it used to enter the mean as
+    -- a share of 0 and diluted every set's caution by 1/24)
+    if held >= M.MIN_HELD then
+      share, counted = share + needless / held, counted + 1
+    end
     totalNeedless, totalHeld = totalNeedless + needless, totalHeld + held
   end
-  return share / #files, metrics.pulseRates(acc), totalNeedless, totalHeld
+  return counted > 0 and share / counted or 0, metrics.pulseRates(acc), totalNeedless, totalHeld,
+    riskHeld > 0 and riskTime / riskHeld or 0
 end
 
 function M.cautionAll(root, throttleParams, tractionParams)

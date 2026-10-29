@@ -20,7 +20,7 @@ local SPACE = {
   { 'K_DOWN', 'traction', 0.5, 25, true },
   { 'K_DOWN_SEVERE', 'traction', 0.5, 30, true },
   { 'K_BACK', 'traction', 0.2, 5, true },
-  { 'HOLD_BAND', 'traction', 0.6, 0.98 },
+  { 'HOLD_BAND', 'traction', 0.55, 0.98 },
   { 'FLOOR', 'traction', 0.05, 0.5 },
   { 'RETURN', 'traction', 0.7, 1.0 },
   { 'LEARN_MARGIN', 'traction', 0.85, 1.0 },
@@ -46,6 +46,8 @@ if MODE == 2 then
     { 'GUARD_LEVEL', 'traction', 0.75, 1.3 },
     { 'RET_HOLD', 'traction', 0, 0.8 },
     { 'RET_ARM', 'traction', 0.9, 1.3 },
+    { 'RET_LOW', 'traction', 0.3, 0.9 },
+    { 'PRED_KD', 'traction', 0.2, 1 },       -- cut rate scale while only the prediction is over the target
   }) do SPACE[#SPACE + 1] = p end
 else
   for _, p in ipairs({
