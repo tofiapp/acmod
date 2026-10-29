@@ -1003,6 +1003,61 @@ do
   check('mode 2: corner cut keeps at least the corner floor', th2.traction.limit >= 0.19, th2.traction.limit)
 end
 
+-- 30. Mode 2 RET_HOLD (v0.11.1): after a cut caused by a real overshoot the cap does not climb straight back into
+-- the next one (v0.11.0 pulsed at ~0.35 s in 1st/2nd gear); it holds for RET_HOLD while the slip stays above
+-- RET_LOW x target, then recovers as before; with the slip low it recovers at once.
+do
+  local Throttle = dofile(CORE .. '/core/throttle.lua')
+  local tuned = dofile(CORE .. '/core/tuned.lua')
+  local function v3(x, y, z) return { x = x, y = y, z = z } end
+  local function newCar()
+    local wheels = {}
+    for i = 0, 3 do
+      wheels[i] = { ndSlip = 0.2, load = 3000, angularSpeed = 60, tyreRadius = 0.33, slipRatio = 0.02, slipAngle = 0.5,
+        look = v3(0, 0, 1), velocity = v3(0, 0, 20) }
+    end
+    return { gear = 2, rpm = 5000, speedKmh = 72, localVelocity = v3(0, 0, 20), tractionType = 0, wheels = wheels }
+  end
+  local function setRear(c, nd, sr) for i = 2, 3 do c.wheels[i].ndSlip, c.wheels[i].slipRatio, c.wheels[i].slipAngle = nd, sr, 0.3 end end
+  local function run(hold, afterRatio)
+    local tp = {}
+    for k, v in pairs(tuned.traction) do tp[k] = v end
+    tp.RET_HOLD = hold
+    local th = Throttle.new(tuned.throttle, tp)
+    local c = newCar()
+    th:configure(c)
+    for _ = 1, 400 do setRear(c, 0.3, 0.04); th:update(0.003, true, c, 0, 0) end
+    for _ = 1, 30 do setRear(c, 1.6, 0.2); th:update(0.003, true, c, 0, 0) end -- real overshoot: cut
+    for _ = 1, 15 do setRear(c, 0.6, afterRatio); th:update(0.003, true, c, 0, 0) end
+    local a0 = th.traction.A
+    for _ = 1, 100 do setRear(c, 0.6, afterRatio); th:update(0.003, true, c, 0, 0) end
+    local a1 = th.traction.A -- 0.3 s later
+    for _ = 1, 200 do setRear(c, 0.6, afterRatio); th:update(0.003, true, c, 0, 0) end
+    return a0, a1, th.traction.A -- and 0.9 s later
+  end
+  check('tuned set holds after a cut', (tuned.traction.RET_HOLD or 0) > 0)
+  local h0, h1, h2 = run(tuned.traction.RET_HOLD, 0.07) -- slip ~0.58 of the peak: above RET_LOW x target
+  local n0, n1 = run(0, 0.07)
+  check('RET_HOLD: no climb right after an overshoot', h1 - h0 < 0.01, string.format('%.3f -> %.3f', h0, h1))
+  check('RET_HOLD off: climbs back at once (the old cycle)', n1 - n0 > 0.2, string.format('%.3f -> %.3f', n0, n1))
+  check('RET_HOLD: recovers after the hold', h2 - h1 > 0.2, string.format('%.3f -> %.3f', h1, h2))
+  local l0, l1 = run(tuned.traction.RET_HOLD, 0.03) -- slip ~0.25 of the peak: plenty of grip
+  check('RET_HOLD: low slip recovers at once', l1 - l0 > 0.2, string.format('%.3f -> %.3f', l0, l1))
+  -- lift and press again inside the window (slip still above RET_LOW x target): the throttle follows the key
+  do
+    local th = Throttle.new(tuned.throttle, tuned.traction)
+    local c = newCar()
+    th:configure(c)
+    for _ = 1, 400 do setRear(c, 0.3, 0.04); th:update(0.003, true, c, 0, 0) end
+    for _ = 1, 30 do setRear(c, 1.6, 0.2); th:update(0.003, true, c, 0, 0) end
+    for _ = 1, 80 do setRear(c, 0.6, 0.07); th:update(0.003, false, c, 0, 0) end -- 0.24 s lift
+    local out
+    for _ = 1, 60 do setRear(c, 0.6, 0.07); out = th:update(0.003, true, c, 0, 0) end -- 0.18 s re-press
+    check('RET_HOLD: a re-press inside the window follows the key', out > th.request - 0.02,
+      string.format('out %.3f request %.3f', out, th.request))
+  end
+end
+
 -- 29. TRACTION_KEY (default X) switches the traction control off and on while driving (burnout, spin on purpose).
 do
   local VK_X = 88

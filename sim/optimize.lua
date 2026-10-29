@@ -44,6 +44,8 @@ if MODE == 2 then
     { 'HOLD_RISE', 'traction', 0, 0.6 },
     { 'ELLIPSE', 'traction', 0.75, 1.2 },
     { 'GUARD_LEVEL', 'traction', 0.75, 1.3 },
+    { 'RET_HOLD', 'traction', 0, 0.8 },
+    { 'RET_ARM', 'traction', 0.9, 1.3 },
   }) do SPACE[#SPACE + 1] = p end
 else
   for _, p in ipairs({

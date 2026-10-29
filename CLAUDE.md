@@ -264,3 +264,17 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
   unchanged, more power-on understeer at low grip: front axle slide in hidden h_kerb_corner_2nd at grip 0.8). MEM 0 in the tuned set; TRACTION_MEMORY now defaults to 0 and 1 really turns the memory on.
   TRACTION_KEY (default X) switches the traction off/on while driving (user: burnouts, spinning on purpose).
   If the user reports spins: TARGET_SLIP below 100 or TRACTION_MEMORY 1 first, then retune with a spike penalty.
+- v0.11.0 user: "braver, but the jerking of the throttle power came back". Logs (Mustang, 2 zips; analysis workflow +
+  cross-check): relay limit cycle in 1st/2nd gear, 4-6 throttle direction changes/s, ~0.35 s period: after a cut the
+  cap climbs at K_BACK 1.2 /s (MEM 0: T = 1) up to HOLD_BAND x target = 0.72 (s12: 0.47), the slip overshoots
+  ~90 ms later to 1.14x target, cut, repeat. The sim missed it: binary steadyDirChanges + runCost cap at 5 (6/s costs
+  the same as 13/s), and its slip noise is 1.5-2.4x too large and Gaussian (real: heavy-tailed, kurtosis ~30), so
+  its pulsing is a shallow noise ripple and s12 chatters at 3-5/s there vs 0.6-1.6 real.
+- v0.11.1: RET_HOLD 0.5 s (traction.lua MODE 2): a cut where the measured slip is over the target (RET_ARM) holds the
+  cap for RET_HOLD while the slip stays above RET_LOW 0.5 x target; arming on prediction/noise cuts or a window that
+  ignores re-arming made kerb recovery 1-2.5 s in the sim. Replay of the 0.11 logs: 1st/2nd direction changes
+  3.9 -> 2.4 and 4.1 -> 3.3 /s, needless cuts 4.2 -> 4.7 % (old 11 datasets). A lift or shift ends the window. 0.11 logs added as sim/data/real e1-e4,
+  f1-f4 (+ gas_out, tc_state). NEXT (planned): heavy-tailed sensor noise in runner.lua, a whole-held low-gear pulse
+  metric with a continuous cost, low-gear lateral exit scenarios, a calibration test that the sim ranks s12/r63 pulsing
+  like the real logs (low gear 2.5 / 1.6 / 4.4 /s for 0.10.0 / 0.10.1 / 0.11.0), replay pulse rate in the cost, then
+  retune with RET_HOLD/RET_ARM in the space (already added).

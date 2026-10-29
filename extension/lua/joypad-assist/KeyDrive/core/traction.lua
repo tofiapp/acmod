@@ -83,6 +83,15 @@ M.DEFAULTS = {
   GUARD_LEVEL = 0,      -- guard threshold on the combined ndSlip (absolute, 1 = tyre peak); 0 = the throttle target
                         -- (v0.10.1 logs, Mustang: with the 0.78 target the guard cut in ordinary fast corners at
                         -- 1.3-2.1 g where the combined slip sits at 0.8-0.97, below the tyre's peak)
+  RET_HOLD = 0,            -- s: after a cut the cap does not rise again for this long (0 = off); longer than the
+                           -- ~90 ms the real 1st/2nd-gear slip lags the throttle, else the cap climbs back into the
+                           -- next overshoot: v0.11.0's 0.35 s pulsing (user: "the jerking came back")
+  RET_LOW = 0.5,           -- ... unless the regulated slip has fallen below this share of the target
+  RET_DEPTH = 0,           -- ... and only once that cut took more than this off the cap
+  RET_ARM = 1,             -- a cut arms the hold only while the measured slip itself is over RET_ARM x target, not
+                           -- cuts made by the prediction or by noise near the target (those re-armed it again and
+                           -- again after a kerb in the sim: the throttle came back 1-2 s late)
+  RET_EPISODE = 0,         -- 1: the window runs from the first arming cut; 0: every arming cut restarts it
 }
 
 local RPM_BAND = 500
@@ -116,7 +125,7 @@ function M.new(params)
     airborne = false,
     wheels = {}, driven = {}, drivenCount = 0,
     memory = {}, stamp = {}, known = {}, -- [gear][band] remembered level, clock when set, a limit has been found
-    clock = 0, overTime = 0, lastGear = 0,
+    clock = 0, overTime = 0, lastGear = 0, cutClock = -1e9, cutA = 1,
     A = 1,              -- absolute throttle cap
     crossBand = -1,     -- rpm band where the current spin started
     crossGear = 0,
@@ -161,6 +170,7 @@ function M:reset()
   self.spareTime = 0
   self.active, self.airborne = false, false
   self.overTime = 0
+  self.cutClock, self.cutA = -1e9, 1
   self.A = 1
 end
 
@@ -251,6 +261,8 @@ local function update2(self, dt, carState, requested, target, response)
     A = requested
     self.lastGear = gear
     self.overTime = 0
+    self.cutClock, self.cutA = -1e9, 1 -- a lift or a shift ends the RET_HOLD window (else a re-press inside it
+                                       -- froze the cap near 0)
   end
 
   local slip, ratio = measure(self, carState)
@@ -323,6 +335,11 @@ local function update2(self, dt, carState, requested, target, response)
         self.crossBand, self.crossGear, self.crossOut = band, gear, out
       end
       if reg > target then self.overTime = self.overTime + dt end
+      -- hold window (RET_HOLD): armed by cuts where the measured slip is really over the target
+      if reg > P.RET_ARM * target and (P.RET_EPISODE == 0 or self.clock - self.cutClock >= P.RET_HOLD) then
+        if self.clock - self.cutClock >= P.RET_HOLD then self.cutA = A end
+        self.cutClock = self.clock
+      end
       local kd = P.K_DOWN * e
       if e > 1 then kd = kd + P.K_DOWN_SEVERE * (e - 1) end
       if kd > P.FALL_MAX then kd = P.FALL_MAX end
@@ -363,13 +380,21 @@ local function update2(self, dt, carState, requested, target, response)
         lim = mem < ahead and mem or ahead
         T = lim < 1 and lim * P.RETURN or 1
       end
-      if reg < hold * P.TRACK and self.slip < fullTarget * P.HOLD_BAND * P.TRACK then
+      -- time hysteresis: no rise right after a cut while the slip is still near the target
+      -- (optionally only after a deep cut, RET_DEPTH)
+      local resting = P.RET_HOLD > 0 and self.clock - self.cutClock < P.RET_HOLD and reg > P.RET_LOW * target
+        and self.cutA - A > P.RET_DEPTH
+      if resting then
+        -- hold A where the cut left it
+      elseif reg < hold * P.TRACK and self.slip < fullTarget * P.HOLD_BAND * P.TRACK then
         -- plenty of grip: follow the driver's request
         local follow = requested + P.AW
         if follow > T then follow = T end
         if A < follow then A = follow end
       end
-      if reg < hold then
+      if resting then
+        -- (see above)
+      elseif reg < hold then
         local spare = 1 - reg / hold
         local rs = self.rampScale
         -- quick return up to T, then K_UP. (v0.10.0 compared A < T: T creeps up every step with the memory's slow
