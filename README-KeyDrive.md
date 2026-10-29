@@ -58,8 +58,8 @@ Aplikace **KeyDrive Config** (instaluje se se ZIPem) má ve hře okno **KeyDrive
 - Obojí si okno pamatuje. Dokud v okně nic nezměníš, platí hodnoty z Content Manageru (SHOW_DIAGNOSTICS,
   TARGET_SLIP, TRACTION_RECOVERY); posuvník se násobí s nimi.
 
-Ve výchozím nastavení (v0.13) naběhne plyn z klidu na plno asi za 1,2 s (samotná klávesa 0,83 s), protože se strop
-plynu vrací pomaleji – to je ten klidnější nástup.
+Ve výchozím nastavení naběhne plyn z klidu na plno asi za 0,95 s (v0.13.1; v0.13.0 1,35 s, samotná klávesa 0,83 s),
+protože se strop plynu vrací pomaleji než klávesa. Pomalejší nástup: sniž THROTTLE_RISE_RATE (85 ≈ jako v0.13.0).
 
 ## Vypnutí hlídání prokluzu za jízdy
 

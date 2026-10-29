@@ -19,16 +19,24 @@
 -- 0.25 /s, assist-made drops 0.05 vs 0.09 /s; needless-cut share 34 % vs 14 % (the user did not feel it as caution).
 -- Sim: big reversals 0.61 vs 0.92 /s, loss vs the oracle 0.17 vs 0.05, runs over 1.5x peak 116 vs 163 of 380.
 -- (The measured numbers above this note are for the v0.12.0 set = strength 0 of v0.13.)
+-- v0.13.1: optimizer round 7 in ANCHOR mode (sim/evaluate.lua opts.anchor = the v0.13.0 set): smaller throttle
+-- amplitude without more loss or real-log caution than the anchor; seed 83. Against v0.13.0: sim (tuning, 333 Hz / fps)
+-- passes 43 / 48 -> 126 / 110 of 380, pulse fails 113 -> 47, loss fails 279 -> 181, over 1.5x peak 116 -> 119 (same),
+-- slides 57 -> 60, recovery fails 19 -> 17; hidden passes 14 / 17 -> 58 / 62, over 1.5x 66 / 57 -> 63 / 51, recovery
+-- fails 5 / 7 -> 9 / 10. Real-log replay: reversals >= 5 % 0.52 -> 0.38 /s (gears 1-2 1.19 -> 0.82), needless cuts
+-- 38 -> 35 %, risk 0.16 -> 0.24 %. HOLD_BAND 0.55 with a faster K_BACK 1.03: the onset without wheelspin is faster
+-- (0 -> full 0.95 s instead of 1.35 s; THROTTLE_RISE_RATE ~85 brings the old onset back, K_BACK scales with it). A
+-- variant keeping K_BACK 0.73 was clearly worse (loss 0.21, caution 44 %): the recovery after cuts needs it.
 return {
   throttle = {
-    ASSIST_FALL = 3.55262, ASSIST_FALL_SEVERE = 2.68795, TARGET_SLIP = 0.745294,
+    ASSIST_FALL = 3.59753, ASSIST_FALL_SEVERE = 2.51877, TARGET_SLIP = 0.763041,
   },
   traction = {
-    MODE = 2, AW = 0.147016, CREEP = 0.0615668, D_TAU = 0.0136921, ELLIPSE = 0.926603, FALL_MAX = 3.39175,
-    FLOOR = 0.132259, FLOOR_LAT = 0.209092, FORGET_DELAY = 0.228905, FORGET_RATE = 0.635358, GUARD_LEVEL = 1.01148,
-    HOLD_BAND = 0.7, HOLD_RISE = 0.0152613, K_BACK = 0.729516, K_DOWN = 6.68475, K_DOWN_SEVERE = 4.10537,
-    K_UP = 0.469592, LAT_SPLIT = 1, LEARN_LAT = 0.56064, LEARN_MARGIN = 0.963772, MEM = 0, PRED = 0.0411296,
-    PRED_KD = 0.309352, RETURN = 0.905245, RET_ARM = 1.00468, RET_HOLD = 0.490648, RET_LOW = 0.507014,
-    SLIP_TAU = 0.0147423, SPARE = 0.82465, V_REF = 1.49558,
+    MODE = 2, AW = 0.165985, CREEP = 0.0695285, D_TAU = 0.0123033, ELLIPSE = 0.907694, FALL_MAX = 3.55408,
+    FLOOR = 0.20735, FLOOR_LAT = 0.116898, FORGET_DELAY = 0.151058, FORGET_RATE = 0.34108, GUARD_LEVEL = 1.02921,
+    HOLD_BAND = 0.55, HOLD_RISE = 0.00685547, K_BACK = 1.03499, K_DOWN = 5.22029, K_DOWN_SEVERE = 3.60462,
+    K_UP = 0.68592, LAT_SPLIT = 1, LEARN_LAT = 0.347181, LEARN_MARGIN = 0.983805, MEM = 0, PRED = 0.0560064,
+    PRED_KD = 0.209141, RETURN = 0.871818, RET_ARM = 0.944237, RET_HOLD = 0.506012, RET_LOW = 0.42934,
+    SLIP_TAU = 0.0227815, SPARE = 0.832098, V_REF = 1.6325,
   },
 }

@@ -43,16 +43,16 @@ do
     table.concat(results, ', '))
 end
 
--- 1b. v0.13 default (the v0.12.1 strength 100 the user liked: "the throttle onset is getting good"): the cap comes back
--- at K_BACK 0.73 /s, slower than the key ramp 1.2 /s, so even without wheelspin the onset is ~0.73 /s after the anti-windup
--- head start: about 1.2 s from 0 to full instead of 0.83 s.
+-- 1b. With traction on, the cap comes back at K_BACK, which can be slower than the key ramp, so even without wheelspin
+-- it limits the onset after the anti-windup head start (v0.13.0: K_BACK 0.73, ~1.35 s to full; v0.13.1: 1.03, ~0.95 s;
+-- the key ramp alone 0.83 s).
 do
   local s = fresh()
   mock.keys[VK_UP] = true
   run(s, 0.3, 0.003)
   local g03 = mock.joypad.gas
   run(s, 1.2, 0.003)
-  check('default onset: ~0.23 after 0.3 s (key ramp alone 0.36)', g03 > 0.2 and g03 < 0.26, g03)
+  check('default onset: ~0.32 after 0.3 s (key ramp alone 0.36; v0.13.0 0.23)', g03 > 0.27 and g03 < 0.36, g03)
   check('default onset: full throttle within 1.5 s', mock.joypad.gas > 0.97, mock.joypad.gas)
   mock.keys[VK_UP] = nil
 end

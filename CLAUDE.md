@@ -316,3 +316,8 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
   key ramp 1.2 /s also slows the onset without wheelspin (0 -> full ~1.2 s); tests 1/3/7/7b use TRACTION 0 for the pure
   key ramp, tests 28/30 the frozen v0.12.0 set (fixtures/tuned_v0120.lua). NEXT: optimizer anchored at this set
   (penalise more loss / caution than the anchor, reward smaller amplitude).
+- v0.13.1: optimizer round 7 in anchor mode (anchor = v0.13.0), seed 83: HOLD_BAND 0.55, K_BACK 1.03, K_DOWN 5.2, PRED_KD
+  0.21, FLOOR 0.21. Sim tuning passes 43 -> 126/380, pulse fails 113 -> 47, loss fails 279 -> 181, safety unchanged;
+  hidden passes 14 -> 58/200; replay big reversals 0.52 -> 0.38 /s, needless 38 -> 35 %. Onset 0 -> full 1.35 -> 0.95 s
+  (K_BACK also sets the onset; keeping 0.73 cost loss 0.21 / caution 44 %). Tell the user THROTTLE_RISE_RATE ~85 if
+  the slower onset is missed.
