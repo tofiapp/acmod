@@ -12,7 +12,9 @@ local M = {}
 local live = shared.connect()
 -- (real keys: 'keydrive_' .. name; each control has its own *Set flag: moving the slider while KeyDrive was not running
 -- used to copy the zeroed live.showDiagnostics and hide the overlay for good)
-local stored = ac.storage({ diagSet = false, showDiag = true, strengthSet = false, strength = 50 }, 'keydrive')
+-- (v0.13 moved the scale: the old 100 is the new 50, so the strength lives under new keys and starts at 50 again;
+-- the diagnostics choice keeps its key)
+local stored = ac.storage({ diagSet = false, showDiag = true, strength13Set = false, strength13 = 50 }, 'keydrive')
 
 local lastAlive, staleTime = -1, 0
 local WARN = rgbm(1, 0.6, 0.3, 1)
@@ -23,13 +25,13 @@ local textTarget, textTargetFor = '', -1
 function M.update(dt)
   if live.alive ~= lastAlive then lastAlive, staleTime = live.alive, 0 else staleTime = staleTime + dt end
   if stored.diagSet then live.cfgShowDiag, live.cfgDiagSet = stored.showDiag, true end
-  if stored.strengthSet then live.cfgStrength, live.cfgStrengthSet = stored.strength, true end
+  if stored.strength13Set then live.cfgStrength, live.cfgStrengthSet = stored.strength13, true end
 end
 
 local function strengthText(s)
-  if s < 20 then return 'odvážné' elseif s < 40 then return 'méně opatrné' elseif s <= 60 then return 'vyladěné'
+  if s < 20 then return 'odvážné (jako 0.12)' elseif s < 40 then return 'méně opatrné' elseif s <= 60 then return 'výchozí'
   elseif s <= 80 then return 'opatrnější' end
-  return 'velmi opatrné'
+  return 'nejopatrnější'
 end
 
 function M.window()
@@ -48,10 +50,10 @@ function M.window()
 
   ui.text('Síla zásahu (hlídání prokluzu):')
   ui.setNextItemWidth(ui.windowWidth() - 24)
-  local s = stored.strengthSet and stored.strength or 50
+  local s = stored.strength13Set and stored.strength13 or 50
   local value, changed = ui.slider('##strength', s, 0, 100, '%.0f', true)
   if changed then
-    stored.strength, stored.strengthSet = math.floor(value + 0.5), true
+    stored.strength13, stored.strength13Set = math.floor(value + 0.5), true
   end
   local si = math.floor(s + 0.5)
   if si ~= textStrengthFor then
@@ -68,7 +70,7 @@ function M.window()
     ui.text(textTarget)
   end
   if ui.button('Výchozí (50)') then
-    stored.strength, stored.strengthSet = 50, true
+    stored.strength13, stored.strength13Set = 50, true
   end
   ui.separator()
   ui.textWrapped('Méně zásahu = víc plynu, kola se víc protáčí. Víc zásahu = klidnější, ale pomalejší. Klávesa X hlídání úplně vypne a zase zapne.')

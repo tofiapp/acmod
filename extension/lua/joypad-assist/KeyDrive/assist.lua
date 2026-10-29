@@ -118,15 +118,17 @@ live.targetSlip = throttleParams.TARGET_SLIP -- the target really used (overlay,
 local traction = throttleCore.traction
 
 -- Intervention strength (slider "Síla zásahu" in the KeyDriveConfig app, 0..100, 50 = as set in settings.ini): scales
--- the allowed slip (0: 1.07x, up to the tyre peak at most; 100: 0.8x) and how fast the cap comes back after a cut
--- (0: 1.5x; 100: 0.6x), on top of TARGET_SLIP / TRACTION_RECOVERY. Applied while driving, without a script reload.
+-- the allowed slip and how fast the cap comes back after a cut, on top of TARGET_SLIP / TRACTION_RECOVERY. Applied
+-- while driving, without a script reload. v0.13: 50 = the v0.12.1 strength 100 the user liked (now in core/tuned.lua);
+-- 0 = the v0.12 default (allowed slip x1.25, recovery x1.67, never past the tyre peak); 100 = a step more cautious
+-- (x0.85, x0.75).
 local function strengthScales(st)
   if st <= 50 then
     local f = st / 50
-    return 1.07 - 0.07 * f, 1.5 - 0.5 * f
+    return 1.25 - 0.25 * f, 5 / 3 - 2 / 3 * f
   end
   local f = (st - 50) / 50
-  return 1 - 0.2 * f, 1 - 0.4 * f
+  return 1 - 0.15 * f, 1 - 0.25 * f
 end
 local strengthNow = -1
 local strengthParams = {} -- reused for setParams

@@ -28,11 +28,12 @@ local function run(s, seconds, dt)
   for _ = 1, n do s.update(dt) end
 end
 
--- 1. Throttle ramps up at THROTTLE_RISE_RATE, independent of the physics rate.
+-- 1. Throttle ramps up at THROTTLE_RISE_RATE, independent of the physics rate (the key ramp alone: traction off, since
+-- with traction on the cap's recovery K_BACK also limits the onset, see 1b).
 do
   local results = {}
   for _, dt in ipairs({ 0.003, 1 / 60, 0.01 }) do
-    local s = fresh()
+    local s = fresh({ TRACTION = 0 })
     mock.keys[VK_UP] = true
     run(s, 0.3, dt)
     results[#results + 1] = mock.joypad.gas
@@ -40,6 +41,20 @@ do
   check('throttle rise 120 %/s after 0.3 s', near(results[1], 0.36, 0.01), results[1])
   check('throttle rise independent of dt', near(results[1], results[2], 0.01) and near(results[1], results[3], 0.01),
     table.concat(results, ', '))
+end
+
+-- 1b. v0.13 default (the v0.12.1 strength 100 the user liked: "the throttle onset is getting good"): the cap comes back
+-- at K_BACK 0.73 /s, slower than the key ramp 1.2 /s, so even without wheelspin the onset is ~0.73 /s after the anti-windup
+-- head start: about 1.2 s from 0 to full instead of 0.83 s.
+do
+  local s = fresh()
+  mock.keys[VK_UP] = true
+  run(s, 0.3, 0.003)
+  local g03 = mock.joypad.gas
+  run(s, 1.2, 0.003)
+  check('default onset: ~0.23 after 0.3 s (key ramp alone 0.36)', g03 > 0.2 and g03 < 0.26, g03)
+  check('default onset: full throttle within 1.5 s', mock.joypad.gas > 0.97, mock.joypad.gas)
+  mock.keys[VK_UP] = nil
 end
 
 -- 2. Reaches the cap and stays there; falls at THROTTLE_FALL_RATE after release.
@@ -57,7 +72,7 @@ end
 
 -- 3. Rates come from settings.ini.
 do
-  local s = fresh({ THROTTLE_RISE_RATE = 500 })
+  local s = fresh({ THROTTLE_RISE_RATE = 500, TRACTION = 0 })
   mock.keys[VK_UP] = true
   run(s, 0.1, 0.003)
   check('custom rise rate', near(mock.joypad.gas, 0.5, 0.015), mock.joypad.gas)
@@ -109,7 +124,7 @@ end
 
 -- 7. Rebound keys from controls.ini, re-read on change.
 do
-  local s = fresh()
+  local s = fresh({ TRACTION = 0 })
   mock.controls.KEYBOARD.GAS = 87 -- W
   for _, cb in ipairs(mock.callbacks.controls) do cb() end
   mock.keys[87] = true
@@ -125,6 +140,7 @@ do
   mock.controls.GEARDN = { KEY = '0x46' }   -- F
   mock.controls.HANDBRAKE = { KEY = '0x20' }
   mock.controls.KEYBOARD.GAS = '0x57'       -- W as hex string
+  mock.settings = { KEYDRIVE = { TRACTION = 0 } } -- the key ramp alone
   local s = mock.load(CORE, 'assist.lua')
   mock.joypad.gearUp, mock.joypad.gearDown = false, false
   s.update(0.003)
@@ -976,10 +992,10 @@ end
 
 -- 28. Mode 2 regression (user's v0.10 logs): after a limit was learned, the cap must not stay pinned to
 -- RETURN x memory while the tyres have plenty of grip (v0.10.0 held 0.55-0.64 for 6 s on a straight), and a limit
--- crossed in a corner (high lateral slip) must not be remembered at all.
+-- crossed in a corner (high lateral slip) must not be remembered at all. (v0.12.0 set: core/tuned.lua moves on.)
 do
   local Throttle = dofile(CORE .. '/core/throttle.lua')
-  local tuned = dofile(CORE .. '/core/tuned.lua')
+  local tuned = dofile(here .. '/fixtures/tuned_v0120.lua')
   local function v3(x, y, z) return { x = x, y = y, z = z } end
   local function newCar()
     local wheels = {}
@@ -1019,10 +1035,10 @@ end
 
 -- 30. Mode 2 RET_HOLD (v0.11.1): after a cut caused by a real overshoot the cap does not climb straight back into
 -- the next one (v0.11.0 pulsed at ~0.35 s in 1st/2nd gear); it holds for RET_HOLD while the slip stays above
--- RET_LOW x target, then recovers as before; with the slip low it recovers at once.
+-- RET_LOW x target, then recovers as before; with the slip low it recovers at once. (v0.12.0 set, frozen.)
 do
   local Throttle = dofile(CORE .. '/core/throttle.lua')
-  local tuned = dofile(CORE .. '/core/tuned.lua')
+  local tuned = dofile(here .. '/fixtures/tuned_v0120.lua')
   local function v3(x, y, z) return { x = x, y = y, z = z } end
   local function newCar()
     local wheels = {}
@@ -1353,7 +1369,7 @@ do
   app.windowSettings(1 / 60)
   app.update(1 / 60)
   s.update(0.003)
-  check('strength 100: allowed slip 0.8x', math.abs(live.targetSlip - target50 * 0.8) < 1e-9 and live.strength == 100,
+  check('strength 100: allowed slip 0.85x', math.abs(live.targetSlip - target50 * 0.85) < 1e-9 and live.strength == 100,
     live.targetSlip)
   mock.sliderSet = { ['##strength'] = 0 }
   app.windowSettings(1 / 60)

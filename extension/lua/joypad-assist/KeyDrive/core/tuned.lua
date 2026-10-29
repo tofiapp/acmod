@@ -13,15 +13,21 @@
 --   sim/compare.py, tuning set 333 Hz / fps: passes 98 / 93 -> 127 / 117 of 380, cost 86.4 / 89.9 -> 72.5 / 74.9;
 --     runs over 1.5x peak slip 146 / 154 -> 163 / 168; rear/axle slides 64 / 61 -> 64 / 60; recovery fails 0-1 -> 1-5
 --   hidden set 333 Hz / fps: passes 54 / 49 -> 60 / 47 of 200, cost 82.3 / 81.7 -> 68.3 / 70.8; over 1.5x 79 / 69 -> 90 / 87
+-- v0.13.0: the user drove v0.12.1 at slider strength 100 ("much better than 50: very few jerks, the throttle onset
+-- is getting good"), so that became the default: TARGET_SLIP x0.8 (0.9316 -> 0.7453), K_BACK, K_UP, FORGET_RATE x0.6.
+-- Real logs (Road America, v0.12.1 at 100 vs 50): throttle reversals >= 5 % 0.38 vs 0.65 /s, throttle travel 0.18 vs
+-- 0.25 /s, assist-made drops 0.05 vs 0.09 /s; needless-cut share 34 % vs 14 % (the user did not feel it as caution).
+-- Sim: big reversals 0.61 vs 0.92 /s, loss vs the oracle 0.17 vs 0.05, runs over 1.5x peak 116 vs 163 of 380.
+-- (The measured numbers above this note are for the v0.12.0 set = strength 0 of v0.13.)
 return {
   throttle = {
-    ASSIST_FALL = 3.55262, ASSIST_FALL_SEVERE = 2.68795, TARGET_SLIP = 0.931618,
+    ASSIST_FALL = 3.55262, ASSIST_FALL_SEVERE = 2.68795, TARGET_SLIP = 0.745294,
   },
   traction = {
     MODE = 2, AW = 0.147016, CREEP = 0.0615668, D_TAU = 0.0136921, ELLIPSE = 0.926603, FALL_MAX = 3.39175,
-    FLOOR = 0.132259, FLOOR_LAT = 0.209092, FORGET_DELAY = 0.228905, FORGET_RATE = 1.05893, GUARD_LEVEL = 1.01148,
-    HOLD_BAND = 0.7, HOLD_RISE = 0.0152613, K_BACK = 1.21586, K_DOWN = 6.68475, K_DOWN_SEVERE = 4.10537,
-    K_UP = 0.782653, LAT_SPLIT = 1, LEARN_LAT = 0.56064, LEARN_MARGIN = 0.963772, MEM = 0, PRED = 0.0411296,
+    FLOOR = 0.132259, FLOOR_LAT = 0.209092, FORGET_DELAY = 0.228905, FORGET_RATE = 0.635358, GUARD_LEVEL = 1.01148,
+    HOLD_BAND = 0.7, HOLD_RISE = 0.0152613, K_BACK = 0.729516, K_DOWN = 6.68475, K_DOWN_SEVERE = 4.10537,
+    K_UP = 0.469592, LAT_SPLIT = 1, LEARN_LAT = 0.56064, LEARN_MARGIN = 0.963772, MEM = 0, PRED = 0.0411296,
     PRED_KD = 0.309352, RETURN = 0.905245, RET_ARM = 1.00468, RET_HOLD = 0.490648, RET_LOW = 0.507014,
     SLIP_TAU = 0.0147423, SPARE = 0.82465, V_REF = 1.49558,
   },

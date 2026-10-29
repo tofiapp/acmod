@@ -157,8 +157,8 @@ apps/lua/KeyDriveKeyboardTest/ input method test, variant A (LAZY = FULL): with 
                                back (steer math.huge, combineAxis true, kers Skip) on off, input change and onRelease
 apps/lua/KeyDriveConfig/       companion app. Window "KeyDrive" (src/settings.lua, v0.12.1): "Zobrazit diagnostiku" and
                                "Síla zásahu" 0..100 (50 = as tuned) -> live.cfgDiagSet/cfgShowDiag, cfgStrengthSet/cfgStrength (ac.storage
-                               'keydrive', each control sent only once touched); assist.lua strengthScales: target x1.07..0.8,
-                               recovery x1.5..0.6; src/shared.lua is a COPY of the core's (test 32 compares them).
+                               'keydrive', each control sent only once touched; v0.13 keys strength13*); assist.lua
+                               strengthScales (v0.13): 0 = x1.25 / x1.67 (= v0.12 default), 50 = tuned, 100 = x0.85 / x0.75; src/shared.lua is a COPY of the core's (test 32 compares them).
                                Window "KeyDrive Reference" + src/reference.lua, records
                                in NORMAL keyboard mode (KeyDrive inactive) keys, car.steer, front wheel angle, pedals,
                                speed, slip -> Documents/Assetto Corsa/logs/keydrive/ac-reference.csv (first line '#' meta:
@@ -306,3 +306,13 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
   NEUTRAL (traction off in N by design): engaging 1st with 0.8+ request -> rear ndSlip up to 38, the cap reaches the
   floor too late (clutch dump) -> a launch cap on N->1 at standstill; (b) second slide under trail braking (rear
   combined slip 1.5-2.2 while the brake limiter only watches longitudinal slip) -> brake phase.
+- v0.12.1 user: strength 100 "much better than 50, very few jerks, throttle onset getting good"; "hide the window" meant
+  the big diagnostic panel (the checkbox does it). Real logs: what separates 100 from 50 is the AMPLITUDE (reversals
+  >= 5 % 0.38 vs 0.65 /s, travel 0.18 vs 0.25 /s), not the 1 %-deadband count; the needless-cut share (34 % vs 14 %) was
+  not felt. The sim agrees on amplitude (pulseBig 0.61 vs 0.92) but no cost weighting ranks 100 < 50 without letting a
+  more cautious set win: where the user's optimum lies along caution is unknown -> the user explores it with the slider.
+- v0.13.0: default = v0.12.1 strength 100 (tuned.lua TARGET_SLIP 0.7453, K_BACK/K_UP/FORGET_RATE x0.6); slider
+  re-centred (0 = v0.12 default, 100 = x0.85 / x0.75), stored under new keys (starts at 50). Note: K_BACK 0.73 /s < the
+  key ramp 1.2 /s also slows the onset without wheelspin (0 -> full ~1.2 s); tests 1/3/7/7b use TRACTION 0 for the pure
+  key ramp, tests 28/30 the frozen v0.12.0 set (fixtures/tuned_v0120.lua). NEXT: optimizer anchored at this set
+  (penalise more loss / caution than the anchor, reward smaller amplitude).
