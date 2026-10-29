@@ -92,6 +92,14 @@ M.DEFAULTS = {
                            -- cuts made by the prediction or by noise near the target (those re-armed it again and
                            -- again after a kerb in the sim: the throttle came back 1-2 s late)
   RET_EPISODE = 0,         -- 1: the window runs from the first arming cut; 0: every arming cut restarts it
+  RESTORE = 0,             -- 1: after an EXTERNAL disturbance (kerb, bump: the sent throttle had not risen for
+                           -- RESTORE_QUIET before the slip crossed the target) the cap returns to its level before the
+                           -- cut at K_BACK even inside the hold band, and RET_HOLD does not apply. A cut the throttle
+                           -- itself caused (it was rising into the limit) keeps the calm behaviour against pulsing.
+                           -- (round 6: a low hold band stopped the pulsing but brought back the v0.10 "refused to
+                           -- accelerate after a kerb": recovery 1-3 s in hairpin_kerb_1st)
+  RESTORE_QUIET = 0.3,     -- s
+  RESTORE_BELOW = 1,       -- restore only while the regulated slip is below this x target
   PRED_KD = 1,             -- cut rate scale while only the PREDICTION is over the target (measured slip at or below
                            -- it, guard not the cause); 1 = as v0.11.1. v0.11.1 logs: 52 of 63 low-gear cap falls began
                            -- on the prediction alone (measured slip 0.78-0.89 of the target) and fed the pulsing
@@ -128,7 +136,7 @@ function M.new(params)
     airborne = false,
     wheels = {}, driven = {}, drivenCount = 0,
     memory = {}, stamp = {}, known = {}, -- [gear][band] remembered level, clock when set, a limit has been found
-    clock = 0, overTime = 0, lastGear = 0, cutClock = -1e9, cutA = 1,
+    clock = 0, overTime = 0, lastGear = 0, cutClock = -1e9, cutA = 1, prevOut = 0, outRiseClock = 0, restoreTo = 0, external = false, cutting = false,
     A = 1,              -- absolute throttle cap
     crossBand = -1,     -- rpm band where the current spin started
     crossGear = 0,
@@ -174,6 +182,7 @@ function M:reset()
   self.active, self.airborne = false, false
   self.overTime = 0
   self.cutClock, self.cutA = -1e9, 1
+  self.prevOut, self.outRiseClock, self.restoreTo, self.external, self.cutting = 0, self.clock or 0, 0, false, false
   self.A = 1
 end
 
@@ -264,6 +273,7 @@ local function update2(self, dt, carState, requested, target, response)
     A = requested
     self.lastGear = gear
     self.overTime = 0
+    self.restoreTo, self.external, self.cutting, self.outRiseClock = 0, false, false, self.clock
     self.cutClock, self.cutA = -1e9, 1 -- a lift or a shift ends the RET_HOLD window (else a re-press inside it
                                        -- froze the cap near 0)
   end
@@ -319,8 +329,14 @@ local function update2(self, dt, carState, requested, target, response)
     local sp = reg + P.PRED * (self.slipRate > 0 and self.slipRate or 0)
     local fullTarget = target
     target = tgt
-    if A > requested + P.AW then A = requested + P.AW end
+    if A > requested + P.AW then
+      A = requested + P.AW
+      -- the driver lifted below the cap: his own ramp leads, so a RET_HOLD window ends (else a partial lift and
+      -- re-press inside it froze the cap at the lift's lowest point + AW for up to RET_HOLD)
+      self.cutClock, self.cutA = -1e9, 1
+    end
     local out = requested < A and requested or A
+    if out > self.prevOut + 1e-5 then self.outRiseClock = self.clock end -- the sent throttle is rising (RESTORE)
     local e = sp / target - 1
     local eX = e
     -- guard: the tyres past their combined peak (e.g. the rear sliding sideways with little wheelspin) always take
@@ -339,6 +355,12 @@ local function update2(self, dt, carState, requested, target, response)
         self.crossBand, self.crossGear, self.crossOut = band, gear, out
       end
       if reg > target then self.overTime = self.overTime + dt end
+      if not self.cutting then
+        -- a new cut episode: external disturbance if the throttle had been steady (RESTORE)
+        self.cutting = true
+        self.external = self.clock - self.outRiseClock > P.RESTORE_QUIET
+        self.restoreTo = out
+      end
       -- hold window (RET_HOLD): armed by cuts where the measured slip is really over the target
       if reg > P.RET_ARM * target and (P.RET_EPISODE == 0 or self.clock - self.cutClock >= P.RET_HOLD) then
         if self.clock - self.cutClock >= P.RET_HOLD then self.cutA = A end
@@ -367,6 +389,7 @@ local function update2(self, dt, carState, requested, target, response)
       end
       self.crossBand = -1
       self.overTime = 0
+      self.cutting = false
       local hold = target * P.HOLD_BAND
       -- forgetting: the cap holds the throttle back although the tyres have plenty of grip
       if requested > A + 0.02 and reg < hold * P.SPARE and self.slip < fullTarget * P.HOLD_BAND then
@@ -389,7 +412,7 @@ local function update2(self, dt, carState, requested, target, response)
       -- time hysteresis: no rise right after a cut while the slip is still near the target
       -- (optionally only after a deep cut, RET_DEPTH)
       local resting = P.RET_HOLD > 0 and self.clock - self.cutClock < P.RET_HOLD and reg > P.RET_LOW * target
-        and self.cutA - A > P.RET_DEPTH
+        and self.cutA - A > P.RET_DEPTH and not (P.RESTORE ~= 0 and self.external)
       if resting then
         -- hold A where the cut left it
       elseif reg < hold * P.TRACK and self.slip < fullTarget * P.HOLD_BAND * P.TRACK then
@@ -420,10 +443,17 @@ local function update2(self, dt, carState, requested, target, response)
         A = A + P.K_UP * P.HOLD_RISE * self.rampScale * response * dt
         if A > 1 then A = 1 end
       end
+      -- RESTORE: back to the level before an external disturbance, also inside the hold band
+      if P.RESTORE ~= 0 and self.external and A < self.restoreTo and reg >= hold and reg < P.RESTORE_BELOW * target then
+        A = A + P.K_BACK * self.rampScale * response * dt
+        if A > self.restoreTo then A = self.restoreTo end
+      end
+      if A >= self.restoreTo then self.external = false end
     end
   end
   self.A = A
   local out = requested < A and requested or A
+  self.prevOut = out
   self.k = requested > 0.02 and out / requested or 1
   self.limit = A
   self.severe = self.prevSlip > 2 * target

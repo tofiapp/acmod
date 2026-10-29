@@ -282,3 +282,14 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
   Nordschleife, part of Spa and a whole Red Bull Ring zip ("almost phenomenal there") were REPLAYS: KeyDrive's live
   values frozen while the car moved (Gamepad FX does not run in replays) -> v0.11.2 = recorder skips stale samples
   (same throttle as 0.11.1). Check logs for frozen tc_cap/drive_slip_nd before analysing.
+- Sim upgrade (after 0.11.1): heavy-tailed slip noise fitted to 17 real sessions (runner.lua VOL_SIGMA 0.6, VOL_TAU
+  0.6 s, NOISE_REL 0.115), sim/calibrate.py (sim must rank low-gear pulse s12 < v0.11.1 < r63 like the logs), USER
+  check 'pulse' (whole key-held direction changes/s, gears 1-2 too; graded vs max(1, oracle), cap 10/run, wet/cold/grip
+  x0.25), scenarios exit_1st_lateral / exit_2nd_lateral / hairpin_kerb_1st, real-log replay terms (caution x80,
+  low-gear pulse x8, RISK x300 = replayed output above the logged one while the real tyres were past their peak),
+  +10 per failed safety check (a never-cutting core used to win), LOSS_WEIGHT 20, recoveryTime x3. Cost ranks
+  v0.11.1 < s12 < r63 < traction off < very cautious. Core: PRED_KD (prediction-only cuts gentler), RESTORE (tried,
+  OFF: it re-enabled the pulsing), lift below the cap ends a RET_HOLD window (review: partial lift + re-press froze it).
+- v0.12.0: optimizer round 6 seed 74 + HOLD_BAND 0.70 by hand (0.6 brought back 1-3 s kerb recovery). Sim low-gear
+  pulse 3.7 -> 1.5 /s, replay: low-gear pulse 2.79 -> 1.91, needless 12.3 -> 9.8 %, risk 0.14 -> 0.64 %; tuning passes
+  98 -> 127/380, but runs over 1.5x peak slip 146 -> 163 (hidden 79 -> 90). Watch for spins in the next logs.

@@ -641,9 +641,10 @@ do
 end
 
 -- 21. Torque peak at 5300 rpm (like the user's car): the memory per gear and rpm band makes the second launch
--- spin much less than the first, by easing off just before the revs reach the band where it spun.
-do
-  local s = fresh()
+-- spin much less than the first, by easing off just before the revs reach the band where it spun. The memory is off by
+-- default since v0.11 (TRACTION_MEMORY 0): tested with it on, and the default must keep both launches nearly clean.
+for _, memory in ipairs({ 1, 0 }) do
+  local s = fresh({ TRACTION_MEMORY = memory })
   local c = mock.car
   local m, r, J, N, mu, G = 1300, 0.32, 8, 3500, 1.1, 18
   local function torque(rpm)
@@ -688,7 +689,13 @@ do
   if os.getenv('KD_VERBOSE') then
     print(string.format('rpm launch 1: spin %.2f max %.1f v %.1f | 2: spin %.2f max %.1f v %.1f', s1, m1, v1, s2, m2, v2))
   end
-  check('second launch spins no more than the first (memory per rpm band; mode 2 may not spin at all)', s2 <= s1 * 0.7 + 0.005, string.format('%.2f vs %.2f', s2, s1))
+  if memory == 1 then
+    -- (when the first launch is already clean, under 4 % of the time over 1.3x, the second only has to stay clean)
+    check('memory on: second launch spins no more than the first (mode 2 may not spin at all)',
+      s2 <= math.max(s1 * 0.7 + 0.005, 0.04), string.format('%.2f vs %.2f', s2, s1))
+  else
+    check('memory off (default): both launches nearly clean', s1 < 0.05 and s2 < 0.05, string.format('%.2f / %.2f', s1, s2))
+  end
   check('second launch not slower', v2 > v1 * 0.97, string.format('%.1f vs %.1f', v2, v1))
 end
 
@@ -1197,7 +1204,9 @@ end
 do
   local Traction = dofile(CORE .. '/core/traction.lua')
   local Old = dofile(here .. '/fixtures/traction_v0111.lua')
-  local tuned = dofile(CORE .. '/core/tuned.lua')
+  -- the v0.11.1 parameter set (frozen: core/tuned.lua moves on with every retune); RET_HOLD off for the bit-exact
+  -- part because v0.12 ends a hold window when the driver lifts below the cap (a deliberate change)
+  local tuned = dofile(here .. '/fixtures/tuned_v0111.lua')
   local function v3(x, y, z) return { x = x, y = y, z = z } end
   local function newCar()
     local wheels = {}
@@ -1244,7 +1253,7 @@ do
     end
     return maxd
   end
-  check('PRED_KD 1: bit-exact with v0.11.1 (tuned set)', trace(nil, 30000) == 0)
+  check('PRED_KD 1: bit-exact with v0.11.1 (v0.11.1 set, RET_HOLD off)', trace({ RET_HOLD = 0 }, 30000) == 0)
   check('PRED_KD 1: bit-exact with v0.11.1 (memory on, no RET_HOLD)', trace({ MEM = 1, RET_HOLD = 0 }, 30000) == 0)
   check('PRED_KD default is 1', Traction.DEFAULTS.PRED_KD == 1 and Traction.new(tuned.traction).p.PRED_KD == 1)
   -- (b) the same cut with PRED_KD 1 and 0.3: steady slip, then a fast rise that stays under the target
