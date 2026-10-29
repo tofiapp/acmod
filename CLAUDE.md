@@ -278,3 +278,7 @@ step an output; prefer gentle, slow corrections and opt-in for anything that mov
   metric with a continuous cost, low-gear lateral exit scenarios, a calibration test that the sim ranks s12/r63 pulsing
   like the real logs (low gear 2.5 / 1.6 / 4.4 /s for 0.10.0 / 0.10.1 / 0.11.0), replay pulse rate in the cost, then
   retune with RET_HOLD/RET_ARM in the space (already added).
+- v0.11.1 user: "jerking clearly smaller, want to perfect it"; logs (Sachsenring, Spa): low-gear 2.96 / 2.24 /s.
+  Nordschleife, part of Spa and a whole Red Bull Ring zip ("almost phenomenal there") were REPLAYS: KeyDrive's live
+  values frozen while the car moved (Gamepad FX does not run in replays) -> v0.11.2 = recorder skips stale samples
+  (same throttle as 0.11.1). Check logs for frozen tc_cap/drive_slip_nd before analysing.
