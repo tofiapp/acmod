@@ -4,20 +4,29 @@
 -- input method) or at render frames ("fps": 50-165 fps picked per run, +-30 % jitter per frame and occasional
 -- hitches; variant A / robustness). Between calls the last throttle is held.
 -- Sensor: the controller sees ndSlip / slipRatio with noise and a delay (physics steps), everything else exact.
--- The noise is fitted to the user's Mustang v0.10 logs (sim/cars/rwd_mustang.lua, ~33 Hz samples, steady full
--- throttle on a straight in 3rd-6th gear):
---   - driven wheels: slip ratio / peak ratio fluctuates with a step std (30 ms apart) of 0.057 / 0.050 / 0.045 /
---     0.028 in 3rd / 4th / 5th / 6th at mean levels 0.38 / 0.28 / 0.21 / 0.17 (std ~0.15 x level), lag-1
---     correlation ~0.3; KeyDrive's own filtered slip rate (tc_slip_rate) std 1.4-2.1 /s. Both rear wheels move
---     together (correlation 0.99: a locked axle), the non-driven fronts hardly at all (step std 0.003-0.009), and
---     the longitudinal g does not follow it (correlation 0.03), so it is modelled as measurement noise on the wheel
---     speed: band-limited noise (a damped 5 Hz resonance, zeta 0.35: the positive lag-1 correlation of the 30 ms
---     steps rules out noise above ~10 Hz) in slip-ratio units, one channel per locked axle (else per wheel), size
---     NOISE_REL x |slip ratio / peak| + NOISE_ABS; ndSlip is recomputed from the noisy ratio and the slip angle.
---     Fit (Mustang, tuned v0.10 controller, 8 seeds, same at half the step): tc_slip_rate std 1.9 / 1.4 /s, tc_sx
---     step std 0.059 / 0.043, ratio step std 0.073 / 0.054, lag-1 +0.2 in 3rd / 4th at levels 0.43 / 0.32 (logs:
---     1.66 / 1.43, 0.051 / 0.044, 0.057-0.070 / 0.050-0.061, +0.32 / +0.31 at 0.38 / 0.28); 6th: ratio step 0.041 at
---     0.22 (log 0.028 at 0.17); above ratio / peak = 2 the size stops growing (no data);
+-- The noise is fitted to the user's Mustang logs v0.10-v0.11.1 (17 sessions; sim/cars/rwd_mustang.lua): KeyDrive's own
+-- measured slip tc_sx (load-weighted |slip ratio| of the driven wheels / learned peak ratio, filtered SLIP_TAU) at
+-- steady full throttle, uncut, on a straight (|lat_g| < 0.3) in 3rd-6th gear, steps between rows resampled to 40 Hz
+-- (sim/calibrate.lua repeats the measurement in the sim and prints both):
+--   - level 0.39 / 0.29 / 0.22 / 0.19 in 3rd / 4th / 5th / 6th; step size 1.4826 x MAD 0.021 / 0.018 / 0.011 / 0.011
+--     (~0.055 x level), std 0.027 / 0.024 / 0.021 / 0.019, std / MAD 1.3-1.8, kurtosis 6-12 (heavy tail: a Gaussian
+--     has 1.0 and 3); step autocorrelation lag 1 / 3 / 4 / 8 (25 ms each) +0.58 / -0.49 / -0.52 / +0.14 (a ~5 Hz
+--     band); the step SIZE stays correlated for seconds (|step| / level autocorrelation +0.24 at 0.2 s, +0.21 at
+--     0.5 s: rough and smooth stretches of track). KeyDrive's filtered slip rate (tc_slip_rate), r63 parameters: std
+--     1.1 / 0.8 / 0.75 / 0.5 /s. Both rear wheels move together (correlation 0.99: a locked axle), the non-driven fronts
+--     hardly at all (step std 0.003-0.009), and the longitudinal g does not follow it (correlation 0.03, v0.10 logs).
+--     Model: measurement noise on the wheel speed, band-limited (a damped 5 Hz resonance, zeta 0.35) in slip-ratio
+--     units, one channel per locked axle (else per wheel), size NOISE_REL x |slip ratio / peak| + NOISE_ABS; the
+--     innovation driving the resonance is Gaussian times a slowly varying log-normal size exp(VOL_SIGMA y) (y: unit
+--     Ornstein-Uhlenbeck, time constant VOL_TAU, mean square of the size 1), which gives the heavy tail and the
+--     clustering; ndSlip is recomputed from the noisy ratio and the slip angle. Fit (grid over VOL_SIGMA 0.5-0.7,
+--     VOL_TAU 0.3-1 s, NOISE_REL 0.09-0.115; r63 + RET_HOLD controller, 24 seeds; levels in the sim are 5-20 % higher):
+--     MAD 0.022 / 0.016 / 0.014 / 0.014, std 0.035 / 0.023 / 0.019 / 0.020, kurtosis 8 / 7 / 6 / 9, |step|
+--     autocorrelation +0.21-0.25 at 0.2 s, slip rate std 1.5 / 0.9 / 0.8 / 0.8 /s; the same at half the step. The old
+--     Gaussian noise (NOISE_REL 0.16, VOL_SIGMA 0) had MAD 2x too large and kurtosis 3, so every controller rippled
+--     at 4-5 throttle direction changes /s in 1st/2nd gear (logs: 1.6-4.4 depending on the controller); with this
+--     noise the low-gear pulsing of the three parameter sets the user drove is close to the logs and in their order
+--     (sim/calibrate.lua). Above ratio / peak = 2 the size stops growing (no data);
 --   - a wheel reads ndSlip = slipRatio = slipAngle = 0 in ~1.6 % of the frames (rears; fronts ~4 %), runs of
 --     1-8 frames (mean ~40 ms); KeyDrive's load-weighted slip equals the other wheel then, so the wheel carries no
 --     load in those frames (thrown up by a bump): it reads load 0 too.
@@ -39,9 +48,10 @@ local M = {}
 
 local DT_DEFAULT = 1 / 333
 -- sensor noise (see the header)
-local NOISE_REL, NOISE_ABS, NOISE_SX_CAP = 0.16, 0.004, 2   -- size = REL x min(|sx|, CAP) + ABS (sx = ratio / peak)
+local NOISE_REL, NOISE_ABS, NOISE_SX_CAP = 0.115, 0.004, 2   -- size = REL x min(|sx|, CAP) + ABS (sx = ratio / peak)
 local NOISE_ABS_FREE = 0.004                                  -- non-driven wheels
 local NOISE_HZ, NOISE_ZETA = 5, 0.35                          -- resonant band: centre frequency, damping
+local VOL_SIGMA, VOL_TAU = 0.6, 0.6                           -- heavy tail: log-normal innovation size, its time constant (s)
 local ZERO_FRAC = { [0] = 0.04, 0.04, 0.016, 0.016 }          -- fraction of time a wheel reads all zeros (logs)
 local ZERO_MEAN = 0.04                                        -- s, mean length of such a dropout
 local R_MIN = 12 -- m, tightest corner radius (a hairpin)
@@ -108,7 +118,8 @@ end
 M.keyAt = keyAt
 
 -- opts: { car = profile table, rate = 'physics'|'fps', seed, grip, power, controller = factory(view, car) or nil,
---         oracle = true, sensor = { noiseRel, noiseAbs, zero = true|false, delay = 2 (steps of 1/333 s) },
+--         oracle = true, sensor = { noiseRel, noiseAbs, volSigma, volTau, hz, zeta, zero = true|false,
+--         delay = 2 (steps of 1/333 s) },
 --         dt = physics step (default 1/333; robustness checks only) }
 function M.run(scn, opts)
   local DT = opts.dt or DT_DEFAULT
@@ -146,9 +157,19 @@ function M.run(scn, opts)
   local nz = sensor.zeta or NOISE_ZETA
   local nq = math.sqrt(4 * nz * nw * nw * nw) -- unit variance of x
   local nsq = math.sqrt(DT)
+  -- heavy tail: the innovation's size is exp(VOL_SIGMA x y) with y a slow unit-variance Ornstein-Uhlenbeck process
+  -- (time constant VOL_TAU, exact discretisation), normalised to a mean square of 1
+  local vSig = sensor.volSigma or VOL_SIGMA
+  local vDecay = math.exp(-DT / (sensor.volTau or VOL_TAU))
+  local vIn = math.sqrt(1 - vDecay * vDecay)
+  local vC = math.exp(-vSig * vSig)
+  local vy = {}
+  for i = 0, 3 do vy[i] = srng.gauss() end
   local function noiseStep()
     for i = 0, 3 do
-      nv[i] = nv[i] + (-2 * nz * nw * nv[i] - nw * nw * nx[i]) * DT + nq * nsq * srng.gauss()
+      vy[i] = vy[i] * vDecay + vIn * srng.gauss()
+      local amp = vC * math.exp(vSig * vy[i])
+      nv[i] = nv[i] + (-2 * nz * nw * nv[i] - nw * nw * nx[i]) * DT + nq * nsq * amp * srng.gauss()
       nx[i] = nx[i] + nv[i] * DT
       nval[i] = nx[i]
     end

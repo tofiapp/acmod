@@ -9,6 +9,15 @@ local controllers = require('controllers')
 local M = {}
 
 M.REAL_WEIGHT = 30 -- cost per unit share of needless cut time on the real logs (0.17 now -> +5)
+-- Throttle pulse (v0.11.0 user: "the jerking came back"; 0.11.1: "clearly smaller, but I want to perfect it"):
+-- continuous and UNCAPPED, per direction change/s over the USER bound (metrics.THRESHOLDS.pulse = 1 /s), so 13 /s
+-- costs far more than 6 /s (the old capped steady term saw both as +5).
+M.PULSE_WEIGHT = 2      -- per run: whole key-held time
+M.PULSE_LOW_WEIGHT = 2  -- per run: gears 1-2 on top (where the real pulsing is: 0.11.0 logs 4.4 /s vs 1.7-2.7 overall)
+M.PULSE_USER = 1.5      -- the user's own cars on top of their x2 run weight (their pulsing is what the user feels)
+M.REAL_PULSE_WEIGHT = 8 -- per direction change/s over 1 of the REPLAYED output in gears 1-2 on the logs with the
+                        -- logged output (gas_out: 0.11+ logs), where the replay reproduces the logged low-gear rate
+                        -- (core/tuned.lua g1-g5: 2.1-3.0 replayed vs 2.0-3.0 logged; r63 e/f 4.0/4.1 vs 4.3/4.6)
 M.CARS = { 'rwd_supra', 'rwd_mustang', 'fwd_hothatch', 'awd_gt' }
 -- robustness: nominal plus +-20 % grip and power (the user's spec)
 M.SCALES = { { 1, 1 }, { 0.8, 1 }, { 1.2, 1 }, { 1, 0.8 }, { 1, 1.2 } }
@@ -78,7 +87,7 @@ local BOUNDS = {
   peakSlip = 'peakSlip', over13Time = 'over13Time', slideTime = 'slideTime', steadyDirChanges = 'steadyDirChanges',
   steadyStd = 'steadyStd', maxRate = 'maxRate', recoveryTime = 'recoveryTime',
 }
-function M.runCost(res)
+function M.runCost(res, userCar)
   local T = metrics.THRESHOLDS
   local c = 0
   for _, ok in pairs(res.checks) do if not ok then c = c + 10 end end
@@ -89,6 +98,11 @@ function M.runCost(res)
   if v.loss and v.lossBound then
     -- user v0.10: "sometimes needlessly cautious": speed weighs more (was 2 x loss)
     c = c + math.min(5, math.max(0, v.loss / v.lossBound - 1)) + 4 * math.max(0, v.loss)
+  end
+  if res.checks.pulse ~= nil then
+    local p = M.PULSE_WEIGHT * math.max(0, (v.pulse or 0) - T.pulse)
+      + M.PULSE_LOW_WEIGHT * math.max(0, (v.pulseLow or 0) - T.pulse)
+    c = c + p * (userCar and M.PULSE_USER or 1)
   end
   return c
 end
@@ -114,7 +128,8 @@ function M.evaluate(root, set, params, opts)
             seed = hash(sc.name .. car.name .. rate), controller = controllers.keydrive(params.throttle, params.traction) })
           local res = metrics.evaluate(sc.def, tr, ref)
           -- the user's own cars (Supercars Gen3 Supra and Mustang) count double
-          total = total + M.runCost(res) * ((car.name == 'rwd_supra' or car.name == 'rwd_mustang') and 2 or 1)
+          local user = car.name == 'rwd_supra' or car.name == 'rwd_mustang'
+          total = total + M.runCost(res, user) * (user and 2 or 1)
           runs = runs + 1
           if res.pass then passed = passed + 1 end
           for k, ok in pairs(res.checks) do if not ok then fails[k] = (fails[k] or 0) + 1 end end
@@ -126,9 +141,10 @@ function M.evaluate(root, set, params, opts)
   -- real driving (open-loop replay of the user's logs): share of key-held time with a needless cut. The sim judges
   -- safety, this judges caution (user v0.10: "sometimes needlessly cautious", "after a kerb it refused to accelerate").
   if opts.real ~= false then
-    local share = require('replay').cautionAll(root, params.throttle, params.traction)
+    local share, pulse = require('replay').realAll(root, params.throttle, params.traction)
     fails.realCaution = math.floor(share * 1000 + 0.5) -- per mille, for the log
-    cost = cost + M.REAL_WEIGHT * share
+    fails.realPulseLow = math.floor((pulse.rateLow or 0) * 100 + 0.5) -- 1/100 changes/s, for the log
+    cost = cost + M.REAL_WEIGHT * share + M.REAL_PULSE_WEIGHT * math.max(0, (pulse.rateLow or 0) - 1)
   end
   return cost, passed, runs, fails
 end

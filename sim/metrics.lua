@@ -22,7 +22,125 @@ M.THRESHOLDS = {
                          -- key ramp would bring it back (user report v0.10: after a
                          -- kerb the car refused to accelerate on straight asphalt)
   reverseFollow = 0.01,  -- PROPOSAL: in reverse/neutral the throttle is the plain key ramp (no regulation)
+  pulse = 1,             -- USER (the steady-state number, applied to the WHOLE key-held time): throttle direction
+                         -- changes per second while the gas key is held in a forward gear, 40 Hz, 1 % deadband, from
+                         -- 0.5 s after the key press and 0.3 s after a gear change; graded on the whole run and on
+                         -- gears 1-2 alone (v0.11.0 user: "the jerking came back": real 1st/2nd gear 4.4 /s, overall
+                         -- 1.7-2.7 /s, while the settled-window check above saw almost nothing)
 }
+
+-- Whole key-held pulse measure (shared with sim/replay.lua for the real logs, so the sim and the logs are counted
+-- the same way; the same definition as the measurements of the user's logs in the v0.11 history).
+M.PULSE = {
+  DEADBAND = 0.01,  -- a direction change needs a move of at least 1 % from the last reference
+  SKIP_KEY = 0.5,   -- s after the key press (the driver's own ramp)
+  SKIP_GEAR = 0.3,  -- s after a gear change (cut + upshift kick)
+  BIG = 0.05,       -- amplitude: a reversal whose swing (turning point to turning point) is >= 5 % is a big one
+  MIN_RUN = 8,      -- samples (0.2 s at 40 Hz): shorter stretches are not counted
+  GAP = 0.1,        -- s: a time gap between samples larger than this splits the stream (paused game, missing rows)
+  SKIP_DIST = 0.5,  -- s after a scenario kerb or grip step (sim only)
+}
+
+local function newPulseAcc()
+  return { held = 0, changes = 0, big = 0, travel = 0, heldLow = 0, changesLow = 0, bigLow = 0, travelLow = 0 }
+end
+M.newPulseAcc = newPulseAcc
+
+-- One contiguous run of samples xs[1..n] (one gear, key held): direction changes (meas.py definition: reference
+-- moves with every step beyond the deadband), big reversals (zig-zag with the deadband, swing >= BIG) and travel.
+local function pulseRun(xs, n)
+  local P = M.PULSE
+  local db = P.DEADBAND
+  local changes, dir, ref = 0, 0, xs[1]
+  local big, zdir, ext, piv = 0, 0, xs[1], xs[1]
+  local travel = 0
+  for k = 2, n do
+    local x = xs[k]
+    travel = travel + math.abs(x - xs[k - 1])
+    if x > ref + db then
+      if dir < 0 then changes = changes + 1 end
+      dir, ref = 1, x
+    elseif x < ref - db then
+      if dir > 0 then changes = changes + 1 end
+      dir, ref = -1, x
+    end
+    if zdir == 0 then
+      if x > piv + db then zdir, ext = 1, x elseif x < piv - db then zdir, ext = -1, x end
+    elseif zdir > 0 then
+      if x > ext then ext = x
+      elseif x < ext - db then
+        if ext - piv >= P.BIG then big = big + 1 end
+        zdir, piv, ext = -1, ext, x
+      end
+    else
+      if x < ext then ext = x
+      elseif x > ext + db then
+        if piv - ext >= P.BIG then big = big + 1 end
+        zdir, piv, ext = 1, ext, x
+      end
+    end
+  end
+  return changes, big, travel
+end
+
+-- Pulse statistics over a 40 Hz stream: t[i] (s), thr[i] (0..1 output), key[i] (gas key held and the assist active),
+-- gear[i]; accumulates into acc (see newPulseAcc) and returns it. Only forward gears count; a gap splits the stream.
+-- skip: optional list of { t0, t1 } windows left out (sim disturbances where the throttle MUST move: a kerb, a grip
+-- step; the perfect foot itself changes direction twice there).
+function M.pulseStats(t, thr, key, gear, n, acc, skip)
+  local P = M.PULSE
+  acc = acc or newPulseAcc()
+  local xs, nx, t0, t1, runGear = {}, 0, 0, 0, 0
+  local function flush()
+    if nx >= P.MIN_RUN then
+      local c, b, tv = pulseRun(xs, nx)
+      local dur = t1 - t0
+      acc.held, acc.changes, acc.big, acc.travel = acc.held + dur, acc.changes + c, acc.big + b, acc.travel + tv
+      if runGear <= 2 then
+        acc.heldLow, acc.changesLow = acc.heldLow + dur, acc.changesLow + c
+        acc.bigLow, acc.travelLow = acc.bigLow + b, acc.travelLow + tv
+      end
+    end
+    nx = 0
+  end
+  local keyT, gearT, lastGear
+  for i = 1, n do
+    local ti = t[i]
+    if i > 1 and (ti - t[i - 1] > P.GAP or ti <= t[i - 1]) then flush(); keyT, lastGear = nil, nil end
+    if not key[i] then
+      flush(); keyT, lastGear = nil, nil
+    else
+      if not keyT then keyT = ti end
+      local g = gear[i]
+      if g ~= lastGear then flush(); gearT, lastGear = ti, g end
+      local skipped = false
+      if skip then
+        for _, w in ipairs(skip) do if ti >= w[1] and ti <= w[2] then skipped = true; break end end
+      end
+      if g > 0 and ti - keyT >= P.SKIP_KEY and ti - gearT >= P.SKIP_GEAR and not skipped then
+        nx = nx + 1
+        xs[nx] = thr[i]
+        if nx == 1 then t0, runGear = ti, g end
+        t1 = ti
+      else
+        flush()
+      end
+    end
+  end
+  flush()
+  return acc
+end
+
+-- Rates per second from an accumulator: all, gears 1-2, big reversals, travel.
+function M.pulseRates(acc)
+  local function r(a, b) return b > 0 and a / b or nil end
+  return {
+    rate = r(acc.changes, acc.held), rateLow = r(acc.changesLow, acc.heldLow),
+    big = r(acc.big, acc.held), bigLow = r(acc.bigLow, acc.heldLow),
+    travel = r(acc.travel, acc.held), travelLow = r(acc.travelLow, acc.heldLow),
+    held = acc.held, heldLow = acc.heldLow,
+  }
+end
 
 local TARGET = 1          -- grading reference: the tyre peak, independent of the controller's TARGET_SLIP
 local SAMPLE = 0.025      -- s, 40 Hz resampling for the steady-state statistics (like the in-game log)
@@ -30,6 +148,7 @@ local RATE_WINDOW = 0.1   -- s, throttle rate and jerk are measured over 100 ms 
                           -- moves in frame-sized steps; what the driver feels is the change over ~0.1 s)
 local DEADBAND = 0.005    -- a throttle direction change must be at least 0.5 % to count
 local SETTLE = 1.0        -- s after a disturbance (key edge, shift, kerb, grip change) before "steady state"
+M.PULSE_MIN_HELD = 1.0  -- s of measured key-held time before the pulse rate is graded
 local MIN_GAIN = 0.5      -- m: loss is n/a when the oracle covers less than this more than a car with no throttle
 
 local function longest(tr, dt, pred, gate)
@@ -274,6 +393,35 @@ function M.evaluate(scn, tr, ref)
       val.steadyDirChanges, val.steadyStd = worstDir, worstStd
       chk.steadyDirChanges = worstDir <= T.steadyDirChanges
       chk.steadyStd = worstStd < T.steadyStd
+    end
+
+    -- pulse over the whole key-held forward-gear time (40 Hz like the in-game log)
+    local pt, px, pk, pg, pn = {}, {}, {}, {}, 0
+    for i = 1, tr.n, every do
+      pn = pn + 1
+      pt[pn], px[pn], pk[pn], pg[pn] = tr.t[i], tr.thr[i], tr.key[i], tr.gear[i]
+    end
+    local skip = {}
+    for _, k in ipairs(scn.kerbs or {}) do skip[#skip + 1] = { k.t, k.t + k.len + M.PULSE.SKIP_DIST } end
+    if scn.mu then
+      local prev
+      for x, y in tostring(scn.mu):gmatch('(-?[%d%.]+)%s*:%s*(-?[%d%.]+)') do
+        if prev and math.abs(tonumber(y) - prev[2]) > 0.05 and tonumber(x) - prev[1] <= 0.5 then -- a step, not a slow drift
+          skip[#skip + 1] = { prev[1], tonumber(x) + M.PULSE.SKIP_DIST }
+        end
+        prev = { tonumber(x), tonumber(y) }
+      end
+    end
+    local pr = M.pulseRates(M.pulseStats(pt, px, pk, pg, pn, nil, skip))
+    val.pulseHeld, val.pulseHeldLow = pr.held, pr.heldLow
+    if pr.held >= M.PULSE_MIN_HELD then
+      val.pulse, val.pulseBig, val.pulseTravel = pr.rate, pr.big, pr.travel
+      local worst = pr.rate
+      if pr.heldLow >= M.PULSE_MIN_HELD then
+        val.pulseLow, val.pulseBigLow, val.pulseTravelLow = pr.rateLow, pr.bigLow, pr.travelLow
+        if pr.rateLow > worst then worst = pr.rateLow end
+      end
+      chk.pulse = worst <= T.pulse
     end
   end
 
