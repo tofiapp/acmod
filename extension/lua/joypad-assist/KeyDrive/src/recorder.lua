@@ -56,6 +56,7 @@ local EVENTS_COL = NC
 
 local header, rowFormat
 local carId, trackId = '?', '?'
+local lastAlive, staleTime = -1, 0
 local lastLive = nil
 do
   local names, fmts = {}, {}
@@ -210,6 +211,10 @@ function M.update(dt, live, carState)
 
   local idle = carState.speedKmh < 1 and live.keyMask == 0
   if idle then return end
+  -- the physics core is not running (replay, AI driving, pause, Gamepad FX off): its live values are frozen, so
+  -- do not record (user logs v0.11.1: a Nordschleife replay was logged as driving with KeyDrive's values stuck)
+  if live.alive ~= lastAlive then lastAlive, staleTime = live.alive, 0 else staleTime = staleTime + dt end
+  if staleTime > 0.1 then return end
   sampleTimer = sampleTimer + dt
   if sampleTimer >= 1 / RATE then
     sampleTimer = sampleTimer % (1 / RATE)

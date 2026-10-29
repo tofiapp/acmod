@@ -352,6 +352,13 @@ do
     check('log has ~40 Hz rows (10 s)', rows > 380 and rows < 420, rows)
     check('log rows have every column', select(2, log:match('\n([^\n]+)$'):gsub(',', '')) == select(2, header:gsub(',', '')))
   end
+  -- physics core not running (replay, AI, pause): the car moves but the live values are frozen -> no rows
+  do
+    local _, before = (mock.saved['cfg/keydrive/keydrive-log.csv'] or ''):gsub('\n', '')
+    for _ = 1, 11 * 60 do r.update(1 / 60) end
+    local _, after = (mock.saved['cfg/keydrive/keydrive-log.csv'] or ''):gsub('\n', '')
+    check('no rows while the physics core is stale', after <= before + 8, before .. ' -> ' .. after)
+  end
   c.collisionDepth = 0.2
   for _ = 1, 10 do s.update(1 / 60); r.update(1 / 60) end
   c.collisionDepth = 0
