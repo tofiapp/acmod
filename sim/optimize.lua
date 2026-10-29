@@ -3,7 +3,9 @@
 -- Usage (via optimize.py): luajit sim/optimize.lua <root> <mode 1|2> <seed> <randomIters> <nmIters> <outPrefix> [start]
 --   writes <outPrefix>.lua (best params so far, Lua table) and <outPrefix>.log
 
-local ROOT, MODE, SEED, NRAND, NNM, OUT, START = ...
+local ROOT, MODE, SEED, NRAND, NNM, OUT, START, ANCHOR = ...
+-- ANCHOR: optional parameter file: evaluate's anchor mode (smoother than it, not slower or more cautious)
+local anchorParams = (ANCHOR and ANCHOR ~= '') and dofile(ANCHOR) or nil
 package.path = ROOT .. '/sim/?.lua;' .. ROOT .. '/extension/lua/joypad-assist/KeyDrive/?.lua;' .. package.path
 MODE, SEED, NRAND, NNM = tonumber(MODE) or 2, tonumber(SEED) or 1, tonumber(NRAND) or 30, tonumber(NNM) or 60
 
@@ -132,7 +134,7 @@ local best, bestX, bestInfo = math.huge, nil, nil
 local evals = 0
 local function f(x)
   local p = toParams(x)
-  local cost, passed, runs, fails = evaluate.evaluate(ROOT, 'tuning', p, { scales = scales })
+  local cost, passed, runs, fails = evaluate.evaluate(ROOT, 'tuning', p, { scales = scales, anchor = anchorParams })
   evals = evals + 1
   if cost < best then
     best, bestX = cost, { unpack(x) }

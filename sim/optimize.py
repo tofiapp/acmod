@@ -11,13 +11,13 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 def worker(args):
-    mode, seed, nrand, nnm, start = args
+    mode, seed, nrand, nnm, start, anchor = args
     from lupa import luajit21
     lua = luajit21.LuaRuntime(unpack_returned_tuples=True)
     run = lua.eval("function(p, ...) return assert(loadfile(p))(...) end")
     out = str(ROOT / "sim" / "out" / f"opt-m{mode}-s{seed}")
     run(str(ROOT / "sim" / "optimize.lua"), str(ROOT).replace("\\", "/"), str(mode), str(seed), str(nrand), str(nnm),
-        out.replace("\\", "/"), start)
+        out.replace("\\", "/"), start, anchor)
     return out
 
 
@@ -29,6 +29,7 @@ def main():
     ap.add_argument("--nm", type=int, default=60)
     ap.add_argument("--start", default="", help="start parameter file(s), comma separated: one per process")
     ap.add_argument("--seed0", type=int, default=1)
+    ap.add_argument("--anchor", default="", help="anchor parameter file (evaluate.lua anchor mode)")
     a = ap.parse_args()
     (ROOT / "sim" / "out").mkdir(exist_ok=True)
     # references (oracle, zero throttle) are computed once here, then every worker reads the cache
@@ -43,7 +44,7 @@ def main():
     jobs = []
     starts = a.start.split(",") if a.start else [""]
     for i in range(a.procs):
-        jobs.append((modes[i % len(modes)], a.seed0 + i, a.rand, a.nm, starts[i % len(starts)]))
+        jobs.append((modes[i % len(modes)], a.seed0 + i, a.rand, a.nm, starts[i % len(starts)], a.anchor))
     with mp.Pool(a.procs) as pool:
         for out in pool.imap_unordered(worker, jobs):
             print("finished", out)

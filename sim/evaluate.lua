@@ -51,6 +51,17 @@ M.GRADE_WEIGHT = {      -- per graded value past its bound (default 1, each capp
   recoveryTime = 3,     -- v0.10 user: "after a kerb it refused to accelerate on straight asphalt" (a named complaint;
                         -- 1 s late costs 3, the cap 15)
 }
+-- ANCHOR mode (v0.13, opts.anchor = a parameter set): the user picked a set by feel (v0.12.1 at strength 100 = the
+-- v0.13 default) whose caution the sim cannot rank (no weighting put it ahead of v0.12 without letting a still more
+-- cautious set win). So search for sets that are smoother than the anchor in throttle AMPLITUDE (what separated the
+-- user's preference in the logs: reversals >= 5 %, throttle travel) without being slower or more cautious than it:
+-- the real-log caution weight drops to ANCHOR_REAL_WEIGHT and any loss / needless-cut share above the anchor's costs
+-- ANCHOR_LOSS_PEN / ANCHOR_REAL_PEN per unit.
+M.AMP_BIG = 10          -- per (reversals >= 5 %/s, whole + gears 1-2), mean over dry runs, user cars x PULSE_USER
+M.AMP_TRAVEL = 20       -- per (throttle travel /s, whole + gears 1-2), same averaging
+M.ANCHOR_REAL_WEIGHT = 10
+M.ANCHOR_LOSS_PEN = 300 -- per unit of mean loss (share of the oracle's gain) above the anchor's
+M.ANCHOR_REAL_PEN = 200 -- per unit of real needless-cut share above the anchor's
 M.CARS = { 'rwd_supra', 'rwd_mustang', 'fwd_hothatch', 'awd_gt' }
 -- robustness: nominal plus +-20 % grip and power (the user's spec)
 M.SCALES = { { 1, 1 }, { 0.8, 1 }, { 1.2, 1 }, { 1, 0.8 }, { 1, 1.2 } }
@@ -189,6 +200,7 @@ function M.evaluate(root, set, params, opts)
   local cache = M.references(root, set, scns, cars, scales, rise, fall)
   local total, totalPulse, runs, passed = 0, 0, 0, 0
   local fails = {}
+  local ampSum, ampN, lossSum, lossN = 0, 0, 0, 0
   for _, sc in ipairs(scns) do
     for _, car in ipairs(cars) do
       for _, sg in ipairs(scales) do
@@ -201,6 +213,15 @@ function M.evaluate(root, set, params, opts)
           -- the user's own cars (Supercars Gen3 Supra and Mustang) count double
           local user = car.name == 'rwd_supra' or car.name == 'rwd_mustang'
           local rc, rp = M.runCost(res, user, sc.def.group)
+          local v = res.values
+          if not M.PULSE_GROUP[sc.def.group] then
+            if v.pulseBig then
+              ampSum = ampSum + (M.AMP_BIG * (v.pulseBig + (v.pulseBigLow or 0)) + M.AMP_TRAVEL * ((v.pulseTravel or 0)
+                + (v.pulseTravelLow or 0))) * (user and M.PULSE_USER or 1)
+              ampN = ampN + 1
+            end
+            if v.loss then lossSum, lossN = lossSum + math.max(0, v.loss), lossN + 1 end
+          end
           local w = user and 2 or 1
           total, totalPulse = total + rc * w, totalPulse + rp * w
           runs = runs + 1
@@ -213,13 +234,30 @@ function M.evaluate(root, set, params, opts)
   local cost = total / runs
   -- breakdown (5th return value): sim without pulse, sim pulse, real caution, real pulse
   local parts = { sim = (total - totalPulse) / runs, simPulse = totalPulse / runs, realCaution = 0, realPulse = 0 }
+  parts.amp = ampN > 0 and ampSum / ampN or 0
+  parts.meanLoss = lossN > 0 and lossSum / lossN or 0
+  local anchor
+  if opts.anchor then
+    -- the anchor's own numbers on the same set / scales / rates (memoised per process)
+    M.anchorCache = M.anchorCache or {}
+    local akey = string.format('%s|%d|%s', set, #scales, table.concat(rates, ','))
+    anchor = M.anchorCache[akey]
+    if not anchor then
+      local _, _, _, _, ap = M.evaluate(root, set, opts.anchor, { scales = scales, rates = rates, real = opts.real })
+      anchor = ap
+      M.anchorCache[akey] = anchor
+    end
+    parts.anchorLoss = M.ANCHOR_LOSS_PEN * math.max(0, parts.meanLoss - anchor.meanLoss)
+    cost = cost + parts.amp + parts.anchorLoss
+  end
   -- real driving (open-loop replay of the user's logs): share of key-held time with a needless cut. The sim judges
   -- safety, this judges caution (user v0.10: "sometimes needlessly cautious", "after a kerb it refused to accelerate").
   if opts.real ~= false then
     local share, pulse, _, _, risk = require('replay').realAll(root, params.throttle, params.traction)
     fails.realCaution = math.floor(share * 1000 + 0.5) -- per mille, for the log
     fails.realPulseLow = math.floor((pulse.rateLow or 0) * 100 + 0.5) -- 1/100 changes/s, for the log
-    parts.realCaution = M.REAL_WEIGHT * share
+    parts.realCaution = anchor and (M.ANCHOR_REAL_WEIGHT * share + M.ANCHOR_REAL_PEN * math.max(0, share - (anchor.realShare or 0)))
+      or M.REAL_WEIGHT * share
     parts.realPulse = M.REAL_PULSE_WEIGHT * math.max(0, (pulse.rateLow or 0) - 1)
     parts.realRisk = M.REAL_RISK_WEIGHT * risk
     fails.realRisk = math.floor(risk * 1000 + 0.5) -- per mille, for the log
